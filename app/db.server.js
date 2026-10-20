@@ -135,8 +135,12 @@ const courierConfigSchema = new mongoose.Schema(
       type: String,
       default: "",
     },
-    // Task 2: Automated Routing & Risk Safety Net Parameters
+    // Task 2: Automated Routing & Risk Safety Net Parameters (Legacy & Enterprise Dynamic Geo-Routing)
     autoRoutingEnabled: {
+      type: Boolean,
+      default: false,
+    },
+    isAutoRoutingEnabled: {
       type: Boolean,
       default: false,
     },
@@ -152,11 +156,48 @@ const courierConfigSchema = new mongoose.Schema(
       default: "steadfast",
       trim: true,
     },
+    defaultCourier: {
+      type: String,
+      enum: ["pathao", "steadfast", "redx"],
+      default: "steadfast",
+      trim: true,
+    },
     minSafetySuccessRate: {
       type: Number,
       default: 70,
       min: 0,
       max: 100,
+    },
+    minSuccessRate: {
+      type: Number,
+      default: 70,
+      min: 0,
+      max: 100,
+    },
+    customRoutes: {
+      type: [
+        new mongoose.Schema(
+          {
+            division: { type: String, required: true, trim: true },
+            district: { type: String, required: true, trim: true },
+            courier: {
+              type: String,
+              enum: ["pathao", "steadfast", "redx"],
+              required: true,
+              trim: true,
+            },
+          },
+          { _id: false }
+        ),
+      ],
+      default: [
+        { division: "Dhaka", district: "Dhaka", courier: "pathao" },
+        {
+          division: "Chattogram",
+          district: "All Districts in Division",
+          courier: "steadfast",
+        },
+      ],
     },
   },
   {

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, type SVGProps } from "react";
 import type {
   HeadersFunction,
   LoaderFunctionArgs,
@@ -29,6 +29,7 @@ import {
   TextField,
   Grid,
   Divider,
+  Icon,
 } from "@shopify/polaris";
 
 import { authenticate } from "../shopify.server";
@@ -39,6 +40,113 @@ import CourierConfig, {
   GlobalFraudNetwork,
   ShipmentBooking,
 } from "../db.server";
+
+/**
+ * 1. HIERARCHICAL BANGLADESH LOCATION DATA (8 Divisions -> 64 Districts)
+ */
+export const BANGLADESH_LOCATIONS: Record<string, string[]> = {
+  Dhaka: [
+    "Dhaka",
+    "Gazipur",
+    "Narayanganj",
+    "Tangail",
+    "Manikganj",
+    "Munshiganj",
+    "Narsingdi",
+    "Kishoreganj",
+    "Faridpur",
+    "Gopalganj",
+    "Madaripur",
+    "Rajbari",
+    "Shariatpur",
+  ],
+  Chattogram: [
+    "Chattogram",
+    "Cox's Bazar",
+    "Cumilla",
+    "Brahmanbaria",
+    "Chandpur",
+    "Noakhali",
+    "Feni",
+    "Lakshmipur",
+    "Rangamati",
+    "Khagrachhari",
+    "Bandarban",
+  ],
+  Rajshahi: [
+    "Rajshahi",
+    "Bogura",
+    "Pabna",
+    "Sirajganj",
+    "Natore",
+    "Naogaon",
+    "Chapainawabganj",
+    "Joypurhat",
+  ],
+  Khulna: [
+    "Khulna",
+    "Jashore",
+    "Kushtia",
+    "Satkhira",
+    "Bagerhat",
+    "Jhenaidah",
+    "Magura",
+    "Narail",
+    "Chuadanga",
+    "Meherpur",
+  ],
+  Barishal: [
+    "Barishal",
+    "Patuakhali",
+    "Bhola",
+    "Pirojpur",
+    "Barguna",
+    "Jhalokati",
+  ],
+  Sylhet: ["Sylhet", "Moulvibazar", "Habiganj", "Sunamganj"],
+  Rangpur: [
+    "Rangpur",
+    "Dinajpur",
+    "Kurigram",
+    "Gaibandha",
+    "Nilphamari",
+    "Panchagarh",
+    "Thakurgaon",
+    "Lalmonirhat",
+  ],
+  Mymensingh: ["Mymensingh", "Jamalpur", "Netrokona", "Sherpur"],
+};
+
+export const COURIER_OPTIONS = [
+  { label: "Pathao Courier", value: "pathao" },
+  { label: "Steadfast Courier", value: "steadfast" },
+  { label: "RedX Delivery", value: "redx" },
+];
+
+export interface CustomRouteRule {
+  division: string;
+  district: string;
+  courier: string;
+}
+
+function TrashRemoveIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg
+      viewBox="0 0 20 20"
+      fill="currentColor"
+      width="20"
+      height="20"
+      aria-hidden="true"
+      {...props}
+    >
+      <path
+        fillRule="evenodd"
+        d="M8.5 3a1.5 1.5 0 0 0-1.415 1H4.75a.75.75 0 0 0 0 1.5h.32l.662 9.266A2.25 2.25 0 0 0 7.977 16.85h4.046a2.25 2.25 0 0 0 2.245-2.084l.662-9.266h.32a.75.75 0 0 0 0-1.5h-2.335A1.5 1.5 0 0 0 11.5 3h-3Zm1.5 1h-1.5a.5.5 0 0 1 .5-.5h2a.5.5 0 0 1 .5.5H10ZM7.53 7.47a.75.75 0 0 1 .75.75v5a.75.75 0 0 1-1.5 0v-5a.75.75 0 0 1 .75-.75Zm4.94 0a.75.75 0 0 1 .75.75v5a.75.75 0 0 1-1.5 0v-5a.75.75 0 0 1 .75-.75Z"
+        clipRule="evenodd"
+      />
+    </svg>
+  );
+}
 
 export interface FraudStatsProfile {
   phone: string;
@@ -51,9 +159,13 @@ export interface FraudStatsProfile {
 
 export interface AutoRoutingConfig {
   autoRoutingEnabled: boolean;
+  isAutoRoutingEnabled: boolean;
   insideDhakaCourier: string;
   outsideDhakaCourier: string;
+  defaultCourier: string;
   minSafetySuccessRate: number;
+  minSuccessRate: number;
+  customRoutes: CustomRouteRule[];
 }
 
 export interface OrderLineItem {
@@ -480,6 +592,71 @@ async function evaluateOrderStatusAndCashDiscrepancy(params: {
   };
 }
 
+/**
+ * 3. ROUTING ENGINE EVALUATION LOGIC SNIPPET (For Webhook / Order Sync Evaluation)
+ */
+export function evaluateWebhookOrderRouting(params: {
+  orderCity: string;
+  customerSuccessRate: number;
+  customRoutes: CustomRouteRule[];
+  defaultCourier: string;
+  minSuccessRate: number;
+  isAutoRoutingEnabled: boolean;
+}) {
+  const {
+    orderCity,
+    customerSuccessRate,
+    customRoutes,
+    defaultCourier,
+    minSuccessRate,
+    isAutoRoutingEnabled,
+  } = params;
+
+  if (!isAutoRoutingEnabled) {
+    return {
+      status: "Manual Mode",
+      isLockedForReview: false,
+      assignedCourier: defaultCourier,
+    };
+  }
+
+  // Step 1: Fraud Risk Safety Net Check
+  if (customerSuccessRate < minSuccessRate) {
+    return {
+      status: "Risky - Locked for Manual Review",
+      isLockedForReview: true,
+      assignedCourier: null,
+    };
+  }
+
+  const normalizedCity = (orderCity || "").trim().toLowerCase();
+
+  // Step 2: Primary Exact District Match or Division Wildcard Match, Fallback to defaultCourier
+  const exactDistrictRule = customRoutes.find(
+    (r) => r.district.toLowerCase() === normalizedCity
+  );
+
+  const divisionWildcardRule = customRoutes.find((r) => {
+    if (r.district !== "All Districts in Division") return false;
+    const divisionDistricts = BANGLADESH_LOCATIONS[r.division] || [];
+    return divisionDistricts.some(
+      (d) => d.toLowerCase() === normalizedCity
+    );
+  });
+
+  const assignedCourier =
+    exactDistrictRule?.courier ||
+    divisionWildcardRule?.courier ||
+    customRoutes.find((r) => r.district === orderCity)?.courier ||
+    defaultCourier;
+
+  return {
+    status: "Auto-Routed (Safe)",
+    isLockedForReview: false,
+    assignedCourier,
+  };
+}
+
 function applyRoutingAndSafetyLogic(
   order: RawShopifyOrder,
   fraudStats: FraudStatsProfile,
@@ -490,9 +667,17 @@ function applyRoutingAndSafetyLogic(
   const locationString =
     `${order.city} ${order.province} ${order.shippingAddress}`.toLowerCase();
   const isInsideDhaka = locationString.includes("dhaka");
+  const isEnabled = Boolean(
+    routingConfig.isAutoRoutingEnabled ?? routingConfig.autoRoutingEnabled
+  );
+  const minRate = Number(
+    routingConfig.minSuccessRate ?? routingConfig.minSafetySuccessRate ?? 70
+  );
+  const fallbackCourier =
+    routingConfig.defaultCourier || defaultCourierFallback || "steadfast";
 
-  if (routingConfig.autoRoutingEnabled) {
-    if (fraudStats.successRate < routingConfig.minSafetySuccessRate) {
+  if (isEnabled) {
+    if (fraudStats.successRate < minRate) {
       return {
         ...order,
         customerPhone: fraudStats.phone,
@@ -501,16 +686,42 @@ function applyRoutingAndSafetyLogic(
         status: "Risky - Locked for Manual Review",
         isRiskyLocked: true,
         isInsideDhaka,
-        assignedCourier: isInsideDhaka
-          ? routingConfig.insideDhakaCourier
-          : routingConfig.outsideDhakaCourier,
-        routingReason: `Blocked: Success Rate (${fraudStats.successRate}%) < ${routingConfig.minSafetySuccessRate}% threshold`,
+        assignedCourier: fallbackCourier,
+        routingReason: `Blocked: Success Rate (${fraudStats.successRate}%) < ${minRate}% threshold`,
       };
     }
 
-    const routedCourier = isInsideDhaka
-      ? routingConfig.insideDhakaCourier
-      : routingConfig.outsideDhakaCourier;
+    const orderCity = (order.city || "").trim();
+    const normalizedCity = orderCity.toLowerCase();
+    const customRoutes = routingConfig.customRoutes || [];
+
+    const exactDistrictRule = customRoutes.find(
+      (r) => r.district.toLowerCase() === normalizedCity
+    );
+
+    const divisionWildcardRule = customRoutes.find((r) => {
+      if (r.district !== "All Districts in Division") return false;
+      const divisionDistricts = BANGLADESH_LOCATIONS[r.division] || [];
+      return divisionDistricts.some(
+        (d) => d.toLowerCase() === normalizedCity
+      );
+    });
+
+    const routedCourier =
+      exactDistrictRule?.courier ||
+      divisionWildcardRule?.courier ||
+      (isInsideDhaka
+        ? routingConfig.insideDhakaCourier
+        : routingConfig.outsideDhakaCourier) ||
+      fallbackCourier;
+
+    const matchedRuleText = exactDistrictRule
+      ? `District Match: ${exactDistrictRule.district} → ${exactDistrictRule.courier.toUpperCase()}`
+      : divisionWildcardRule
+      ? `Division Rule: ${divisionWildcardRule.division} → ${divisionWildcardRule.courier.toUpperCase()}`
+      : isInsideDhaka
+      ? `Inside Dhaka → ${routedCourier.toUpperCase()}`
+      : `Default Courier → ${routedCourier.toUpperCase()}`;
 
     return {
       ...order,
@@ -523,14 +734,11 @@ function applyRoutingAndSafetyLogic(
       isRiskyLocked: false,
       isInsideDhaka,
       assignedCourier: routedCourier,
-      routingReason: isInsideDhaka
-        ? `Inside Dhaka → Auto-mapped to ${routedCourier.toUpperCase()}`
-        : `Outside Dhaka → Auto-mapped to ${routedCourier.toUpperCase()}`,
+      routingReason: matchedRuleText,
     };
   }
 
-  const isBelowThreshold =
-    fraudStats.successRate < routingConfig.minSafetySuccessRate;
+  const isBelowThreshold = fraudStats.successRate < minRate;
 
   return {
     ...order,
@@ -545,9 +753,9 @@ function applyRoutingAndSafetyLogic(
     isRiskyLocked: isBelowThreshold,
     isInsideDhaka,
     assignedCourier: defaultCourierFallback,
-    routingReason: isInsideDhaka
-      ? "Zone: Inside Dhaka (Manual Mode)"
-      : "Zone: Outside Dhaka (Manual Mode)",
+    routingReason: isBelowThreshold
+      ? `Blocked: Success Rate (${fraudStats.successRate}%) < ${minRate}% threshold`
+      : `Manual Mode → ${defaultCourierFallback.toUpperCase()}`,
   };
 }
 
@@ -1053,11 +1261,39 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const isUnlimitedBulk = !Number.isFinite(rawBulkCap);
   const bulkBatchLimit = isUnlimitedBulk ? -1 : rawBulkCap;
 
+  const isAutoRoutingEnabled = Boolean(
+    storeConfig?.isAutoRoutingEnabled ?? storeConfig?.autoRoutingEnabled ?? false
+  );
+  const customRoutes: CustomRouteRule[] =
+    Array.isArray(storeConfig?.customRoutes) &&
+    storeConfig.customRoutes.length > 0
+      ? storeConfig.customRoutes.map((r: any) => ({
+          division: String(r.division || "Dhaka"),
+          district: String(r.district || "Dhaka"),
+          courier: String(r.courier || "pathao"),
+        }))
+      : [
+          { division: "Dhaka", district: "Dhaka", courier: "pathao" },
+          {
+            division: "Chattogram",
+            district: "All Districts in Division",
+            courier: "steadfast",
+          },
+        ];
+  const defaultCourier = String(storeConfig?.defaultCourier || "steadfast");
+  const minSuccessRate = Number(
+    storeConfig?.minSuccessRate ?? storeConfig?.minSafetySuccessRate ?? 70
+  );
+
   const routingConfig: AutoRoutingConfig = {
-    autoRoutingEnabled: Boolean(storeConfig?.autoRoutingEnabled ?? false),
+    autoRoutingEnabled: isAutoRoutingEnabled,
+    isAutoRoutingEnabled,
     insideDhakaCourier: storeConfig?.insideDhakaCourier || "pathao",
     outsideDhakaCourier: storeConfig?.outsideDhakaCourier || "steadfast",
-    minSafetySuccessRate: Number(storeConfig?.minSafetySuccessRate ?? 70),
+    defaultCourier,
+    minSafetySuccessRate: minSuccessRate,
+    minSuccessRate,
+    customRoutes,
   };
 
   const activeCouriers = {
@@ -1507,29 +1743,96 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const actionType = String(formData.get("actionType") || "dispatchOrder");
 
   if (actionType === "saveRoutingSettings") {
-    const autoRoutingEnabled =
+    const isAutoRoutingEnabled =
+      String(formData.get("isAutoRoutingEnabled")) === "true" ||
       String(formData.get("autoRoutingEnabled")) === "true";
+
+    const defaultCourierRaw = String(
+      formData.get("defaultCourier") || "steadfast"
+    ).trim();
+    const validCouriers = ["pathao", "steadfast", "redx"];
+    const defaultCourier = validCouriers.includes(defaultCourierRaw)
+      ? defaultCourierRaw
+      : "steadfast";
+
     const insideDhakaCourier = String(
       formData.get("insideDhakaCourier") || "pathao"
     ).trim();
     const outsideDhakaCourier = String(
       formData.get("outsideDhakaCourier") || "steadfast"
     ).trim();
-    const rawRate = Number(formData.get("minSafetySuccessRate") ?? 70);
-    const minSafetySuccessRate = Math.min(
-      100,
-      Math.max(0, Number.isNaN(rawRate) ? 70 : Math.round(rawRate))
+
+    const minSuccessRateRaw = Number(
+      formData.get("minSuccessRate") ?? formData.get("minSafetySuccessRate") ?? 70
     );
+    const minSuccessRate = Math.min(
+      100,
+      Math.max(
+        0,
+        Number.isNaN(minSuccessRateRaw) ? 70 : Math.round(minSuccessRateRaw)
+      )
+    );
+
+    const customRoutesJson = String(formData.get("customRoutes") || "[]");
+    let parsedRoutes: CustomRouteRule[] = [];
+
+    try {
+      const rawArray = JSON.parse(customRoutesJson);
+      if (Array.isArray(rawArray)) {
+        parsedRoutes = rawArray
+          .filter((item) => item && typeof item === "object")
+          .map((item) => {
+            const division =
+              BANGLADESH_LOCATIONS[String(item.division)] !== undefined
+                ? String(item.division)
+                : "Dhaka";
+
+            const divisionDistricts = BANGLADESH_LOCATIONS[division];
+            const requestedDistrict = String(
+              item.district || "All Districts in Division"
+            );
+
+            const district =
+              requestedDistrict === "All Districts in Division" ||
+              divisionDistricts.includes(requestedDistrict)
+                ? requestedDistrict
+                : "All Districts in Division";
+
+            const courier = validCouriers.includes(String(item.courier))
+              ? String(item.courier)
+              : "pathao";
+
+            return { division, district, courier };
+          });
+      }
+    } catch {
+      // ignore
+    }
+
+    if (parsedRoutes.length === 0 && (!customRoutesJson || customRoutesJson === "[]")) {
+      parsedRoutes = [
+        { division: "Dhaka", district: "Dhaka", courier: "pathao" },
+        {
+          division: "Chattogram",
+          district: "All Districts in Division",
+          courier: "steadfast",
+        },
+      ];
+    }
 
     await CourierConfig.findOneAndUpdate(
       { shopDomain },
       {
         $set: {
           shopDomain,
-          autoRoutingEnabled,
+          autoRoutingEnabled: isAutoRoutingEnabled,
+          isAutoRoutingEnabled,
+          customRoutes: parsedRoutes,
+          defaultCourier,
           insideDhakaCourier,
           outsideDhakaCourier,
-          minSafetySuccessRate,
+          minSafetySuccessRate: minSuccessRate,
+          minSuccessRate,
         },
       },
       { upsert: true, new: true, setDefaultsOnInsert: true }
@@ -1539,9 +1842,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       success: true,
       actionType: "saveRoutingSettings",
       limitReached: false,
-      message: `Auto-Routing & Risk Safety Net updated! (${
-        autoRoutingEnabled ? "Enabled" : "Disabled"
-      } • Inside Dhaka: ${insideDhakaCourier.toUpperCase()} • Outside Dhaka: ${outsideDhakaCourier.toUpperCase()} • Safety Threshold: ${minSafetySuccessRate}%)`,
+      message: `Saved ${parsedRoutes.length} dynamic geo-routing rule(s), default fallback courier (${defaultCourier.toUpperCase()}), and ${minSuccessRate}% fraud safety threshold to MongoDB.`,
       bookedSlips: [] as DispatchedSlipRecord[],
     };
   }
@@ -1849,8 +2150,17 @@ export default function OrdersFulfillmentPage() {
 
   const [useDemoOrders, setUseDemoOrders] = useState(false);
 
-  const [autoRoutingEnabled, setAutoRoutingEnabled] = useState(
-    routingConfig.autoRoutingEnabled
+  const [isAutoRoutingEnabled, setIsAutoRoutingEnabled] = useState<boolean>(
+    routingConfig.isAutoRoutingEnabled ?? routingConfig.autoRoutingEnabled
+  );
+  const [autoRoutingEnabled, setAutoRoutingEnabled] = useState<boolean>(
+    routingConfig.isAutoRoutingEnabled ?? routingConfig.autoRoutingEnabled
+  );
+  const [customRoutes, setCustomRoutes] = useState<CustomRouteRule[]>(
+    routingConfig.customRoutes || []
+  );
+  const [defaultCourier, setDefaultCourier] = useState<string>(
+    routingConfig.defaultCourier || "steadfast"
   );
   const [insideDhakaCourier, setInsideDhakaCourier] = useState(
     routingConfig.insideDhakaCourier
@@ -1858,8 +2168,11 @@ export default function OrdersFulfillmentPage() {
   const [outsideDhakaCourier, setOutsideDhakaCourier] = useState(
     routingConfig.outsideDhakaCourier
   );
-  const [minSafetySuccessRate, setMinSafetySuccessRate] = useState(
-    String(routingConfig.minSafetySuccessRate)
+  const [minSuccessRate, setMinSuccessRate] = useState<string>(
+    String(routingConfig.minSuccessRate ?? routingConfig.minSafetySuccessRate ?? 70)
+  );
+  const [minSafetySuccessRate, setMinSafetySuccessRate] = useState<string>(
+    String(routingConfig.minSuccessRate ?? routingConfig.minSafetySuccessRate ?? 70)
   );
 
   const [manuallyUnlockedOrders, setManuallyUnlockedOrders] = useState<
@@ -1901,14 +2214,28 @@ export default function OrdersFulfillmentPage() {
   const [clientBatchError, setClientBatchError] = useState<string | null>(null);
 
   useEffect(() => {
-    setAutoRoutingEnabled(routingConfig.autoRoutingEnabled);
+    const isEnabled = Boolean(
+      routingConfig.isAutoRoutingEnabled ?? routingConfig.autoRoutingEnabled
+    );
+    const rateStr = String(
+      routingConfig.minSuccessRate ?? routingConfig.minSafetySuccessRate ?? 70
+    );
+    setIsAutoRoutingEnabled(isEnabled);
+    setAutoRoutingEnabled(isEnabled);
+    setCustomRoutes(routingConfig.customRoutes || []);
+    setDefaultCourier(routingConfig.defaultCourier || "steadfast");
     setInsideDhakaCourier(routingConfig.insideDhakaCourier);
     setOutsideDhakaCourier(routingConfig.outsideDhakaCourier);
-    setMinSafetySuccessRate(String(routingConfig.minSafetySuccessRate));
+    setMinSuccessRate(rateStr);
+    setMinSafetySuccessRate(rateStr);
   }, [
+    routingConfig.isAutoRoutingEnabled,
     routingConfig.autoRoutingEnabled,
+    routingConfig.customRoutes,
+    routingConfig.defaultCourier,
     routingConfig.insideDhakaCourier,
     routingConfig.outsideDhakaCourier,
+    routingConfig.minSuccessRate,
     routingConfig.minSafetySuccessRate,
   ]);
 
@@ -2029,13 +2356,85 @@ export default function OrdersFulfillmentPage() {
     },
   ];
 
+  const divisionSelectOptions = Object.keys(BANGLADESH_LOCATIONS).map(
+    (divisionName) => ({
+      label: `${divisionName} Division`,
+      value: divisionName,
+    })
+  );
+
+  const getDistrictSelectOptions = (selectedDivision: string) => {
+    const districts = BANGLADESH_LOCATIONS[selectedDivision] || [];
+    return [
+      {
+        label: `All Districts in ${selectedDivision} Division`,
+        value: "All Districts in Division",
+      },
+      ...districts.map((districtName) => ({
+        label: districtName,
+        value: districtName,
+      })),
+    ];
+  };
+
+  const handleDivisionChange = (index: number, newDivision: string) => {
+    setCustomRoutes((prevRoutes) =>
+      prevRoutes.map((row, idx) =>
+        idx === index
+          ? {
+              ...row,
+              division: newDivision,
+              district: "All Districts in Division",
+            }
+          : row
+      )
+    );
+  };
+
+  const handleDistrictChange = (index: number, newDistrict: string) => {
+    setCustomRoutes((prevRoutes) =>
+      prevRoutes.map((row, idx) =>
+        idx === index ? { ...row, district: newDistrict } : row
+      )
+    );
+  };
+
+  const handleCourierChange = (index: number, newCourier: string) => {
+    setCustomRoutes((prevRoutes) =>
+      prevRoutes.map((row, idx) =>
+        idx === index ? { ...row, courier: newCourier } : row
+      )
+    );
+  };
+
+  const handleAddRuleRow = () => {
+    setCustomRoutes((prevRoutes) => [
+      ...prevRoutes,
+      {
+        division: "Dhaka",
+        district: "All Districts in Division",
+        courier: "pathao",
+      },
+    ]);
+  };
+
+  const handleRemoveRuleRow = (indexToRemove: number) => {
+    setCustomRoutes((prevRoutes) =>
+      prevRoutes.filter((_, idx) => idx !== indexToRemove)
+    );
+  };
+
   const handleSaveRoutingSettings = () => {
     const formData = new FormData();
     formData.append("actionType", "saveRoutingSettings");
-    formData.append("autoRoutingEnabled", String(autoRoutingEnabled));
+    formData.append("isAutoRoutingEnabled", String(isAutoRoutingEnabled));
+    formData.append("autoRoutingEnabled", String(isAutoRoutingEnabled));
+    formData.append("defaultCourier", defaultCourier);
     formData.append("insideDhakaCourier", insideDhakaCourier);
     formData.append("outsideDhakaCourier", outsideDhakaCourier);
-    formData.append("minSafetySuccessRate", minSafetySuccessRate || "70");
+    formData.append("minSuccessRate", minSuccessRate || "70");
+    formData.append("minSafetySuccessRate", minSuccessRate || "70");
+    formData.append("customRoutes", JSON.stringify(customRoutes));
     submit(formData, { method: "post" });
   };
 
@@ -2998,29 +3397,31 @@ export default function OrdersFulfillmentPage() {
             </Layout.Section>
           )}
 
-          {/* ==================== TASK 2: AUTO-ROUTING & RISK SAFETY NET SETTINGS ==================== */}
+          {/* ==================== TASK 2: ENTERPRISE DYNAMIC GEO-ROUTING & FRAUD RISK SAFETY NET ==================== */}
           <Layout.Section>
             <Card>
               <BlockStack gap="400">
-                <InlineStack align="space-between" blockAlign="center">
+                {/* Card Header & Primary Save Button */}
+                <InlineStack align="space-between" blockAlign="center" wrap>
                   <BlockStack gap="050">
                     <InlineStack gap="200" blockAlign="center">
                       <Text as="h2" variant="headingMd">
                         Automated Geo-Routing &amp; Fraud Risk Safety Net
                       </Text>
                       <Badge
-                        tone={
-                          routingConfig.autoRoutingEnabled ? "success" : "attention"
-                        }
+                        tone={isAutoRoutingEnabled ? "success" : "attention"}
                       >
-                        {routingConfig.autoRoutingEnabled
-                          ? "Auto-Routing Active"
+                        {isAutoRoutingEnabled
+                          ? "Dynamic Engine Active"
                           : "Manual Mode"}
                       </Badge>
+                      <Badge tone="info">Enterprise Rule Builder</Badge>
                     </InlineStack>
                     <Text as="p" variant="bodySm" tone="subdued">
-                      Automatically route safe orders by Inside/Outside Dhaka and
-                      lock customers below your minimum delivery success rate (X%).
+                      Map any of Bangladesh&apos;s 8 Divisions and 64 Districts
+                      to specific courier partners, define a nationwide
+                      catch-all fallback, and lock high-risk orders below your
+                      minimum delivery success rate.
                     </Text>
                   </BlockStack>
 
@@ -3035,41 +3436,208 @@ export default function OrdersFulfillmentPage() {
 
                 <Divider />
 
+                {/* Master Automation Switch */}
+                <Box
+                  padding="300"
+                  background="bg-surface-secondary"
+                  borderRadius="200"
+                >
+                  <Checkbox
+                    label="Enable Automated Geo-Routing & Fraud Risk Safety Net"
+                    helpText="When enabled, incoming Shopify orders are automatically evaluated against your fraud threshold and routed to the matching Division/District courier."
+                    checked={isAutoRoutingEnabled}
+                    onChange={(newChecked) => {
+                      setIsAutoRoutingEnabled(newChecked);
+                      setAutoRoutingEnabled(newChecked);
+                    }}
+                  />
+                </Box>
+
+                <Divider />
+
+                {/* Dynamic Rule Builder Rows */}
+                <BlockStack gap="300">
+                  <InlineStack align="space-between" blockAlign="center">
+                    <BlockStack gap="050">
+                      <Text as="h3" variant="headingSm">
+                        Custom Division &amp; District Routing Rules (
+                        {customRoutes.length})
+                      </Text>
+                      <Text as="p" variant="bodySm" tone="subdued">
+                        Rules are evaluated from top to bottom. Specific
+                        district rules take priority over division-wide rules.
+                      </Text>
+                    </BlockStack>
+
+                    <Button variant="secondary" onClick={handleAddRuleRow}>
+                      + Add Routing Rule
+                    </Button>
+                  </InlineStack>
+
+                  {customRoutes.length === 0 ? (
+                    <Box
+                      padding="400"
+                      background="bg-surface-secondary"
+                      borderRadius="200"
+                    >
+                      <Text as="p" variant="bodySm" tone="subdued">
+                        No custom district rules configured. All safe orders
+                        will be routed to your Default Courier (Rest of
+                        Bangladesh) below. Click &quot;+ Add Routing Rule&quot;
+                        to add a custom rule.
+                      </Text>
+                    </Box>
+                  ) : (
+                    <BlockStack gap="250">
+                      {customRoutes.map((rule, index) => (
+                        <Box
+                          key={`rule-${index}`}
+                          padding="300"
+                          background="bg-surface-secondary"
+                          borderRadius="200"
+                        >
+                          <Grid>
+                            {/* a) Select for Division */}
+                            <Grid.Cell
+                              columnSpan={{
+                                xs: 6,
+                                sm: 6,
+                                md: 2,
+                                lg: 4,
+                                xl: 4,
+                              }}
+                            >
+                              <Select
+                                label={`Rule #${index + 1}: Division`}
+                                options={divisionSelectOptions}
+                                value={rule.division}
+                                onChange={(val) =>
+                                  handleDivisionChange(index, val)
+                                }
+                              />
+                            </Grid.Cell>
+
+                            {/* b) Select for District (Dynamically populated by Division) */}
+                            <Grid.Cell
+                              columnSpan={{
+                                xs: 6,
+                                sm: 6,
+                                md: 2,
+                                lg: 4,
+                                xl: 4,
+                              }}
+                            >
+                              <Select
+                                label="District"
+                                options={getDistrictSelectOptions(
+                                  rule.division
+                                )}
+                                value={rule.district}
+                                onChange={(val) =>
+                                  handleDistrictChange(index, val)
+                                }
+                              />
+                            </Grid.Cell>
+
+                            {/* c) Select for Courier + d) Remove Row Button */}
+                            <Grid.Cell
+                              columnSpan={{
+                                xs: 6,
+                                sm: 6,
+                                md: 2,
+                                lg: 4,
+                                xl: 4,
+                              }}
+                            >
+                              <InlineStack
+                                gap="200"
+                                blockAlign="end"
+                                wrap={false}
+                              >
+                                <Box width="100%">
+                                  <Select
+                                    label="Assigned Courier"
+                                    options={COURIER_OPTIONS}
+                                    value={rule.courier}
+                                    onChange={(val) =>
+                                      handleCourierChange(index, val)
+                                    }
+                                  />
+                                </Box>
+                                <Box>
+                                  <Button
+                                    tone="critical"
+                                    variant="secondary"
+                                    accessibilityLabel={`Remove rule ${
+                                      index + 1
+                                    }`}
+                                    icon={<Icon source={TrashRemoveIcon} />}
+                                    onClick={() => handleRemoveRuleRow(index)}
+                                  />
+                                </Box>
+                              </InlineStack>
+                            </Grid.Cell>
+                          </Grid>
+                        </Box>
+                      ))}
+                    </BlockStack>
+                  )}
+                </BlockStack>
+
+                <Divider />
+
+                {/* Catch-All Fallback Courier & Fraud Risk Safety Net */}
                 <Grid>
-                  <Grid.Cell columnSpan={{ xs: 6, sm: 6, md: 3, lg: 3, xl: 3 }}>
-                    <Checkbox
-                      label="Enable Automated Geo-Routing & Risk Lock"
-                      checked={autoRoutingEnabled}
-                      onChange={(newChecked) => setAutoRoutingEnabled(newChecked)}
-                    />
-                  </Grid.Cell>
-                  <Grid.Cell columnSpan={{ xs: 6, sm: 6, md: 3, lg: 3, xl: 3 }}>
+                  <Grid.Cell
+                    columnSpan={{ xs: 6, sm: 6, md: 3, lg: 6, xl: 6 }}
+                  >
                     <Select
-                      label="Inside Dhaka Courier"
-                      options={fallbackCourierOptions}
-                      value={insideDhakaCourier}
-                      onChange={(val) => setInsideDhakaCourier(val)}
+                      label="Default Courier (Rest of Bangladesh)"
+                      options={COURIER_OPTIONS}
+                      value={defaultCourier}
+                      onChange={(val) => setDefaultCourier(val)}
+                      helpText="Catch-all fallback courier for any Bangladeshi district not covered by the custom rules above."
                     />
                   </Grid.Cell>
-                  <Grid.Cell columnSpan={{ xs: 6, sm: 6, md: 3, lg: 3, xl: 3 }}>
-                    <Select
-                      label="Outside Dhaka Courier"
-                      options={fallbackCourierOptions}
-                      value={outsideDhakaCourier}
-                      onChange={(val) => setOutsideDhakaCourier(val)}
-                    />
-                  </Grid.Cell>
-                  <Grid.Cell columnSpan={{ xs: 6, sm: 6, md: 3, lg: 3, xl: 3 }}>
+
+                  <Grid.Cell
+                    columnSpan={{ xs: 6, sm: 6, md: 3, lg: 6, xl: 6 }}
+                  >
                     <TextField
                       label="Min. Safe Success Rate (X%)"
                       type="number"
                       suffix="%"
-                      value={minSafetySuccessRate}
-                      onChange={(val) => setMinSafetySuccessRate(val)}
+                      value={minSuccessRate}
+                      onChange={(val) => {
+                        setMinSuccessRate(val);
+                        setMinSafetySuccessRate(val);
+                      }}
                       autoComplete="off"
+                      helpText="Orders from customers with a historical delivery success rate below X% are locked for manual review."
                     />
                   </Grid.Cell>
                 </Grid>
+
+                <Divider />
+
+                {/* Bottom Action Bar */}
+                <InlineStack align="space-between" blockAlign="center">
+                  <Text as="span" variant="bodySm" tone="subdued">
+                    Evaluation Logic:{" "}
+                    <code>
+                      const assignedCourier = customRoutes.find(r =&gt;
+                      r.district === orderCity)?.courier || defaultCourier;
+                    </code>
+                  </Text>
+
+                  <Button
+                    variant="primary"
+                    loading={isSavingRoutingSettings}
+                    onClick={handleSaveRoutingSettings}
+                  >
+                    Save Routing &amp; Safety Rules
+                  </Button>
+                </InlineStack>
               </BlockStack>
             </Card>
           </Layout.Section>
