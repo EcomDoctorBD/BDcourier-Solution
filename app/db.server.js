@@ -443,6 +443,55 @@ export const ZoneDistricts = mongoose.model(
   zoneDistrictsSchema
 );
 
+/**
+ * 4. Task: AI Address Correction & Caching Schema
+ * Enforces rawInput, cleanAddress, district, thana, confidence, createdAt
+ */
+const addressCacheSchema = new mongoose.Schema(
+  {
+    rawInput: {
+      type: String,
+      required: true,
+      unique: true,
+      index: true,
+      trim: true,
+      lowercase: true,
+    },
+    cleanAddress: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    district: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    thana: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+    confidence: {
+      type: String,
+      enum: ["HIGH", "MEDIUM", "LOW"],
+      default: "HIGH",
+    },
+    createdAt: {
+      type: Date,
+      default: Date.now,
+      index: true,
+    },
+  },
+  { timestamps: false }
+);
+
+if (mongoose.models.AddressCache) {
+  delete mongoose.models.AddressCache;
+}
+
+export const AddressCache = mongoose.model("AddressCache", addressCacheSchema);
+
 export default CourierConfig;
 
 

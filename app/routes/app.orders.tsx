@@ -40,6 +40,7 @@ import CourierConfig, {
   GlobalFraudNetwork,
   ShipmentBooking,
 } from "../db.server";
+import { cleanAndCacheAddress } from "../clean-address.server";
 
 /**
  * 1. HIERARCHICAL BANGLADESH LOCATION DATA (8 Divisions -> 64 Districts)
@@ -1010,17 +1011,46 @@ async function dispatchSingleOrderToCourier(params: {
     sharedPathaoTokenRef,
   } = params;
 
+  // --------------------------------------------------------------------------
+  // AI Address Correction & Caching Pipeline (Executed precisely on Send to Courier click)
+  // --------------------------------------------------------------------------
+  const addressResolution = await cleanAndCacheAddress(shippingAddress);
+
+  // If confidence returns 'LOW' or district is null:
+  // Instantly abort the automated API transmission, lock the order row grid,
+  // and trigger the amber Polaris <Badge> "Risky Order / Manual Review Required"
+  if (addressResolution.confidence === "LOW" || !addressResolution.district) {
+    return {
+      success: false,
+      isRiskyLocked: true,
+      orderId,
+      orderName,
+      courierName: "",
+      trackingNumber: "",
+      message: `Address Quality Alert for ${orderName}: AI Confidence is LOW or district unidentifiable. Automated dispatch aborted and order locked for manual review.`,
+    };
+  }
+
+  // Automated Routing Integration:
+  // If AI/Cache updates district to 'Dhaka', dispatch payload to Pathao Courier API.
+  // If district is outside Dhaka, dispatch to Steadfast Courier API.
+  const resolvedDistrict = addressResolution.district.trim();
+  const isInsideDhakaResolved = resolvedDistrict.toLowerCase().includes("dhaka");
+  const routedCourier = isInsideDhakaResolved ? "pathao" : "steadfast";
+  const activeCourier = selectedCourier || routedCourier;
+
   const cleanPhone = formatBangladeshPhone(customerPhone);
   const cleanAddress =
-    shippingAddress.length >= 10
+    addressResolution.cleanAddress ||
+    (shippingAddress.length >= 10
       ? shippingAddress
-      : `${shippingAddress || "House 10, Road 5"}, Dhaka, Bangladesh`;
+      : `${shippingAddress || "House 10, Road 5"}, Dhaka, Bangladesh`);
   const amountToCollect = Math.max(0, Math.round(Number(codAmount) || 0));
 
   let courierDisplayName = "";
   let finalTracking = "";
 
-  if (selectedCourier === "pathao") {
+  if (activeCourier === "pathao") {
     courierDisplayName = "Pathao Courier";
     const clientId = storeConfig?.pathaoClientId?.trim();
     const clientSecret = storeConfig?.pathaoSecret?.trim();
@@ -1132,7 +1162,7 @@ async function dispatchSingleOrderToCourier(params: {
         }`,
       };
     }
-  } else if (selectedCourier === "steadfast") {
+  } else if (activeCourier === "steadfast") {
     courierDisplayName = "Steadfast Courier";
     if (
       !storeConfig?.steadfastApiKey?.trim() ||
@@ -1148,7 +1178,7 @@ async function dispatchSingleOrderToCourier(params: {
       };
     }
     finalTracking = `SF-${Math.floor(100000 + Math.random() * 900000)}`;
-  } else if (selectedCourier === "redx") {
+  } else if (activeCourier === "redx") {
     courierDisplayName = "RedX Delivery";
     if (
       !storeConfig?.redxProfileId?.trim() ||
@@ -1184,7 +1214,7 @@ async function dispatchSingleOrderToCourier(params: {
         shopDomain,
         orderId,
         orderName,
-        courierKey: selectedCourier,
+        courierKey: activeCourier,
         courierName: courierDisplayName,
         trackingNumber: finalTracking,
         customerName,
@@ -1216,7 +1246,7 @@ async function dispatchSingleOrderToCourier(params: {
       customerName,
       customerPhone: cleanPhone,
       shippingAddress: cleanAddress,
-      isInsideDhaka,
+      isInsideDhaka: isInsideDhakaResolved,
       codAmount,
       currencyCode,
       warehouseNote,
@@ -1858,6 +1888,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       );
     }
 
+    const lockedOrders = batchResults
+      .filter((r) => r.isRiskyLocked)
+      .map((r) => r.orderId);
+
     if (succeededSlips.length === 0) {
       return {
         success: false,
@@ -1865,6 +1899,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         limitReached: false,
         message: `Bulk booking failed for all ${selectedBatch.length} selected orders. ${failedMessages.join(" | ")}`,
         bookedSlips: [] as DispatchedSlipRecord[],
+        lockedOrderIds: lockedOrders,
       };
     }
 
@@ -1878,6 +1913,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         failedMessages.length > 0 ? ` (${failedMessages.join(" | ")})` : ""
       }`,
       bookedSlips: succeededSlips,
+      lockedOrderIds: lockedOrders,
     };
   }
 
@@ -1971,6 +2007,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     limitReached: false,
     message: singleResult.message,
     bookedSlips: singleResult.slip ? [singleResult.slip] : [],
+    isRiskyLocked: singleResult.isRiskyLocked || false,
+    orderId: singleResult.orderId,
   };
 };
 
@@ -2048,6 +2086,9 @@ export default function OrdersFulfillmentPage() {
   const [manuallyUnlockedOrders, setManuallyUnlockedOrders] = useState<
     Record<string, boolean>
   >({});
+  const [lockedRiskOrders, setLockedRiskOrders] = useState<
+    Record<string, boolean>
+  >({});
 
   const [selectedResources, setSelectedResources] = useState<string[]>([]);
   const [selectedCouriersByOrder, setSelectedCouriersByOrder] = useState<
@@ -2095,6 +2136,21 @@ export default function OrdersFulfillmentPage() {
     if (actionData) {
       setShowBanner(true);
       setClientBatchError(null);
+      if (actionData.isRiskyLocked && (actionData as any).orderId) {
+        setLockedRiskOrders((prev) => ({
+          ...prev,
+          [(actionData as any).orderId]: true,
+        }));
+      }
+      if (Array.isArray((actionData as any).lockedOrderIds)) {
+        setLockedRiskOrders((prev) => {
+          const updated = { ...prev };
+          for (const id of (actionData as any).lockedOrderIds) {
+            updated[id] = true;
+          }
+          return updated;
+        });
+      }
       if (
         actionData.success &&
         Array.isArray(actionData.bookedSlips) &&
@@ -2306,7 +2362,8 @@ export default function OrdersFulfillmentPage() {
     const { totalDelivered, totalReturned, successRate } = order.fraudStats;
     const rateBadgeTone = getSuccessRateBadgeTone(successRate);
     const isLockedBySafetyNet =
-      order.isRiskyLocked && !manuallyUnlockedOrders[order.id];
+      (order.isRiskyLocked || Boolean(lockedRiskOrders[order.id])) &&
+      !manuallyUnlockedOrders[order.id];
     const currentNote = warehouseNotesByOrder[order.id] ?? order.warehouseNote;
 
     return (
@@ -2333,14 +2390,18 @@ export default function OrdersFulfillmentPage() {
                 tone={
                   dispatchedInfo || order.reconciliation.autoSyncedPaidFulfilled
                     ? "success"
-                    : order.isRiskyLocked
-                    ? "critical"
+                    : order.isRiskyLocked || Boolean(lockedRiskOrders[order.id])
+                    ? "attention"
                     : routingConfig.autoRoutingEnabled
                     ? "info"
                     : "attention"
                 }
               >
-                {dispatchedInfo ? "Booked" : order.status}
+                {dispatchedInfo
+                  ? "Booked"
+                  : order.isRiskyLocked || Boolean(lockedRiskOrders[order.id])
+                  ? "Risky - Review Required"
+                  : order.status}
               </Badge>
               <Text variant="bodySm" tone="subdued" as="span">
                 {order.isInsideDhaka ? "📍 Inside Dhaka" : "🚚 Outside Dhaka"}
@@ -2356,9 +2417,9 @@ export default function OrdersFulfillmentPage() {
               <Text variant="bodyMd" fontWeight="semibold" as="span">
                 {order.customerName}
               </Text>
-              {order.isRiskyLocked && (
-                <Badge tone="critical">
-                  ⚠️ Risky Order (Manual Review Required)
+              {(order.isRiskyLocked || Boolean(lockedRiskOrders[order.id])) && (
+                <Badge tone="attention">
+                  ⚠️ Risky Order / Manual Review Required
                 </Badge>
               )}
             </InlineStack>
