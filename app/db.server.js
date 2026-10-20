@@ -46,20 +46,26 @@ connectDB().catch((err) =>
 );
 
 /**
- * Helper to resolve the monthly order limit for any plan tier
- * Free: 120 | Growth: 500 | Pro: 2500 | Enterprise: Infinity (Unlimited)
+ * Helper to resolve the monthly order limit for any plan tier (6-Tier SaaS Model)
+ * Free: 120 | Starter: 250 | Growth: 500 | Pro: 1,000 | Advanced: 2,500 | Enterprise: 10,000
  */
 export function getPlanLimit(planName = "Free") {
   const normalized = String(planName || "Free").trim().toLowerCase();
 
   if (normalized.startsWith("enterprise")) {
-    return Infinity;
+    return 10000;
+  }
+  if (normalized.startsWith("advanced")) {
+    return 2500;
   }
   if (normalized.startsWith("pro")) {
-    return 2500;
+    return 1000;
   }
   if (normalized.startsWith("growth")) {
     return 500;
+  }
+  if (normalized.startsWith("starter")) {
+    return 250;
   }
   return 120;
 }
@@ -114,7 +120,7 @@ const courierConfigSchema = new mongoose.Schema(
     // Task 1: Subscription Capacity & Usage Tracking
     currentPlan: {
       type: String,
-      enum: ["Free", "Growth", "Pro", "Enterprise"],
+      enum: ["Free", "Starter", "Growth", "Pro", "Advanced", "Enterprise"],
       default: "Free",
       trim: true,
     },
@@ -285,18 +291,25 @@ export const GlobalFraudNetwork = mongoose.model(
 );
 
 /**
- * Helper to resolve the bulk booking order batch limit per plan tier
- * Free: 5 | Growth: 50 | Pro & Enterprise: Infinity (Unlimited)
+ * Helper to resolve the bulk booking order batch limit per plan tier (6-Tier SaaS Model)
+ * Free: 1 | Starter: 10 | Growth: 15 | Pro: 50 | Advanced: 50 | Enterprise: 50
  */
 export function getBulkBatchLimit(planName = "Free") {
   const normalized = String(planName || "Free").trim().toLowerCase();
-  if (normalized.startsWith("enterprise") || normalized.startsWith("pro")) {
-    return Infinity;
-  }
-  if (normalized.startsWith("growth")) {
+  if (
+    normalized.startsWith("enterprise") ||
+    normalized.startsWith("advanced") ||
+    normalized.startsWith("pro")
+  ) {
     return 50;
   }
-  return 5;
+  if (normalized.startsWith("growth")) {
+    return 15;
+  }
+  if (normalized.startsWith("starter")) {
+    return 10;
+  }
+  return 1;
 }
 
 /**
