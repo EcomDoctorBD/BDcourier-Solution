@@ -13,7 +13,7 @@ RUN apk add --no-cache openssl python3 make g++ libc6-compat
 
 # Install package dependencies (including devDependencies needed for Vite/Remix build)
 COPY package.json package-lock.json* ./
-RUN npm ci
+RUN npm install --legacy-peer-deps
 
 # Copy all application code
 COPY . .
