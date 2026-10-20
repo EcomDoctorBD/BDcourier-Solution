@@ -1,0 +1,394 @@
+import mongoose from "mongoose";
+
+const MONGODB_URI = process.env.DATABASE_URL;
+
+if (!MONGODB_URI) {
+  throw new Error(
+    "Missing DATABASE_URL environment variable. Please verify your .env file in Google Antigravity."
+  );
+}
+
+let cached = global.__mongooseCache;
+
+if (!cached) {
+  cached = global.__mongooseCache = { conn: null, promise: null };
+}
+
+export async function connectDB() {
+  if (cached.conn) {
+    return cached.conn;
+  }
+
+  if (!cached.promise) {
+    const opts = {
+      bufferCommands: true,
+    };
+
+    cached.promise = mongoose
+      .connect(MONGODB_URI, opts)
+      .then((mongooseInstance) => {
+        console.log("✅ Connected to MongoDB successfully.");
+        return mongooseInstance;
+      })
+      .catch((error) => {
+        cached.promise = null;
+        console.error("❌ MongoDB connection error:", error);
+        throw error;
+      });
+  }
+
+  cached.conn = await cached.promise;
+  return cached.conn;
+}
+
+connectDB().catch((err) =>
+  console.error("Failed initial MongoDB connection:", err)
+);
+
+/**
+ * Helper to resolve the monthly order limit for any plan tier
+ * Free: 120 | Growth: 500 | Pro: 2500 | Enterprise: Infinity (Unlimited)
+ */
+export function getPlanLimit(planName = "Free") {
+  const normalized = String(planName || "Free").trim().toLowerCase();
+
+  if (normalized.startsWith("enterprise")) {
+    return Infinity;
+  }
+  if (normalized.startsWith("pro")) {
+    return 2500;
+  }
+  if (normalized.startsWith("growth")) {
+    return 500;
+  }
+  return 120;
+}
+
+const courierConfigSchema = new mongoose.Schema(
+  {
+    shopDomain: {
+      type: String,
+      required: true,
+      unique: true,
+      index: true,
+      trim: true,
+    },
+    // Pathao Credentials
+    pathaoClientId: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+    pathaoSecret: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+    pathaoStoreId: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+    // Steadfast Credentials
+    steadfastApiKey: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+    steadfastSecretKey: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+    // RedX Credentials
+    redxProfileId: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+    redxLocationId: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+    // Task 1: Subscription Capacity & Usage Tracking
+    currentPlan: {
+      type: String,
+      enum: ["Free", "Growth", "Pro", "Enterprise"],
+      default: "Free",
+      trim: true,
+    },
+    monthlyOrderCount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    billingCycleStart: {
+      type: Date,
+      default: Date.now,
+    },
+    billingStatus: {
+      type: String,
+      default: "ACTIVE",
+    },
+    shopifySubscriptionId: {
+      type: String,
+      default: "",
+    },
+    // Task 2: Automated Routing & Risk Safety Net Parameters
+    autoRoutingEnabled: {
+      type: Boolean,
+      default: false,
+    },
+    insideDhakaCourier: {
+      type: String,
+      enum: ["pathao", "steadfast", "redx"],
+      default: "pathao",
+      trim: true,
+    },
+    outsideDhakaCourier: {
+      type: String,
+      enum: ["pathao", "steadfast", "redx"],
+      default: "steadfast",
+      trim: true,
+    },
+    minSafetySuccessRate: {
+      type: Number,
+      default: 70,
+      min: 0,
+      max: 100,
+    },
+  },
+  {
+    timestamps: true,
+  }
+);
+
+if (mongoose.models.CourierConfig) {
+  delete mongoose.models.CourierConfig;
+}
+
+export const CourierConfig = mongoose.model(
+  "CourierConfig",
+  courierConfigSchema
+);
+
+export const ShopSubscription = CourierConfig;
+
+/**
+ * Mongoose Schema: GlobalFraudNetwork
+ * Caches aggregated delivery & return history per Bangladeshi customer phone number
+ */
+const globalFraudNetworkSchema = new mongoose.Schema(
+  {
+    phone: {
+      type: String,
+      required: true,
+      unique: true,
+      index: true,
+      trim: true,
+    },
+    totalDelivered: {
+      type: Number,
+      default: 0,
+    },
+    totalReturned: {
+      type: Number,
+      default: 0,
+    },
+    totalOrders: {
+      type: Number,
+      default: 0,
+    },
+    successRate: {
+      type: Number,
+      default: 100,
+    },
+    steadfastDelivered: {
+      type: Number,
+      default: 0,
+    },
+    steadfastReturned: {
+      type: Number,
+      default: 0,
+    },
+    pathaoDelivered: {
+      type: Number,
+      default: 0,
+    },
+    pathaoReturned: {
+      type: Number,
+      default: 0,
+    },
+    dataSource: {
+      type: String,
+      default: "multi-courier-aggregation",
+    },
+    lastCheckedAt: {
+      type: Date,
+      default: Date.now,
+    },
+  },
+  {
+    timestamps: true,
+  }
+);
+
+if (mongoose.models.GlobalFraudNetwork) {
+  delete mongoose.models.GlobalFraudNetwork;
+}
+
+export const GlobalFraudNetwork = mongoose.model(
+  "GlobalFraudNetwork",
+  globalFraudNetworkSchema
+);
+
+/**
+ * Helper to resolve the bulk booking order batch limit per plan tier
+ * Free: 5 | Growth: 50 | Pro & Enterprise: Infinity (Unlimited)
+ */
+export function getBulkBatchLimit(planName = "Free") {
+  const normalized = String(planName || "Free").trim().toLowerCase();
+  if (normalized.startsWith("enterprise") || normalized.startsWith("pro")) {
+    return Infinity;
+  }
+  if (normalized.startsWith("growth")) {
+    return 50;
+  }
+  return 5;
+}
+
+/**
+ * Mongoose Schema: ShipmentBooking
+ * Persists courier booking consignment records and printable packing slip payloads
+ */
+const shipmentBookingSchema = new mongoose.Schema(
+  {
+    shopDomain: { type: String, required: true, index: true, trim: true },
+    orderId: { type: String, required: true, index: true, trim: true },
+    orderName: { type: String, required: true },
+    courierKey: { type: String, required: true },
+    courierName: { type: String, required: true },
+    trackingNumber: { type: String, required: true },
+    customerName: { type: String, default: "" },
+    customerPhone: { type: String, default: "" },
+    shippingAddress: { type: String, default: "" },
+    codAmount: { type: String, default: "0.00" },
+    courierCashCollected: { type: String, default: "0.00" },
+    courierStatus: { type: String, default: "in_transit" },
+    shopifySyncedPaidFulfilled: { type: Boolean, default: false },
+    currencyCode: { type: String, default: "BDT" },
+    warehouseNote: {
+      type: String,
+      default: "⚠️ Fragile - Pack with bubble wrap",
+    },
+    bookedAt: { type: Date, default: Date.now },
+  },
+  { timestamps: true }
+);
+
+if (mongoose.models.ShipmentBooking) {
+  delete mongoose.models.ShipmentBooking;
+}
+
+export const ShipmentBooking = mongoose.model(
+  "ShipmentBooking",
+  shipmentBookingSchema
+);
+
+/**
+ * 2. Task 5: ShippingZone Schema
+ * Stores merchant shipping zone pricing, COD surcharge flag, and weight tiers
+ */
+const weightTierSubSchema = new mongoose.Schema(
+  {
+    maxWeight: { type: Number, required: true, min: 0 },
+    extraRate: { type: Number, required: true, min: 0 },
+  },
+  { _id: false }
+);
+
+const shippingZoneSchema = new mongoose.Schema(
+  {
+    merchantId: {
+      type: String,
+      required: true,
+      index: true,
+      trim: true,
+    },
+    zoneName: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    baseRate: {
+      type: Number,
+      required: true,
+      default: 70,
+      min: 0,
+    },
+    codSurchargeEnabled: {
+      type: Boolean,
+      default: false,
+    },
+    codSurchargePercentage: {
+      type: Number,
+      default: 1,
+      min: 0,
+    },
+    weightTiers: {
+      type: [weightTierSubSchema],
+      default: [
+        { maxWeight: 1, extraRate: 0 },
+        { maxWeight: 3, extraRate: 30 },
+        { maxWeight: 5, extraRate: 60 },
+      ],
+    },
+  },
+  { timestamps: true }
+);
+
+/**
+ * 3. Task 5: ZoneDistricts Schema
+ * Maps a ShippingZone ID (`zoneId`) to an array of Bangladeshi `districtIds`
+ */
+const zoneDistrictsSchema = new mongoose.Schema(
+  {
+    zoneId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "ShippingZone",
+      required: true,
+      unique: true,
+      index: true,
+    },
+    merchantId: {
+      type: String,
+      required: true,
+      index: true,
+      trim: true,
+    },
+    districtIds: {
+      type: [String],
+      default: [],
+      index: true,
+    },
+  },
+  { timestamps: true }
+);
+
+if (mongoose.models.ShippingZone) {
+  delete mongoose.models.ShippingZone;
+}
+if (mongoose.models.ZoneDistricts) {
+  delete mongoose.models.ZoneDistricts;
+}
+
+export const ShippingZone = mongoose.model("ShippingZone", shippingZoneSchema);
+export const ZoneDistricts = mongoose.model(
+  "ZoneDistricts",
+  zoneDistrictsSchema
+);
+
+export default CourierConfig;
+
+

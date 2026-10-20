@@ -1,0 +1,23 @@
+# Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
+
+client_id = "bc8cab60c84e1dcbb55b4c057645e5c8"
+name = "Delivery1"
+application_url = "https://delivery1-alb-1581793960.ap-southeast-2.elb.amazonaws.com"
+embedded = true
+
+[build]
+automatically_update_urls_on_dev = false
+
+[webhooks]
+api_version = "2027-01"
+
+[access_scopes]
+# Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
+scopes = "write_products,read_orders,write_orders,read_fulfillments,write_fulfillments,read_shipping,write_shipping"
+
+[auth]
+redirect_urls = [
+  "https://delivery1-alb-1581793960.ap-southeast-2.elb.amazonaws.com/auth/callback",
+  "https://delivery1-alb-1581793960.ap-southeast-2.elb.amazonaws.com/auth/shopify/callback",
+  "https://delivery1-alb-1581793960.ap-southeast-2.elb.amazonaws.com/api/auth/callback"
+]
