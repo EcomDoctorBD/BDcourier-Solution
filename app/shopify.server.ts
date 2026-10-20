@@ -41,10 +41,13 @@ const shopify = shopifyApp({
         "write_shipping",
         "write_products",
       ],
-  appUrl: process.env.SHOPIFY_APP_URL || "",
+  appUrl:
+    process.env.SHOPIFY_APP_URL ||
+    "https://delivery1-alb-1581793960.ap-southeast-2.elb.amazonaws.com",
   authPathPrefix: "/auth",
   sessionStorage: new MongoDBSessionStorage(new URL(mongoUri), mongoDbName) as any,
   distribution: AppDistribution.AppStore,
+  isEmbeddedApp: true,
   billing: {
     Starter: {
       amount: 1.99,

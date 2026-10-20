@@ -13,7 +13,6 @@ import {
 import { TitleBar } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-remix/server";
 import {
-  AppProvider as PolarisAppProvider,
   Page,
   Layout,
   Card,
@@ -30,7 +29,6 @@ import {
   DataTable,
   Icon,
 } from "@shopify/polaris";
-import enTranslations from "@shopify/polaris/locales/en.json";
 import "@shopify/polaris/build/esm/styles.css";
 import { authenticate } from "../shopify.server";
 import CourierConfig, { connectDB } from "../db.server";
@@ -598,12 +596,11 @@ export default function PricingAndBillingPage() {
   });
 
   return (
-    <PolarisAppProvider i18n={enTranslations}>
-      <Page
-        title="Subscription Plans & Billing"
-        subtitle={`Store: ${shopDomain} • 6-Tier Courier Automation SaaS Plans`}
-        backAction={{ content: "Courier Dashboard", url: "/app" }}
-      >
+    <Page
+      title="Subscription Plans & Billing"
+      subtitle={`Store: ${shopDomain} • 6-Tier Courier Automation SaaS Plans`}
+      backAction={{ content: "Courier Dashboard", url: "/app" }}
+    >
         <TitleBar title="Pricing & Billing" />
 
         <Layout>
@@ -903,8 +900,7 @@ export default function PricingAndBillingPage() {
           </Layout.Section>
         </Layout>
       </Page>
-    </PolarisAppProvider>
-  );
+    );
 }
 
 export const headers: HeadersFunction = (headersArgs) => {
