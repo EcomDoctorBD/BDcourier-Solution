@@ -3621,15 +3621,7 @@ export default function OrdersFulfillmentPage() {
                 <Divider />
 
                 {/* Bottom Action Bar */}
-                <InlineStack align="space-between" blockAlign="center">
-                  <Text as="span" variant="bodySm" tone="subdued">
-                    Evaluation Logic:{" "}
-                    <code>
-                      const assignedCourier = customRoutes.find(r =&gt;
-                      r.district === orderCity)?.courier || defaultCourier;
-                    </code>
-                  </Text>
-
+                <InlineStack align="end" blockAlign="center">
                   <Button
                     variant="primary"
                     loading={isSavingRoutingSettings}
@@ -3702,25 +3694,27 @@ export default function OrdersFulfillmentPage() {
 
           {/* ==================== MULTI-SELECT ORDERS INDEXTABLE ==================== */}
           <Layout.Section>
-            <Card padding="0">
+            <Card padding={displayedOrders.length === 0 ? "600" : "0"}>
               {displayedOrders.length === 0 ? (
-                <Box padding="600">
+                <Box paddingBlock="600" paddingInline="500">
                   <BlockStack gap="300" inlineAlign="center">
-                    <Text as="h3" variant="headingMd">
+                    <Text as="h3" variant="headingMd" alignment="center">
                       No Unfulfilled Orders Found in This Store
                     </Text>
-                    <Text as="p" variant="bodyMd" tone="subdued">
+                    <Text as="p" variant="bodyMd" tone="subdued" alignment="center">
                       Load sample Bangladeshi COD orders below to test Multi-Select
                       Bulk Booking, Auto-Routing, Risk Locks, the 3 Tiered
                       Printable Packing Slip Templates, and Task 4 Cash Mismatch
                       Verification.
                     </Text>
-                    <Button
-                      variant="primary"
-                      onClick={() => setUseDemoOrders(true)}
-                    >
-                      Load Sample BD Orders for Full Suite Testing
-                    </Button>
+                    <Box paddingBlockStart="200">
+                      <Button
+                        variant="primary"
+                        onClick={() => setUseDemoOrders(true)}
+                      >
+                        Load Sample BD Orders for Full Suite Testing
+                      </Button>
+                    </Box>
                   </BlockStack>
                 </Box>
               ) : (
