@@ -1,5 +1,5 @@
 import crypto from "crypto";
-import type { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
+import { json, type ActionFunctionArgs, type LoaderFunctionArgs } from "@remix-run/node";
 import { connectDB, ShippingZone, ZoneDistricts } from "../db.server";
 
 /**
@@ -125,7 +125,7 @@ function verifyShopifyHmac(rawBody: string, hmacHeader: string | null): boolean 
 }
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  return Response.json({
+  return json({
     status: "online",
     service: "BD Dynamic Courier Shipping Zone Engine",
     endpoint: new URL(request.url).pathname,
@@ -140,7 +140,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const hmacHeader = request.headers.get("X-Shopify-Hmac-Sha256");
 
     if (!verifyShopifyHmac(rawBody, hmacHeader)) {
-      return Response.json({ rates: [] }, { status: 401 });
+      return json({ rates: [] }, { status: 401 });
     }
 
     const payload = JSON.parse(rawBody || "{}");
@@ -188,7 +188,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       const isDhaka = matchedDistrictId === "dhaka";
       const fallbackRateBdt = isDhaka ? 70 : 120;
 
-      return Response.json({
+      return json({
         rates: [
           {
             service_name: isDhaka
@@ -254,9 +254,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       };
     });
 
-    return Response.json({ rates });
+    return json({ rates });
   } catch (error) {
-    return Response.json({
+    return json({
       rates: [
         {
           service_name: "Bangladesh Standard Courier Delivery",
