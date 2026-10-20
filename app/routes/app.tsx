@@ -25,7 +25,7 @@ export default function App() {
           Courier Dashboard
         </Link>
         <Link to="/app/orders">Orders & Shipments</Link>
-        <Link to="/app/shipping">Shipping Zones</Link>
+        <Link to="/app/settings">Settings</Link>
         <Link to="/app/pricing">Pricing & Billing</Link>
       </NavMenu>
       <Outlet />
