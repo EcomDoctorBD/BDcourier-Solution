@@ -2,6 +2,7 @@ import "@shopify/shopify-app-remix/adapters/node";
 import {
   ApiVersion,
   AppDistribution,
+  BillingInterval,
   shopifyApp,
 } from "@shopify/shopify-app-remix/server";
 import { MongoDBSessionStorage } from "@shopify/shopify-app-session-storage-mongodb";
@@ -28,6 +29,33 @@ const shopify = shopifyApp({
   authPathPrefix: "/auth",
   sessionStorage: new MongoDBSessionStorage(new URL(mongoUri), mongoDbName) as any,
   distribution: AppDistribution.AppStore,
+  billing: {
+    Starter: {
+      amount: 1.99,
+      currencyCode: "USD",
+      interval: BillingInterval.Every30Days,
+    },
+    Growth: {
+      amount: 3.49,
+      currencyCode: "USD",
+      interval: BillingInterval.Every30Days,
+    },
+    Pro: {
+      amount: 5.99,
+      currencyCode: "USD",
+      interval: BillingInterval.Every30Days,
+    },
+    Advanced: {
+      amount: 11.99,
+      currencyCode: "USD",
+      interval: BillingInterval.Every30Days,
+    },
+    Enterprise: {
+      amount: 24.99,
+      currencyCode: "USD",
+      interval: BillingInterval.Every30Days,
+    },
+  },
   future: {
     expiringOfflineAccessTokens: true,
   },
