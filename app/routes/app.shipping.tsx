@@ -782,9 +782,7 @@ export default function ShippingZoneEnginePage() {
                       loading={isSavingZone}
                       onClick={handleSaveZone}
                     >
-                      {editingZoneId
-                        ? "Update Shipping Zone in MongoDB"
-                        : "Save Shipping Zone to MongoDB"}
+                      {editingZoneId ? "Update" : "Save"}
                     </Button>
                   </InlineStack>
                 </BlockStack>
