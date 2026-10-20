@@ -24,7 +24,23 @@ const shopify = shopifyApp({
   apiKey: process.env.SHOPIFY_API_KEY,
   apiSecretKey: process.env.SHOPIFY_API_SECRET || "",
   apiVersion: ApiVersion.October25,
-  scopes: process.env.SCOPES?.split(","),
+  scopes: process.env.SCOPES
+    ? Array.from(
+        new Set([
+          "read_orders",
+          "write_orders",
+          ...process.env.SCOPES.split(",").map((s) => s.trim()),
+        ])
+      )
+    : [
+        "read_orders",
+        "write_orders",
+        "read_fulfillments",
+        "write_fulfillments",
+        "read_shipping",
+        "write_shipping",
+        "write_products",
+      ],
   appUrl: process.env.SHOPIFY_APP_URL || "",
   authPathPrefix: "/auth",
   sessionStorage: new MongoDBSessionStorage(new URL(mongoUri), mongoDbName) as any,
