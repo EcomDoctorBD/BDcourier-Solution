@@ -10,7 +10,9 @@ param(
     [string]$DatabaseUrl = $env:DATABASE_URL,
     [string]$ShopifyApiKey = $env:SHOPIFY_API_KEY,
     [string]$ShopifyApiSecret = $env:SHOPIFY_API_SECRET,
-    [string]$Scopes = "write_products,read_orders,write_orders,read_fulfillments,write_fulfillments,read_shipping,write_shipping"
+    [string]$Scopes = "write_products,read_orders,write_orders,read_fulfillments,write_fulfillments,read_shipping,write_shipping",
+    [string]$GeminiApiKey = $env:GEMINI_API_KEY,
+    [string]$GeminiModel = "gemini-1.5-flash"
 )
 
 Write-Host "==========================================================" -ForegroundColor Cyan
@@ -101,7 +103,9 @@ if ($existingService) {
                 "DATABASE_URL": "$DatabaseUrl",
                 "SHOPIFY_API_KEY": "$ShopifyApiKey",
                 "SHOPIFY_API_SECRET": "$ShopifyApiSecret",
-                "SCOPES": "$Scopes"
+                "SCOPES": "$Scopes",
+                "GEMINI_API_KEY": "$GeminiApiKey",
+                "GEMINI_MODEL": "$GeminiModel"
             }
         },
         "ImageRepositoryType": "ECR"

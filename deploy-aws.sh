@@ -89,7 +89,9 @@ else
                 "DATABASE_URL": "${DATABASE_URL}",
                 "SHOPIFY_API_KEY": "${SHOPIFY_API_KEY}",
                 "SHOPIFY_API_SECRET": "${SHOPIFY_API_SECRET}",
-                "SCOPES": "${SCOPES}"
+                "SCOPES": "${SCOPES}",
+                "GEMINI_API_KEY": "${GEMINI_API_KEY}",
+                "GEMINI_MODEL": "${GEMINI_MODEL:-gemini-1.5-flash}"
             }
         },
         "ImageRepositoryType": "ECR"

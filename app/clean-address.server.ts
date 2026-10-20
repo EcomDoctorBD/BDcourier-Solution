@@ -160,90 +160,104 @@ export async function cleanAndCacheAddress(
   // STEP B: Gemini API Fallback
   // -------------------------------------------------------------
   const geminiApiKey = process.env.GEMINI_API_KEY?.trim();
-  const geminiModel = process.env.GEMINI_MODEL || "gemini-1.5-flash";
+  const configuredModel = process.env.GEMINI_MODEL?.trim() || "gemini-1.5-flash";
+  const candidateModels = Array.from(
+    new Set([configuredModel, "gemini-3.8-flash", "gemini-3.5-flash", "gemini-flash-latest"])
+  );
 
   if (geminiApiKey) {
-    try {
-      const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${geminiApiKey}`;
+    for (const geminiModel of candidateModels) {
+      try {
+        const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${geminiApiKey}`;
 
-      const response = await fetch(endpoint, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [
-            {
-              role: "user",
-              parts: [
-                {
-                  text: `Parse and clean this Bangladeshi customer address:\n"${rawAddress}"`,
-                },
-              ],
-            },
-          ],
-          systemInstruction: {
-            parts: [{ text: SYSTEM_INSTRUCTION }],
-          },
-          generationConfig: {
-            responseMimeType: "application/json",
-            temperature: 0.1,
-          },
-        }),
-      });
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 6000);
 
-      if (response.ok) {
-        const data: any = await response.json();
-        const candidateText =
-          data?.candidates?.[0]?.content?.parts?.[0]?.text;
-
-        if (candidateText) {
-          const parsed = JSON.parse(candidateText);
-
-          const cleanAddress =
-            String(parsed.cleanAddress || rawAddress).trim();
-          const district = parsed.district ? String(parsed.district).trim() : null;
-          const thana = parsed.thana ? String(parsed.thana).trim() : "";
-          const confidence: "HIGH" | "MEDIUM" | "LOW" =
-            parsed.confidence === "LOW" || !district
-              ? "LOW"
-              : parsed.confidence === "MEDIUM"
-              ? "MEDIUM"
-              : "HIGH";
-
-          // -------------------------------------------------------------
-          // STEP C: Save Cache (Asynchronously for future <5ms hits)
-          // -------------------------------------------------------------
-          AddressCache.updateOne(
-            { rawInput: normalizedRaw },
-            {
-              $set: {
-                rawInput: normalizedRaw,
-                cleanAddress,
-                district: district || "",
-                thana,
-                confidence,
-                createdAt: new Date(),
+        const response = await fetch(endpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          signal: controller.signal,
+          body: JSON.stringify({
+            contents: [
+              {
+                role: "user",
+                parts: [
+                  {
+                    text: `Parse and clean this Bangladeshi customer address:\n"${rawAddress}"`,
+                  },
+                ],
               },
+            ],
+            systemInstruction: {
+              parts: [{ text: SYSTEM_INSTRUCTION }],
             },
-            { upsert: true }
-          ).catch((err: any) =>
-            console.error("Failed to asynchronously save AddressCache:", err)
-          );
+            generationConfig: {
+              responseMimeType: "application/json",
+              temperature: 0.1,
+            },
+          }),
+        });
+        clearTimeout(timeoutId);
 
-          return {
-            cleanAddress,
-            district,
-            thana,
-            confidence,
-            source: "gemini",
-          };
+        if (response.ok) {
+          const data: any = await response.json();
+          const candidateText =
+            data?.candidates?.[0]?.content?.parts?.[0]?.text;
+
+          if (candidateText) {
+            const parsed = JSON.parse(candidateText);
+
+            const cleanAddress =
+              String(parsed.cleanAddress || rawAddress).trim();
+            const district = parsed.district ? String(parsed.district).trim() : null;
+            const thana = parsed.thana ? String(parsed.thana).trim() : "";
+            const confidence: "HIGH" | "MEDIUM" | "LOW" =
+              parsed.confidence === "LOW" || !district
+                ? "LOW"
+                : parsed.confidence === "MEDIUM"
+                ? "MEDIUM"
+                : "HIGH";
+
+            // -------------------------------------------------------------
+            // STEP C: Save Cache (Asynchronously for future <5ms hits)
+            // -------------------------------------------------------------
+            AddressCache.updateOne(
+              { rawInput: normalizedRaw },
+              {
+                $set: {
+                  rawInput: normalizedRaw,
+                  cleanAddress,
+                  district: district || "",
+                  thana,
+                  confidence,
+                  createdAt: new Date(),
+                },
+              },
+              { upsert: true }
+            ).catch((err: any) =>
+              console.error("Failed to asynchronously save AddressCache:", err)
+            );
+
+            return {
+              cleanAddress,
+              district,
+              thana,
+              confidence,
+              source: "gemini",
+            };
+          }
+        } else {
+          console.warn(
+            `Gemini API (${geminiModel}) returned status ${response.status}: ${await response.text()}`
+          );
+          // If 404 (model not found/deprecated) or 503 (high demand), loop tries next fallback model
+          if (response.status !== 404 && response.status !== 503) {
+            break;
+          }
         }
-      } else {
-        console.warn(
-          `Gemini API returned status ${response.status}: ${await response.text()}`
-        );
+      } catch (geminiErr) {
+        console.warn(`Gemini attempt with model ${geminiModel} failed:`, geminiErr);
       }
-    } catch (geminiErr) {
-      console.error("Gemini API call failed, falling back to local normalizer:", geminiErr);
     }
   }
 

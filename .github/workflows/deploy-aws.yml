@@ -52,6 +52,9 @@ jobs:
           task-definition: task-definition.json
           container-name: delivery1-app
           image: ${{ steps.build-image.outputs.image }}
+          environment-variables: |
+            GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}
+            GEMINI_MODEL=gemini-1.5-flash
 
       - name: Deploy Amazon ECS task definition
         uses: aws-actions/amazon-ecs-deploy-task-definition@v2
