@@ -49,8 +49,8 @@ export interface PricingTier {
 const PRICING_TIERS: PricingTier[] = [
   {
     id: "Free",
-    name: "Free (Moti)",
-    bengaliTag: "মটি • Starter Tier",
+    name: "Free",
+    bengaliTag: "ফ্রী • Starter Tier",
     price: 0.0,
     priceDisplay: "$0.00",
     orderLimit: 120,
@@ -67,7 +67,7 @@ const PRICING_TIERS: PricingTier[] = [
   },
   {
     id: "Growth",
-    name: "Growth (Bikash)",
+    name: "Growth",
     bengaliTag: "বিকাশ • Best Value",
     price: 0.99,
     priceDisplay: "$0.99",
@@ -86,7 +86,7 @@ const PRICING_TIERS: PricingTier[] = [
   },
   {
     id: "Pro",
-    name: "Pro (Agragoti)",
+    name: "Pro",
     bengaliTag: "অগ্রগতি • Scaling Brands",
     price: 2.49,
     priceDisplay: "$2.49",
@@ -793,7 +793,7 @@ export default function SubscriptionBillingPage() {
                               onClick={() => handleSelectPlan(tier.id)}
                             >
                               {tier.price === 0
-                                ? "Switch to Free (Moti)"
+                                ? "Switch to Free"
                                 : `Upgrade to ${tier.name}`}
                             </Button>
                           )}
@@ -823,50 +823,52 @@ export default function SubscriptionBillingPage() {
               </BlockStack>
             </Box>
 
-            <IndexTable
-              resourceName={{ singular: "feature", plural: "features" }}
-              itemCount={comparisonRows.length}
-              selectable={false}
-              headings={[
-                { title: "Capability / Feature" },
-                { title: "Free (Moti) — $0.00/mo" },
-                { title: "Growth (Bikash) — $0.99/mo" },
-                { title: "Pro (Agragoti) — $2.49/mo" },
-                { title: "Enterprise — $4.99/mo" },
-              ]}
-            >
-              {comparisonRows.map((row, idx) => (
-                <IndexTable.Row
-                  id={row.feature}
-                  key={row.feature}
-                  position={idx}
-                >
-                  <IndexTable.Cell>
-                    <Text as="span" variant="bodyMd" fontWeight="semibold">
-                      {row.feature}
-                    </Text>
-                  </IndexTable.Cell>
-                  <IndexTable.Cell>
-                    <Text as="span" variant="bodySm">
-                      {row.free}
-                    </Text>
-                  </IndexTable.Cell>
-                  <IndexTable.Cell>
-                    <Text as="span" variant="bodySm" fontWeight="medium">
-                      {row.growth}
-                    </Text>
-                  </IndexTable.Cell>
-                  <IndexTable.Cell>
-                    <Text as="span" variant="bodySm" fontWeight="medium">
-                      {row.pro}
-                    </Text>
-                  </IndexTable.Cell>
-                  <IndexTable.Cell>
-                    <Badge tone="success">{row.enterprise}</Badge>
-                  </IndexTable.Cell>
-                </IndexTable.Row>
-              ))}
-            </IndexTable>
+            <Box paddingBlockEnd="400">
+              <IndexTable
+                resourceName={{ singular: "feature", plural: "features" }}
+                itemCount={comparisonRows.length}
+                selectable={false}
+                headings={[
+                  { title: "Capability / Feature" },
+                  { title: "Free — $0.00/mo" },
+                  { title: "Growth — $0.99/mo" },
+                  { title: "Pro — $2.49/mo" },
+                  { title: "Enterprise — $4.99/mo" },
+                ]}
+              >
+                {comparisonRows.map((row, idx) => (
+                  <IndexTable.Row
+                    id={row.feature}
+                    key={row.feature}
+                    position={idx}
+                  >
+                    <IndexTable.Cell>
+                      <Text as="span" variant="bodyMd" fontWeight="semibold">
+                        {row.feature}
+                      </Text>
+                    </IndexTable.Cell>
+                    <IndexTable.Cell>
+                      <Text as="span" variant="bodySm">
+                        {row.free}
+                      </Text>
+                    </IndexTable.Cell>
+                    <IndexTable.Cell>
+                      <Text as="span" variant="bodySm" fontWeight="medium">
+                        {row.growth}
+                      </Text>
+                    </IndexTable.Cell>
+                    <IndexTable.Cell>
+                      <Text as="span" variant="bodySm" fontWeight="medium">
+                        {row.pro}
+                      </Text>
+                    </IndexTable.Cell>
+                    <IndexTable.Cell>
+                      <Badge tone="success">{row.enterprise}</Badge>
+                    </IndexTable.Cell>
+                  </IndexTable.Row>
+                ))}
+              </IndexTable>
+            </Box>
           </Card>
         </Layout.Section>
       </Layout>
