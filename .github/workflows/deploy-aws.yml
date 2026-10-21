@@ -53,10 +53,13 @@ jobs:
           container-name: delivery1-app
           image: ${{ steps.build-image.outputs.image }}
           environment-variables: |
+            NODE_ENV=production
+            PORT=3000
             MONGODB_URI=${{ secrets.MONGODB_URI }}
             DATABASE_URL=${{ secrets.MONGODB_URI }}
             SHOPIFY_API_KEY=${{ secrets.SHOPIFY_API_KEY }}
             SHOPIFY_API_SECRET=${{ secrets.SHOPIFY_API_SECRET }}
+            ENCRYPTION_KEY=${{ secrets.SHOPIFY_API_SECRET }}
             GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}
             GEMINI_MODEL=gemini-1.5-flash
 
