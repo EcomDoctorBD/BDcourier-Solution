@@ -39,26 +39,7 @@ import CourierConfig, {
   connectDB,
   ShippingZone,
   ZoneDistricts,
-  MerchantIntegrations,
 } from "../db.server";
-import {
-  getMerchantIntegration,
-  updateSpreadsheetSettings,
-  disconnectGoogleAccount,
-  syncOrderToGoogleSheet,
-} from "../google-sheets.server";
-
-export const GOOGLE_SHEETS_COLUMNS = [
-  "Order ID",
-  "Timestamp",
-  "Customer Name",
-  "Phone Number",
-  "Raw Shopify Address",
-  "Cleaned District",
-  "Cleaned Thana",
-  "Courier Partner Assigned",
-  "Official Courier Tracking ID",
-] as const;
 
 export interface DistrictItem {
   id: string;
@@ -410,8 +391,6 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     districtIds: districtMapByZoneId[String(z._id)] || [],
   }));
 
-  const googleIntegration = await getMerchantIntegration(shopDomain);
-
   return {
     shopDomain,
     currentPlan,
@@ -419,7 +398,6 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     routingConfig,
     savedZones,
     divisions: BANGLADESH_DIVISIONS,
-    googleIntegration: googleIntegration ? JSON.parse(JSON.stringify(googleIntegration)) : null,
   };
 };
 
@@ -725,63 +703,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     };
   }
 
-  // ==================== 4. GOOGLE SHEETS INTEGRATION ACTIONS ====================
-  if (actionType === "saveGoogleSettings") {
-    const spreadsheetId = String(formData.get("spreadsheetId") || "").trim();
-    const sheetName = String(formData.get("sheetName") || "Orders").trim();
-    const autoSyncEnabled = String(formData.get("autoSyncEnabled")) === "true";
-
-    await updateSpreadsheetSettings(shopDomain, {
-      spreadsheetId,
-      sheetName,
-      autoSyncEnabled,
-    });
-
-    return {
-      success: true,
-      actionType: "saveGoogleSettings",
-      message: "Google Sheets integration preferences saved successfully.",
-    };
-  }
-
-  if (actionType === "disconnectGoogle") {
-    await disconnectGoogleAccount(shopDomain);
-    return {
-      success: true,
-      actionType: "disconnectGoogle",
-      message: "Google Account disconnected from Delivery1.",
-    };
-  }
-
-  if (actionType === "testGoogleSync") {
-    const randomSuffix = Math.floor(1000 + Math.random() * 9000);
-    const testResult = await syncOrderToGoogleSheet(shopDomain, {
-      orderId: `#TEST-${randomSuffix}`,
-      timestamp: new Date(),
-      customerName: "Mohammad Rahman (Test Order)",
-      phoneNumber: "01712345678",
-      rawAddress: "House 14, Road 5, Block C, Banani, Dhaka-1213",
-      cleanedDistrict: "Dhaka",
-      cleanedThana: "Banani",
-      courierPartner: "Pathao Courier",
-      courierTrackingId: `TRK-TEST-${randomSuffix}`,
-    });
-
-    if (testResult.success) {
-      return {
-        success: true,
-        actionType: "testGoogleSync",
-        message: "Test order row appended to your Google Sheet successfully!",
-      };
-    } else {
-      return {
-        success: false,
-        actionType: "testGoogleSync",
-        message: `Test order sync failed: ${testResult.error}`,
-      };
-    }
-  }
-
   return { success: false, actionType: "", message: "Unknown action submitted." };
 };
 
@@ -793,46 +714,19 @@ export default function SettingsUnifiedPage() {
     routingConfig,
     savedZones,
     divisions,
-    googleIntegration,
   } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const submit = useSubmit();
   const navigation = useNavigation();
 
-  // Tabs state: Tab 0 = "Automated Routing & Safety", Tab 1 = "Shipping Zones", Tab 2 = "Integrations"
+  // Tabs state: Tab 0 = "Automated Routing & Safety", Tab 1 = "Shipping Zones"
   const [selectedTab, setSelectedTab] = useState(0);
-
-  // ==================== TAB 3: GOOGLE SHEETS INTEGRATION STATE ====================
-  const [googleSpreadsheetId, setGoogleSpreadsheetId] = useState<string>(
-    googleIntegration?.spreadsheetId || ""
-  );
-  const [googleSheetName, setGoogleSheetName] = useState<string>(
-    googleIntegration?.sheetName || "Orders"
-  );
-  const [googleAutoSyncEnabled, setGoogleAutoSyncEnabled] = useState<boolean>(
-    googleIntegration?.autoSyncEnabled ?? true
-  );
-
-  const isGoogleConnected = Boolean(googleIntegration?.googleRefreshToken);
-  const googleSpreadsheetUrl =
-    googleIntegration?.spreadsheetUrl ||
-    (googleSpreadsheetId
-      ? `https://docs.google.com/spreadsheets/d/${googleSpreadsheetId}`
-      : "");
-
-  useEffect(() => {
-    if (googleIntegration) {
-      setGoogleSpreadsheetId(googleIntegration.spreadsheetId || "");
-      setGoogleSheetName(googleIntegration.sheetName || "Orders");
-      setGoogleAutoSyncEnabled(googleIntegration.autoSyncEnabled ?? true);
-    }
-  }, [googleIntegration]);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
-      if (params.get("google") === "connected" || params.get("tab") === "integrations") {
-        setSelectedTab(2);
+      if (params.get("tab") === "shipping" || params.get("tab") === "zones") {
+        setSelectedTab(1);
       }
     }
   }, []);
@@ -1121,47 +1015,6 @@ export default function SettingsUnifiedPage() {
   const isRegisteringCarrier =
     navigation.state === "submitting" &&
     pendingAction === "registerCarrierService";
-  const isSavingGoogleSettings =
-    navigation.state === "submitting" &&
-    pendingAction === "saveGoogleSettings";
-  const isDisconnectingGoogle =
-    navigation.state === "submitting" &&
-    pendingAction === "disconnectGoogle";
-  const isTestingSync =
-    navigation.state === "submitting" &&
-    pendingAction === "testGoogleSync";
-
-  const handleConnectGoogle = () => {
-    window.location.href = `/api/google/auth?shop=${encodeURIComponent(shopDomain)}`;
-  };
-
-  const handleSaveGoogleSettings = () => {
-    const fd = new FormData();
-    fd.append("actionType", "saveGoogleSettings");
-    fd.append("spreadsheetId", googleSpreadsheetId);
-    fd.append("sheetName", googleSheetName);
-    fd.append("autoSyncEnabled", String(googleAutoSyncEnabled));
-    submit(fd, { method: "post" });
-  };
-
-  const handleDisconnectGoogle = () => {
-    if (
-      window.confirm(
-        "Are you sure you want to disconnect Google Sheets? Real-time order auto-sync will be paused."
-      )
-    ) {
-      const fd = new FormData();
-      fd.append("actionType", "disconnectGoogle");
-      submit(fd, { method: "post" });
-    }
-  };
-
-  const handleTestSync = () => {
-    const fd = new FormData();
-    fd.append("actionType", "testGoogleSync");
-    submit(fd, { method: "post" });
-  };
-
   const tabs = [
     {
       id: "routing-safety-tab",
@@ -1175,27 +1028,15 @@ export default function SettingsUnifiedPage() {
       accessibilityLabel: "Shipping Zones",
       panelID: "shipping-zones-panel",
     },
-    {
-      id: "integrations-tab",
-      content: "Integrations",
-      accessibilityLabel: "Integrations",
-      panelID: "integrations-panel",
-    },
   ];
 
   return (
     <Page
-      title="Settings"
+      title="Courier Settings"
       subtitle={`Store: ${shopDomain} • Active Plan: ${currentPlan}`}
-      backAction={{ content: "Courier Dashboard", url: "/app" }}
+      backAction={{ content: "Dashboard", url: "/app" }}
       primaryAction={
-        selectedTab === 2
-          ? {
-              content: "Save Integration Settings",
-              loading: isSavingGoogleSettings,
-              onAction: handleSaveGoogleSettings,
-            }
-          : selectedTab === 1
+        selectedTab === 1
           ? {
               content: "Sync Checkout CarrierService",
               loading: isRegisteringCarrier,
@@ -1208,7 +1049,7 @@ export default function SettingsUnifiedPage() {
             }
       }
     >
-      <TitleBar title="Settings" />
+      <TitleBar title="Courier Settings" />
 
       <BlockStack gap="400">
         {/* Polaris Navigation Tabs */}
@@ -1913,237 +1754,8 @@ export default function SettingsUnifiedPage() {
             </Layout.Section>
           </Layout>
         )}
-
-        {/* ==================== TAB 2: INTEGRATIONS ==================== */}
-        {selectedTab === 2 && (
-          <Layout>
-            <Layout.Section>
-              <Card>
-                <BlockStack gap="500">
-                  {/* Google Sheets Header & Logo */}
-                  <InlineStack align="space-between" blockAlign="center" wrap>
-                    <InlineStack gap="400" blockAlign="center">
-                      <GoogleSheetsIcon />
-                      <BlockStack gap="100">
-                        <InlineStack gap="200" blockAlign="center">
-                          <Text variant="headingMd" as="h2">
-                            Google Sheets Auto-Sync
-                          </Text>
-                          {isGoogleConnected ? (
-                            <Badge tone="success">Connected</Badge>
-                          ) : (
-                            <Badge tone="neutral">Disconnected</Badge>
-                          )}
-                        </InlineStack>
-                        <Text variant="bodyMd" tone="subdued">
-                          Automatically export your orders to a Google Sheet in real time.
-                        </Text>
-                      </BlockStack>
-                    </InlineStack>
-
-                    {!isGoogleConnected ? (
-                      <Button
-                        variant="primary"
-                        size="large"
-                        onClick={handleConnectGoogle}
-                      >
-                        Connect Google Account
-                      </Button>
-                    ) : (
-                      <InlineStack gap="200">
-                        {googleSpreadsheetUrl && (
-                          <Button
-                            variant="secondary"
-                            onClick={() => window.open(googleSpreadsheetUrl, "_blank")}
-                          >
-                            Open Google Sheet ↗
-                          </Button>
-                        )}
-                        <Button
-                          tone="critical"
-                          variant="plain"
-                          loading={isDisconnectingGoogle}
-                          onClick={handleDisconnectGoogle}
-                        >
-                          Disconnect
-                        </Button>
-                      </InlineStack>
-                    )}
-                  </InlineStack>
-
-                  <Divider />
-
-                  {!isGoogleConnected ? (
-                    <BlockStack gap="400">
-                      <Banner
-                        title="Real-Time Order Logistics Export"
-                        tone="info"
-                      >
-                        <p>
-                          Connect your Google Account to automatically stream every new Shopify order
-                          and booked courier parcel directly into your spreadsheet without manual data entry.
-                        </p>
-                      </Banner>
-
-                      <Card background="bg-surface-secondary">
-                        <BlockStack gap="200">
-                          <Text variant="headingSm" as="h3">
-                            Standard Exported Columns (9 Logistics Attributes):
-                          </Text>
-                          <InlineStack gap="200" wrap>
-                            {GOOGLE_SHEETS_COLUMNS.map((col) => (
-                              <Badge key={col} tone="info">
-                                {col}
-                              </Badge>
-                            ))}
-                          </InlineStack>
-                        </BlockStack>
-                      </Card>
-                    </BlockStack>
-                  ) : (
-                    <BlockStack gap="400">
-                      {/* Live Status Overview */}
-                      <Grid>
-                        <Grid.Cell columnSpan={{ xs: 6, sm: 6, md: 6, lg: 6, xl: 6 }}>
-                          <Card background="bg-surface-secondary">
-                            <BlockStack gap="100">
-                              <Text variant="bodySm" tone="subdued">
-                                Connected Google Account
-                              </Text>
-                              <Text variant="bodyMd" fontWeight="semibold">
-                                {googleIntegration?.googleUserEmail || "Google Account Linked"}
-                              </Text>
-                              {googleIntegration?.googleUserName && (
-                                <Text variant="bodyXs" tone="subdued">
-                                  {googleIntegration.googleUserName}
-                                </Text>
-                              )}
-                            </BlockStack>
-                          </Card>
-                        </Grid.Cell>
-
-                        <Grid.Cell columnSpan={{ xs: 6, sm: 6, md: 6, lg: 6, xl: 6 }}>
-                          <Card background="bg-surface-secondary">
-                            <BlockStack gap="100">
-                              <Text variant="bodySm" tone="subdued">
-                                Active Connected Sheet
-                              </Text>
-                              <Text variant="bodyMd" fontWeight="semibold">
-                                {googleIntegration?.spreadsheetName || "Delivery1 Orders"}
-                              </Text>
-                              <Text variant="bodyXs" tone="subdued">
-                                Tab: {googleSheetName} • Total Synced: {googleIntegration?.totalOrdersSynced || 0}
-                              </Text>
-                            </BlockStack>
-                          </Card>
-                        </Grid.Cell>
-                      </Grid>
-
-                      {/* Spreadsheet Configuration Form */}
-                      <BlockStack gap="300">
-                        <Text variant="headingSm" as="h3">
-                          Spreadsheet Settings
-                        </Text>
-                        <TextField
-                          label="Google Spreadsheet ID"
-                          value={googleSpreadsheetId}
-                          onChange={setGoogleSpreadsheetId}
-                          autoComplete="off"
-                          helpText="Found in your sheet URL: https://docs.google.com/spreadsheets/d/[SPREADSHEET_ID]/edit"
-                        />
-                        <TextField
-                          label="Target Sheet (Tab) Name"
-                          value={googleSheetName}
-                          onChange={setGoogleSheetName}
-                          autoComplete="off"
-                          helpText="Default is 'Orders'. If the tab does not exist, Delivery1 will auto-create it."
-                        />
-                        <Checkbox
-                          label="Enable Real-Time Auto-Sync on Order Dispatch"
-                          checked={googleAutoSyncEnabled}
-                          onChange={setGoogleAutoSyncEnabled}
-                          helpText="Whenever an order is sent to Pathao or Steadfast, append it instantly as a new row."
-                        />
-                      </BlockStack>
-
-                      {/* Sync Telemetry and Test Trigger */}
-                      <InlineStack align="space-between" blockAlign="center" wrap>
-                        <InlineStack gap="300" blockAlign="center">
-                          <Button
-                            variant="primary"
-                            loading={isSavingGoogleSettings}
-                            onClick={handleSaveGoogleSettings}
-                          >
-                            Save Sheet Settings
-                          </Button>
-                          <Button
-                            loading={isTestingSync}
-                            onClick={handleTestSync}
-                          >
-                            Sync Test Order
-                          </Button>
-                        </InlineStack>
-
-                        {googleIntegration?.lastSyncAt && (
-                          <Text variant="bodyXs" tone="subdued">
-                            Last Synced:{" "}
-                            {new Date(googleIntegration.lastSyncAt).toLocaleString("en-GB", {
-                              timeZone: "Asia/Dhaka",
-                            })}
-                          </Text>
-                        )}
-                      </InlineStack>
-
-                      {googleIntegration?.lastSyncError && (
-                        <Banner tone="critical" title="Recent Sync Notice">
-                          <p>{googleIntegration.lastSyncError}</p>
-                        </Banner>
-                      )}
-
-                      <Divider />
-
-                      <BlockStack gap="200">
-                        <Text variant="headingXs" as="h4">
-                          Exported Columns Reference:
-                        </Text>
-                        <InlineStack gap="150" wrap>
-                          {GOOGLE_SHEETS_COLUMNS.map((col) => (
-                            <Badge key={col}>{col}</Badge>
-                          ))}
-                        </InlineStack>
-                      </BlockStack>
-                    </BlockStack>
-                  )}
-                </BlockStack>
-              </Card>
-            </Layout.Section>
-          </Layout>
-        )}
       </BlockStack>
     </Page>
-  );
-}
-
-function GoogleSheetsIcon(props: SVGProps<SVGSVGElement>) {
-  return (
-    <svg
-      width="44"
-      height="44"
-      viewBox="0 0 44 44"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-      {...props}
-    >
-      <rect width="44" height="44" rx="10" fill="#0F9D58" />
-      <path
-        d="M28 13H16C14.3431 13 13 14.3431 13 16V28C13 29.6569 14.3431 31 16 31H28C29.6569 31 31 29.6569 31 28V16C31 14.3431 29.6569 13 28 13Z"
-        fill="white"
-      />
-      <path
-        d="M16 17H28V19.5H16V17ZM16 20.75H28V23.25H16V20.75ZM16 24.5H28V27H16V24.5Z"
-        fill="#0F9D58"
-      />
-    </svg>
   );
 }
 
