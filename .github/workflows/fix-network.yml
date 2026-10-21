@@ -72,11 +72,31 @@ jobs:
             aws elbv2 describe-target-health --target-group-arn "$TG_ARN" || true
           fi
 
+          echo "=== [4.1] Checking ALB DNS & Security Groups ==="
+          ALB_ARN="arn:aws:elasticloadbalancing:ap-southeast-2:496663582013:loadbalancer/app/delivery1-alb/d4f7f14e6f1d08d9"
+          aws elbv2 describe-load-balancers --load-balancer-arns "$ALB_ARN"
+          ALB_SG=$(aws elbv2 describe-load-balancers --load-balancer-arns "$ALB_ARN" --query "LoadBalancers[0].SecurityGroups[]" --output text)
+          echo "ALB Security Groups: $ALB_SG"
+          for asg in $ALB_SG; do
+            echo "Checking ALB SG: $asg"
+            aws ec2 describe-security-groups --group-ids "$asg" --query "SecurityGroups[0].IpPermissions"
+            echo "Authorizing HTTP (port 80) and HTTPS (port 443) from 0.0.0.0/0 on ALB SG $asg..."
+            aws ec2 authorize-security-group-ingress --group-id "$asg" --protocol tcp --port 80 --cidr 0.0.0.0/0 2>&1 || true
+            aws ec2 authorize-security-group-ingress --group-id "$asg" --protocol tcp --port 443 --cidr 0.0.0.0/0 2>&1 || true
+          done
+
           echo "=== [5/5] Checking ECS Tasks and Recent Container Logs ==="
           TASK_ARNS=$(aws ecs list-tasks --cluster delivery1-cluster --service-name delivery1-service --query "taskArns[]" --output text)
           if [ -n "$TASK_ARNS" ]; then
             echo "Tasks found: $TASK_ARNS"
-            aws ecs describe-tasks --cluster delivery1-cluster --tasks $TASK_ARNS --query "tasks[*].{TaskArn:taskArn,LastStatus:lastStatus,DesiredStatus:desiredStatus,StopCode:stopCode,StoppedReason:stoppedReason,Containers:containers[*].{Name:name,LastStatus:lastStatus,ExitCode:exitCode,Reason:reason}}"
+            aws ecs describe-tasks --cluster delivery1-cluster --tasks $TASK_ARNS
           else
-            echo "No active tasks currently listed. Service is rolling new tasks."
+            echo "No running tasks. Checking recently stopped tasks..."
+            STOPPED_TASKS=$(aws ecs list-tasks --cluster delivery1-cluster --service-name delivery1-service --desired-status STOPPED --query "taskArns[]" --output text)
+            if [ -n "$STOPPED_TASKS" ]; then
+              echo "Stopped tasks: $STOPPED_TASKS"
+              aws ecs describe-tasks --cluster delivery1-cluster --tasks $STOPPED_TASKS --query "tasks[*].{TaskArn:taskArn,StopCode:stopCode,StoppedReason:stoppedReason,Containers:containers[*].{Name:name,LastStatus:lastStatus,ExitCode:exitCode,Reason:reason}}"
+            fi
+            echo "Recent ECS service events:"
+            aws ecs describe-services --cluster delivery1-cluster --services delivery1-service --query "services[0].events[0:5]"
           fi
