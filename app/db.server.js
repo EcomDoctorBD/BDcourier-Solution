@@ -1,11 +1,19 @@
 import mongoose from "mongoose";
 
-const MONGODB_URI = process.env.DATABASE_URL;
+const MONGODB_URI = process.env.MONGODB_URI || process.env.DATABASE_URL;
 
 if (!MONGODB_URI) {
   throw new Error(
-    "Missing DATABASE_URL environment variable. Please verify your .env file in Google Antigravity."
+    "Missing MONGODB_URI or DATABASE_URL environment variable. Please verify your environment configuration."
   );
+}
+
+// Synchronize env variables for backward compatibility
+if (!process.env.DATABASE_URL && MONGODB_URI) {
+  process.env.DATABASE_URL = MONGODB_URI;
+}
+if (!process.env.MONGODB_URI && MONGODB_URI) {
+  process.env.MONGODB_URI = MONGODB_URI;
 }
 
 let cached = global.__mongooseCache;
@@ -15,19 +23,23 @@ if (!cached) {
 }
 
 export async function connectDB() {
-  if (cached.conn) {
+  if (cached.conn && mongoose.connection.readyState === 1) {
     return cached.conn;
   }
 
-  if (!cached.promise) {
+  if (!cached.promise || mongoose.connection.readyState === 0) {
     const opts = {
       bufferCommands: true,
+      maxPoolSize: 10,
+      minPoolSize: 2,
+      serverSelectionTimeoutMS: 10000,
+      socketTimeoutMS: 45000,
     };
 
     cached.promise = mongoose
       .connect(MONGODB_URI, opts)
       .then((mongooseInstance) => {
-        console.log("✅ Connected to MongoDB successfully.");
+        console.log("✅ Connected to MongoDB successfully (Mongoose pool reused).");
         return mongooseInstance;
       })
       .catch((error) => {

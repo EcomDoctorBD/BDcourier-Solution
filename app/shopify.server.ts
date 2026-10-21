@@ -7,11 +7,11 @@ import {
 } from "@shopify/shopify-app-remix/server";
 import { MongoDBSessionStorage } from "@shopify/shopify-app-session-storage-mongodb";
 
-const mongoUri = process.env.DATABASE_URL;
+const mongoUri = process.env.MONGODB_URI || process.env.DATABASE_URL;
 
 if (!mongoUri) {
   throw new Error(
-    "Missing DATABASE_URL environment variable. Please verify your .env file in Google Antigravity."
+    "Missing MONGODB_URI or DATABASE_URL environment variable. Please verify your environment configuration."
   );
 }
 

@@ -55,6 +55,8 @@ jobs:
           environment-variables: |
             GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}
             GEMINI_MODEL=gemini-1.5-flash
+            MONGODB_URI=${{ secrets.MONGODB_URI }}
+            DATABASE_URL=${{ secrets.MONGODB_URI }}
 
       - name: Deploy Amazon ECS task definition
         uses: aws-actions/amazon-ecs-deploy-task-definition@v2
