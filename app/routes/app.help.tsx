@@ -29,7 +29,7 @@ import {
 } from "@shopify/polaris";
 
 import { authenticate } from "../shopify.server";
-import CourierConfig, { connectDB } from "../db.server";
+import CourierConfig, { connectDB, getSystemConfig } from "../db.server";
 
 function WhatsAppIcon() {
   return (
@@ -66,17 +66,33 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   await connectDB();
 
-  const storeConfig: any = await CourierConfig.findOne({ shopDomain }).lean();
+  const [storeConfig, systemConfig]: any[] = await Promise.all([
+    CourierConfig.findOne({ shopDomain }).lean(),
+    getSystemConfig(),
+  ]);
+
   const currentPlan = String(storeConfig?.currentPlan || "Free");
+  const supportEmail = String(systemConfig?.supportEmail || "ecomdoctorbd@gmail.com");
+  const whatsappHelpline = String(systemConfig?.whatsappHelpline || "01346851322");
+  const whatsappNumber = String(systemConfig?.whatsappNumber || "+8801346851322");
 
   return json({
     shopDomain,
     currentPlan,
+    supportEmail,
+    whatsappHelpline,
+    whatsappNumber,
   });
 };
 
 export default function HelpAndSupportRoute() {
-  const { shopDomain, currentPlan } = useLoaderData<typeof loader>();
+  const {
+    shopDomain,
+    currentPlan,
+    supportEmail,
+    whatsappHelpline,
+    whatsappNumber,
+  } = useLoaderData<typeof loader>();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [isModalOpen, setIsModalOpen] = useState(true);
@@ -90,9 +106,10 @@ export default function HelpAndSupportRoute() {
     normalizedPlan.includes("advanced") ||
     normalizedPlan.includes("pro");
 
-  const supportEmail = "support@delivery1.com";
-  const whatsappNumber = "+8801700000000";
-  const rawWhatsAppDigits = whatsappNumber.replace(/[^0-9]/g, "");
+  const digitsOnly = (whatsappNumber || whatsappHelpline).replace(/[^0-9]/g, "");
+  const normalizedWhatsAppDigits = digitsOnly.startsWith("0")
+    ? `88${digitsOnly}`
+    : digitsOnly;
 
   const mailtoSubject = encodeURIComponent(
     `Delivery1 Support Request - ${shopDomain}`
@@ -105,7 +122,7 @@ export default function HelpAndSupportRoute() {
   const whatsappMessage = encodeURIComponent(
     `Hello Delivery1 Priority Support! I am contacting from store: ${shopDomain} (Active Plan: ${currentPlan}). I need assistance with...`
   );
-  const whatsappUrl = `https://api.whatsapp.com/send?phone=${rawWhatsAppDigits}&text=${whatsappMessage}`;
+  const whatsappUrl = `https://api.whatsapp.com/send?phone=${normalizedWhatsAppDigits}&text=${whatsappMessage}`;
 
   const handleClose = () => {
     setIsModalOpen(false);
@@ -193,7 +210,7 @@ export default function HelpAndSupportRoute() {
                       Configure custom base rates, dynamic weight tiers, and
                       cash-on-delivery handling fees for all 64 districts.
                     </Text>
-                    <Link to={`/app/shipping${searchStr}`}>
+                    <Link to={`/app/shipping-rates${searchStr}`}>
                       <Button variant="plain">Configure Rates →</Button>
                     </Link>
                   </BlockStack>

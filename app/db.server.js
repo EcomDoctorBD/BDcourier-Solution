@@ -601,6 +601,65 @@ export const MerchantIntegrations = mongoose.model(
   merchantIntegrationsSchema
 );
 
+/**
+ * 6. Global System Configuration (SystemConfig)
+ * Stores global operational credentials, support channels, and layout strings
+ */
+const systemConfigSchema = new mongoose.Schema(
+  {
+    key: {
+      type: String,
+      required: true,
+      unique: true,
+      default: "global",
+      index: true,
+      trim: true,
+    },
+    supportEmail: {
+      type: String,
+      default: "ecomdoctorbd@gmail.com",
+      trim: true,
+    },
+    whatsappHelpline: {
+      type: String,
+      default: "01346851322",
+      trim: true,
+    },
+    whatsappNumber: {
+      type: String,
+      default: "+8801346851322",
+      trim: true,
+    },
+  },
+  { timestamps: true, collection: "SystemConfig" }
+);
+
+if (mongoose.models.SystemConfig) {
+  delete mongoose.models.SystemConfig;
+}
+
+export const SystemConfig = mongoose.model("SystemConfig", systemConfigSchema);
+
+export async function getSystemConfig() {
+  await connectDB();
+  let config = await SystemConfig.findOne({ key: "global" }).lean();
+  if (!config) {
+    config = await SystemConfig.findOneAndUpdate(
+      { key: "global" },
+      {
+        $set: {
+          key: "global",
+          supportEmail: "ecomdoctorbd@gmail.com",
+          whatsappHelpline: "01346851322",
+          whatsappNumber: "+8801346851322",
+        },
+      },
+      { upsert: true, new: true, setDefaultsOnInsert: true }
+    ).lean();
+  }
+  return config;
+}
+
 export default CourierConfig;
 
 

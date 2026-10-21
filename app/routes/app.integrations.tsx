@@ -31,7 +31,7 @@ import {
 } from "@shopify/polaris";
 
 import { authenticate } from "../shopify.server";
-import { connectDB } from "../db.server";
+import { connectDB, getSystemConfig } from "../db.server";
 import {
   getMerchantIntegration,
   updateSpreadsheetSettings,
@@ -57,11 +57,17 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   await connectDB();
 
-  const googleIntegration = await getMerchantIntegration(shopDomain);
+  const [googleIntegration, systemConfig]: any[] = await Promise.all([
+    getMerchantIntegration(shopDomain),
+    getSystemConfig(),
+  ]);
 
   return json({
     shopDomain,
     googleIntegration,
+    supportEmail: String(systemConfig?.supportEmail || "ecomdoctorbd@gmail.com"),
+    whatsappHelpline: String(systemConfig?.whatsappHelpline || "01346851322"),
+    whatsappNumber: String(systemConfig?.whatsappNumber || "+8801346851322"),
   });
 };
 
@@ -138,10 +144,21 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 };
 
 export default function IntegrationsPage() {
-  const { shopDomain, googleIntegration } = useLoaderData<typeof loader>();
+  const {
+    shopDomain,
+    googleIntegration,
+    supportEmail,
+    whatsappHelpline,
+    whatsappNumber,
+  } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const submit = useSubmit();
   const navigation = useNavigation();
+
+  const digitsOnly = (whatsappNumber || whatsappHelpline).replace(/[^0-9]/g, "");
+  const normalizedWhatsAppDigits = digitsOnly.startsWith("0")
+    ? `88${digitsOnly}`
+    : digitsOnly;
 
   const [googleSpreadsheetId, setGoogleSpreadsheetId] = useState<string>(
     googleIntegration?.spreadsheetId || ""
@@ -479,6 +496,36 @@ export default function IntegrationsPage() {
                   </BlockStack>
                 )}
               </BlockStack>
+            </Card>
+          </Layout.Section>
+
+          {/* Dynamic Technical Assistance & Helpline Card */}
+          <Layout.Section>
+            <Card padding="400">
+              <InlineStack align="space-between" blockAlign="center" wrap>
+                <BlockStack gap="050">
+                  <Text variant="headingSm" as="h4">
+                    Need Custom Spreadsheet or API Assistance?
+                  </Text>
+                  <Text variant="bodySm" tone="subdued">
+                    Contact our engineering support team directly at {supportEmail} or via WhatsApp Helpline ({whatsappHelpline}).
+                  </Text>
+                </BlockStack>
+                <InlineStack gap="200" blockAlign="center">
+                  <Button
+                    url={`mailto:${supportEmail}?subject=Delivery1%20Integration%20Assistance%20-${encodeURIComponent(shopDomain)}`}
+                  >
+                    Contact Email Support
+                  </Button>
+                  <Button
+                    variant="primary"
+                    url={`https://api.whatsapp.com/send?phone=${normalizedWhatsAppDigits}&text=${encodeURIComponent(`Hello Delivery1 Support! I need technical assistance with Google Sheets Integrations for ${shopDomain}.`)}`}
+                    target="_blank"
+                  >
+                    WhatsApp Helpline
+                  </Button>
+                </InlineStack>
+              </InlineStack>
             </Card>
           </Layout.Section>
         </Layout>

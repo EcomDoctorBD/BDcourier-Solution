@@ -7,6 +7,7 @@ import { NavMenu } from "@shopify/app-bridge-react";
 import polarisStyles from "@shopify/polaris/build/esm/styles.css?url";
 
 import { authenticate } from "../shopify.server";
+import { connectDB, getSystemConfig } from "../db.server";
 
 export const links = () => [{ rel: "stylesheet", href: polarisStyles }];
 
@@ -68,18 +69,30 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     );
   }
 
+  let systemConfig: any = null;
+  try {
+    await connectDB();
+    systemConfig = await getSystemConfig();
+  } catch (err) {
+    console.warn("Could not load SystemConfig in app layout:", err);
+  }
+
   return json(
     {
       apiKey: process.env.SHOPIFY_API_KEY || "bc8cab60c84e1dcbb55b4c057645e5c8",
       shop,
       host,
+      supportEmail: systemConfig?.supportEmail || "ecomdoctorbd@gmail.com",
+      whatsappHelpline: systemConfig?.whatsappHelpline || "01346851322",
+      whatsappNumber: systemConfig?.whatsappNumber || "+8801346851322",
     },
     { headers: responseHeaders }
   );
 };
 
 export default function App() {
-  const { apiKey, shop, host } = useLoaderData<typeof loader>();
+  const { apiKey, shop, host, supportEmail, whatsappHelpline, whatsappNumber } =
+    useLoaderData<typeof loader>();
   const [searchParams] = useSearchParams();
 
   const currentShop = searchParams.get("shop") || shop || "";
@@ -122,7 +135,7 @@ export default function App() {
         <Link to={`/app/integrations${searchStr}`}>🔌 Integrations</Link>
         <Link to={`/app/help${searchStr}`}>💬 Help & Support</Link>
       </NavMenu>
-      <Outlet />
+      <Outlet context={{ supportEmail, whatsappHelpline, whatsappNumber }} />
     </AppProvider>
   );
 }
