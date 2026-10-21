@@ -30,9 +30,9 @@ jobs:
           ALB_HOST="delivery1-alb-1581793960.ap-southeast-2.elb.amazonaws.com"
           echo "Checking existing CloudFront distributions for origin: $ALB_HOST..."
           
-          EXISTING_CF=$(aws cloudfront list-distributions --query "DistributionList.Items[?Origins.Items[?DomainName=='$ALB_HOST']].[Id,DomainName,Status]" --output text || true)
+          EXISTING_CF=$(aws cloudfront list-distributions --query "DistributionList.Items[?Origins.Items[?DomainName=='$ALB_HOST']].[Id,DomainName,Status]" --output text 2>/dev/null || true)
           
-          if [ -n "$EXISTING_CF" ]; then
+          if [ -n "$EXISTING_CF" ] && [ "$EXISTING_CF" != "None" ]; then
             CF_ID=$(echo "$EXISTING_CF" | awk '{print $1}')
             CF_DOMAIN=$(echo "$EXISTING_CF" | awk '{print $2}')
             echo "Existing CloudFront Distribution found: ID=$CF_ID, Domain=$CF_DOMAIN"
