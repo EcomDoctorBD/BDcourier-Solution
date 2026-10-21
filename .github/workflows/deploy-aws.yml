@@ -53,10 +53,12 @@ jobs:
           container-name: delivery1-app
           image: ${{ steps.build-image.outputs.image }}
           environment-variables: |
-            GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}
-            GEMINI_MODEL=gemini-1.5-flash
             MONGODB_URI=${{ secrets.MONGODB_URI }}
             DATABASE_URL=${{ secrets.MONGODB_URI }}
+            SHOPIFY_API_KEY=${{ secrets.SHOPIFY_API_KEY }}
+            SHOPIFY_API_SECRET=${{ secrets.SHOPIFY_API_SECRET }}
+            GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}
+            GEMINI_MODEL=gemini-1.5-flash
 
       - name: Deploy Amazon ECS task definition
         uses: aws-actions/amazon-ecs-deploy-task-definition@v2

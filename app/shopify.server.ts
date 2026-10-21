@@ -7,18 +7,27 @@ import {
 } from "@shopify/shopify-app-remix/server";
 import { MongoDBSessionStorage } from "@shopify/shopify-app-session-storage-mongodb";
 
-const mongoUri = process.env.MONGODB_URI || process.env.DATABASE_URL;
+const mongoUri =
+  process.env.MONGODB_URI?.trim() ||
+  process.env.DATABASE_URL?.trim();
 
-if (!mongoUri) {
-  throw new Error(
-    "Missing MONGODB_URI or DATABASE_URL environment variable. Please verify your environment configuration."
-  );
+if (!process.env.DATABASE_URL && mongoUri) {
+  process.env.DATABASE_URL = mongoUri;
+}
+if (!process.env.MONGODB_URI && mongoUri) {
+  process.env.MONGODB_URI = mongoUri;
 }
 
 // Parse the database name from DATABASE_URL (falls back to "shopify_app" if no db name is in the URI path)
-const parsedMongoUrl = new URL(mongoUri);
-const mongoDbName =
-  parsedMongoUrl.pathname.replace(/^\//, "") || "shopify_app";
+let mongoDbName = "shopify_app";
+if (mongoUri) {
+  try {
+    const parsedMongoUrl = new URL(mongoUri);
+    mongoDbName = parsedMongoUrl.pathname.replace(/^\//, "") || "shopify_app";
+  } catch (e) {
+    // fallback to shopify_app
+  }
+}
 
 const shopify = shopifyApp({
   apiKey: process.env.SHOPIFY_API_KEY || "bc8cab60c84e1dcbb55b4c057645e5c8",

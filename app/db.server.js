@@ -1,14 +1,10 @@
 import mongoose from "mongoose";
 
-const MONGODB_URI = process.env.MONGODB_URI || process.env.DATABASE_URL;
+const MONGODB_URI =
+  process.env.MONGODB_URI?.trim() ||
+  process.env.DATABASE_URL?.trim();
 
-if (!MONGODB_URI) {
-  throw new Error(
-    "Missing MONGODB_URI or DATABASE_URL environment variable. Please verify your environment configuration."
-  );
-}
-
-// Synchronize env variables for backward compatibility
+// Synchronize env variables for backward compatibility across all modules
 if (!process.env.DATABASE_URL && MONGODB_URI) {
   process.env.DATABASE_URL = MONGODB_URI;
 }
@@ -27,6 +23,17 @@ export async function connectDB() {
     return cached.conn;
   }
 
+  const activeUri =
+    process.env.MONGODB_URI?.trim() ||
+    process.env.DATABASE_URL?.trim() ||
+    MONGODB_URI;
+
+  if (!activeUri) {
+    throw new Error(
+      "Missing MONGODB_URI or DATABASE_URL environment variable. Please verify container environment configuration."
+    );
+  }
+
   if (!cached.promise || mongoose.connection.readyState === 0) {
     const opts = {
       bufferCommands: true,
@@ -37,7 +44,7 @@ export async function connectDB() {
     };
 
     cached.promise = mongoose
-      .connect(MONGODB_URI, opts)
+      .connect(activeUri, opts)
       .then((mongooseInstance) => {
         console.log("✅ Connected to MongoDB successfully (Mongoose pool reused).");
         return mongooseInstance;
@@ -53,9 +60,12 @@ export async function connectDB() {
   return cached.conn;
 }
 
-connectDB().catch((err) =>
-  console.error("Failed initial MongoDB connection:", err)
-);
+// Background non-blocking warm-up connection (does not halt bootstrap if slow)
+if (MONGODB_URI) {
+  connectDB().catch((err) =>
+    console.warn("Initial MongoDB connection attempt deferred to first request:", err.message)
+  );
+}
 
 /**
  * Helper to resolve the monthly order limit for any plan tier (6-Tier SaaS Model)
