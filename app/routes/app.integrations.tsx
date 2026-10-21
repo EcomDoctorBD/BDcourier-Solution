@@ -28,6 +28,7 @@ import {
   Banner,
   Grid,
   Box,
+  Modal,
 } from "@shopify/polaris";
 
 import { authenticate } from "../shopify.server";
@@ -172,6 +173,7 @@ export default function IntegrationsPage() {
 
   const [showBanner, setShowBanner] = useState(false);
   const [oauthBanner, setOauthBanner] = useState<string | null>(null);
+  const [isWizardOpen, setIsWizardOpen] = useState(false);
 
   const isGoogleConnected = Boolean(googleIntegration?.googleRefreshToken);
   const googleSpreadsheetUrl =
@@ -216,11 +218,25 @@ export default function IntegrationsPage() {
     navigation.formData?.get("actionType") === "testGoogleSync";
 
   const handleConnectGoogle = () => {
+    setIsWizardOpen(true);
+  };
+
+  const handleLaunchOAuthPopup = () => {
     if (typeof window !== "undefined") {
-      const topTarget = window.top || window;
-      topTarget.location.href = `/api/google/auth?shop=${encodeURIComponent(
-        shopDomain
-      )}`;
+      const authUrl = `/api/google/auth?shop=${encodeURIComponent(shopDomain)}`;
+      const width = 600;
+      const height = 700;
+      const left = window.screen.width / 2 - width / 2;
+      const top = window.screen.height / 2 - height / 2;
+      const popup = window.open(
+        authUrl,
+        "GoogleOAuthWindow",
+        `width=${width},height=${height},top=${top},left=${left},scrollbars=yes,status=no`
+      );
+      if (!popup || popup.closed || typeof popup.closed === "undefined") {
+        const topTarget = window.top || window;
+        topTarget.location.href = authUrl;
+      }
     }
   };
 
@@ -284,19 +300,19 @@ export default function IntegrationsPage() {
 
         <Layout>
           <Layout.Section>
-            <Card>
+            <Card padding="500">
               <BlockStack gap="500">
                 {/* Header & Logo */}
                 <InlineStack align="space-between" blockAlign="center" wrap>
                   <InlineStack gap="400" blockAlign="center">
-                    <GoogleSheetsIcon />
+                    <GoogleSheetsIcon glowing={isGoogleConnected} />
                     <BlockStack gap="100">
                       <InlineStack gap="200" blockAlign="center">
                         <Text variant="headingMd" as="h2">
                           Google Sheets Auto-Sync
                         </Text>
                         {isGoogleConnected ? (
-                          <Badge tone="success">Connected</Badge>
+                          <Badge tone="success">● Connected &amp; Syncing</Badge>
                         ) : (
                           <Badge tone="neutral">Disconnected</Badge>
                         )}
@@ -501,7 +517,7 @@ export default function IntegrationsPage() {
 
           {/* Dynamic Technical Assistance & Helpline Card */}
           <Layout.Section>
-            <Card padding="400">
+            <Card padding="500">
               <InlineStack align="space-between" blockAlign="center" wrap>
                 <BlockStack gap="050">
                   <Text variant="headingSm" as="h4">
@@ -530,30 +546,154 @@ export default function IntegrationsPage() {
           </Layout.Section>
         </Layout>
       </BlockStack>
+
+      {/* Google Sheets OAuth Pop-up Setup Wizard Modal */}
+      <Modal
+        open={isWizardOpen}
+        onClose={() => setIsWizardOpen(false)}
+        title="Google Sheets Auto-Sync Setup Wizard"
+        size="large"
+        primaryAction={{
+          content: "Connect with Google Account →",
+          onAction: handleLaunchOAuthPopup,
+        }}
+        secondaryActions={[
+          {
+            content: "Cancel",
+            onAction: () => setIsWizardOpen(false),
+          },
+        ]}
+      >
+        <Modal.Section>
+          <BlockStack gap="400">
+            <Box
+              padding="400"
+              background="bg-surface-secondary"
+              borderRadius="300"
+            >
+              <InlineStack gap="300" blockAlign="center">
+                <GoogleSheetsIcon glowing />
+                <BlockStack gap="050">
+                  <Text variant="headingMd" as="h3">
+                    Connect Your Spreadsheet in 3 Simple Steps
+                  </Text>
+                  <Text variant="bodySm" tone="subdued">
+                    Delivery1 securely connects via Google OAuth 2.0 to stream booked courier parcels in real time.
+                  </Text>
+                </BlockStack>
+              </InlineStack>
+            </Box>
+
+            <Grid>
+              <Grid.Cell columnSpan={{ xs: 6, sm: 6, md: 4, lg: 4, xl: 4 }}>
+                <Box
+                  padding="400"
+                  background="bg-surface"
+                  borderRadius="200"
+                  borderColor="border-subdued"
+                  borderWidth="025"
+                >
+                  <BlockStack gap="200">
+                    <Badge tone="info">Step 1</Badge>
+                    <Text variant="headingSm" as="h4">
+                      1. Authorize Google
+                    </Text>
+                    <Text variant="bodySm" tone="subdued">
+                      Click the button below to open Google&apos;s secure OAuth window and select your Google account.
+                    </Text>
+                  </BlockStack>
+                </Box>
+              </Grid.Cell>
+
+              <Grid.Cell columnSpan={{ xs: 6, sm: 6, md: 4, lg: 4, xl: 4 }}>
+                <Box
+                  padding="400"
+                  background="bg-surface"
+                  borderRadius="200"
+                  borderColor="border-subdued"
+                  borderWidth="025"
+                >
+                  <BlockStack gap="200">
+                    <Badge tone="info">Step 2</Badge>
+                    <Text variant="headingSm" as="h4">
+                      2. Paste Spreadsheet ID
+                    </Text>
+                    <Text variant="bodySm" tone="subdued">
+                      Paste your Google Sheet URL or ID. We will automatically initialize the 9 courier export columns.
+                    </Text>
+                  </BlockStack>
+                </Box>
+              </Grid.Cell>
+
+              <Grid.Cell columnSpan={{ xs: 6, sm: 6, md: 4, lg: 4, xl: 4 }}>
+                <Box
+                  padding="400"
+                  background="bg-surface"
+                  borderRadius="200"
+                  borderColor="border-subdued"
+                  borderWidth="025"
+                >
+                  <BlockStack gap="200">
+                    <Badge tone="info">Step 3</Badge>
+                    <Text variant="headingSm" as="h4">
+                      3. Real-Time Auto-Sync
+                    </Text>
+                    <Text variant="bodySm" tone="subdued">
+                      Every time you book an order with Pathao, Steadfast, or REDX, it automatically appends to your sheet.
+                    </Text>
+                  </BlockStack>
+                </Box>
+              </Grid.Cell>
+            </Grid>
+
+            <Banner tone="info">
+              <p>
+                <strong>Zero Password Storage:</strong> Delivery1 uses official Google OAuth refresh tokens. You can disconnect or revoke access at any time.
+              </p>
+            </Banner>
+          </BlockStack>
+        </Modal.Section>
+      </Modal>
     </Page>
   );
 }
 
-function GoogleSheetsIcon(props: SVGProps<SVGSVGElement>) {
+function GoogleSheetsIcon({
+  glowing = false,
+  ...props
+}: SVGProps<SVGSVGElement> & { glowing?: boolean }) {
   return (
-    <svg
-      width="44"
-      height="44"
-      viewBox="0 0 44 44"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-      {...props}
+    <div
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        borderRadius: "12px",
+        boxShadow: glowing
+          ? "0 0 16px rgba(15, 157, 88, 0.45)"
+          : undefined,
+        transition: "box-shadow 0.3s ease",
+      }}
     >
-      <rect width="44" height="44" rx="10" fill="#0F9D58" />
-      <path
-        d="M28 13H16C14.3431 13 13 14.3431 13 16V28C13 29.6569 14.3431 31 16 31H28C29.6569 31 31 29.6569 31 28V16C31 14.3431 29.6569 13 28 13Z"
-        fill="white"
-      />
-      <path
-        d="M16 17H28V19.5H16V17ZM16 20.75H28V23.25H16V20.75ZM16 24.5H28V27H16V24.5Z"
-        fill="#0F9D58"
-      />
-    </svg>
+      <svg
+        width="44"
+        height="44"
+        viewBox="0 0 44 44"
+        fill="none"
+        xmlns="http://www.w3.org/2000/svg"
+        {...props}
+      >
+        <rect width="44" height="44" rx="10" fill="#0F9D58" />
+        <path
+          d="M28 13H16C14.3431 13 13 14.3431 13 16V28C13 29.6569 14.3431 31 16 31H28C29.6569 31 31 29.6569 31 28V16C31 14.3431 29.6569 13 28 13Z"
+          fill="white"
+        />
+        <path
+          d="M16 17H28V19.5H16V17ZM16 20.75H28V23.25H16V20.75ZM16 24.5H28V27H16V24.5Z"
+          fill="#0F9D58"
+        />
+      </svg>
+    </div>
   );
 }
 

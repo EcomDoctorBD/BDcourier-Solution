@@ -393,9 +393,9 @@ export default function PricingAndBillingPage() {
       "Shipping Zone & Rate, Manual Select",
       "Shipping Zone & Rate, Manual Select",
       "Shipping Zone & Rate, Manual Select",
-      "Dynamic Rule Engine + Shipping Zone",
-      "Auto-Routing Engine + Shipping Zone",
-      "Full Automation + Shipping Zone",
+      "Automatic Courier Selection + Shipping Rates",
+      "Automatic Courier Selection + Shipping Rates",
+      "Full Automation + Shipping Rates",
     ],
     [
       "Bulk Order Limit",
@@ -710,12 +710,12 @@ export default function PricingAndBillingPage() {
               <Box padding="400">
                 <BlockStack gap="100">
                   <Text as="h2" variant="headingMd">
-                    Detailed Plan Comparison Matrix
+                    Detailed Plan Comparison
                   </Text>
                   <Text as="p" variant="bodySm" tone="subdued">
-                    Side-by-side comparison of order capacity, automated routing
-                    engines, bulk processing limits, fraud protection, packing
-                    slips, and financial sync across all 6 plans.
+                    Side-by-side comparison of order capacity, automatic courier selection,
+                    bulk processing limits, fraud protection, packing slips,
+                    and financial sync across all 6 plans.
                   </Text>
                 </BlockStack>
               </Box>

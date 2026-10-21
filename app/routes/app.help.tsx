@@ -75,6 +75,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const supportEmail = String(systemConfig?.supportEmail || "ecomdoctorbd@gmail.com");
   const whatsappHelpline = String(systemConfig?.whatsappHelpline || "01346851322");
   const whatsappNumber = String(systemConfig?.whatsappNumber || "+8801346851322");
+  const tutorialLink = String(systemConfig?.tutorialLink || "");
 
   return json({
     shopDomain,
@@ -82,6 +83,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     supportEmail,
     whatsappHelpline,
     whatsappNumber,
+    tutorialLink,
   });
 };
 
@@ -92,6 +94,7 @@ export default function HelpAndSupportRoute() {
     supportEmail,
     whatsappHelpline,
     whatsappNumber,
+    tutorialLink,
   } = useLoaderData<typeof loader>();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -278,6 +281,33 @@ export default function HelpAndSupportRoute() {
                 </InlineStack>
               </InlineStack>
             </Card>
+
+            {/* Dynamic Setup Tutorial Video Card */}
+            {tutorialLink ? (
+              <Card background="bg-surface-secondary" padding="400">
+                <InlineStack align="space-between" blockAlign="center" wrap>
+                  <BlockStack gap="050">
+                    <InlineStack gap="150" blockAlign="center">
+                      <Text as="h3" variant="headingSm" fontWeight="bold">
+                        📺 Video Documentation & Setup Guide
+                      </Text>
+                      <Badge tone="info">Official Guide</Badge>
+                    </InlineStack>
+                    <Text as="p" variant="bodySm" tone="subdued">
+                      Watch our step-by-step masterclass on configuring courier APIs, auto-routing rules, and dynamic shipping rates.
+                    </Text>
+                  </BlockStack>
+                  <Button
+                    variant="primary"
+                    size="large"
+                    url={tutorialLink}
+                    target="_blank"
+                  >
+                    📺 Watch Setup Tutorial
+                  </Button>
+                </InlineStack>
+              </Card>
+            ) : null}
 
             {/* Conditional Communication Channel based on Tier */}
             {isUnlimitedTier ? (

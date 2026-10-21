@@ -16,6 +16,7 @@ async function main() {
       supportEmail: { type: String, default: "ecomdoctorbd@gmail.com", trim: true },
       whatsappHelpline: { type: String, default: "01346851322", trim: true },
       whatsappNumber: { type: String, default: "+8801346851322", trim: true },
+      tutorialLink: { type: String, default: "https://www.youtube.com/@ecomdoctorbd", trim: true },
     },
     { timestamps: true, collection: "SystemConfig" }
   );
@@ -30,10 +31,11 @@ async function main() {
         supportEmail: "ecomdoctorbd@gmail.com",
         whatsappHelpline: "01346851322",
         whatsappNumber: "+8801346851322",
+        tutorialLink: "https://www.youtube.com/@ecomdoctorbd",
         updatedAt: new Date(),
       },
     },
-    { upsert: true, new: true, setDefaultsOnInsert: true }
+    { upsert: true, returnDocument: "after", setDefaultsOnInsert: true }
   );
 
   console.log("Successfully injected SystemConfig record into MongoDB:");

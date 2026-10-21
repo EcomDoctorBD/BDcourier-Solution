@@ -621,10 +621,10 @@ export default function ShippingRatesPage() {
 
         <BlockStack gap="100">
           <Text as="h2" variant="headingLg">
-            Dynamic Shipping Zone Matrix
+            Delivery Charge Rules
           </Text>
           <Text as="p" variant="bodyMd" tone="subdued">
-            Define customized base rates, incremental weight rules, and Cash-on-Delivery (COD) surcharges across all 64 districts in Bangladesh.
+            Define customized delivery rates, weight rules, and Cash-on-Delivery (COD) fees across all 64 districts in Bangladesh.
           </Text>
         </BlockStack>
 
@@ -894,10 +894,10 @@ export default function ShippingRatesPage() {
                 <InlineStack align="space-between" blockAlign="center">
                   <BlockStack gap="050">
                     <Text as="h3" variant="headingMd">
-                      Active Shipping Zone Matrix Rules
+                      Active Delivery Charge Rules
                     </Text>
                     <Text as="p" variant="bodySm" tone="subdued">
-                      Live zones registered in MongoDB. During Shopify checkout, customer shipping addresses are matched against these zones to dynamically quote delivery rates.
+                      Configured delivery zones and shipping rules. During Shopify checkout, customer shipping addresses are matched against these zones to calculate real-time delivery charges.
                     </Text>
                   </BlockStack>
                   <Badge tone="info">

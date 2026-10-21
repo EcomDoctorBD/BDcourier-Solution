@@ -2197,6 +2197,12 @@ export default function OrdersFulfillmentPage() {
   const displayedOrders =
     orders.length > 0 ? orders : useDemoOrders ? demoOrders : [];
 
+  const riskyOrdersCount = displayedOrders.filter(
+    (o) =>
+      (o.isRiskyLocked || Boolean(lockedRiskOrders[o.id])) &&
+      !manuallyUnlockedOrders[o.id]
+  ).length;
+
   const handleSelectionChange = useCallback(
     (
       selectionType: string,
@@ -2410,18 +2416,18 @@ export default function OrdersFulfillmentPage() {
   // Dynamic Table Headings: Include Task 4 Verification Column ONLY for Pro & Enterprise
   const tableHeadings = isProOrEnterprise
     ? [
-        { title: "Order & Routing" },
-        { title: "Customer, Fraud Stats & Warehouse Note" },
-        { title: "COD & SKU" },
-        { title: "Status Sync & Cash Verification" },
-        { title: "Courier Select" },
+        { title: "Order & Destination" },
+        { title: "Customer & Delivery History" },
+        { title: "Items & COD Amount" },
+        { title: "Payment & Delivery Status" },
+        { title: "Courier Partner" },
         { title: "Action" },
       ]
     : [
-        { title: "Order & Routing" },
-        { title: "Customer, Fraud Stats & Warehouse Note" },
-        { title: "COD & SKU" },
-        { title: "Courier Select" },
+        { title: "Order & Destination" },
+        { title: "Customer & Delivery History" },
+        { title: "Items & COD Amount" },
+        { title: "Courier Partner" },
         { title: "Action" },
       ];
 
@@ -2492,17 +2498,27 @@ export default function OrdersFulfillmentPage() {
                   </InlineStack>
                 </Badge>
               ) : dispatchedInfo ? (
-                <Badge tone="success" status="success">
-                  {sentBadgeText}
-                </Badge>
+                <InlineStack gap="100" wrap>
+                  <Badge tone="success" status="success">
+                    {sentBadgeText}
+                  </Badge>
+                  <Badge tone="success" progress="complete">
+                    ✅ AI Cleaned
+                  </Badge>
+                </InlineStack>
               ) : isLockedBySafetyNet ? (
-                <Badge tone="warning" status="warning">
-                  ⚠️ Risky: Manual Review
+                <Badge tone="warning" progress="partiallyComplete">
+                  ⚠️ Risky Order (Manual Review Required)
                 </Badge>
               ) : (
-                <Badge tone={routingConfig.autoRoutingEnabled ? "info" : undefined}>
-                  {order.status}
-                </Badge>
+                <InlineStack gap="100" wrap>
+                  <Badge tone={routingConfig.autoRoutingEnabled ? "info" : undefined}>
+                    {order.status}
+                  </Badge>
+                  <Badge tone="success" progress="complete">
+                    ✅ AI Cleaned
+                  </Badge>
+                </InlineStack>
               )}
 
               <Text variant="bodySm" tone="subdued" as="span">
@@ -2514,17 +2530,26 @@ export default function OrdersFulfillmentPage() {
 
         {/* Column 2: Customer + Fraud Stats + Safety Net Badge + Warehouse Note */}
         <IndexTable.Cell>
-          <BlockStack gap="150">
-            <InlineStack gap="200" blockAlign="center" wrap>
-              <Text variant="bodyMd" fontWeight="semibold" as="span">
-                {order.customerName}
-              </Text>
-              {isLockedBySafetyNet && (
-                <Badge tone="warning" status="warning">
-                  ⚠️ Risky: Manual Review
-                </Badge>
-              )}
-            </InlineStack>
+          <Box
+            background={isLockedBySafetyNet ? "bg-surface-warning-subdued" : undefined}
+            padding={isLockedBySafetyNet ? "200" : "0"}
+            borderRadius={isLockedBySafetyNet ? "200" : undefined}
+          >
+            <BlockStack gap="150">
+              <InlineStack gap="200" blockAlign="center" wrap>
+                <Text variant="bodyMd" fontWeight="semibold" as="span">
+                  {order.customerName}
+                </Text>
+                {isLockedBySafetyNet ? (
+                  <Badge tone="warning" progress="partiallyComplete">
+                    ⚠️ Risky Order (Manual Review Required)
+                  </Badge>
+                ) : (
+                  <Badge tone="success" progress="complete">
+                    ✅ AI Cleaned
+                  </Badge>
+                )}
+              </InlineStack>
 
             <Text variant="bodySm" tone="subdued" as="span">
               {order.customerPhone} • {order.shippingAddress}
@@ -2553,7 +2578,8 @@ export default function OrdersFulfillmentPage() {
               />
             </div>
           </BlockStack>
-        </IndexTable.Cell>
+        </Box>
+      </IndexTable.Cell>
 
         {/* Column 3: Total Price & SKU Preview */}
         <IndexTable.Cell>
@@ -2704,7 +2730,7 @@ export default function OrdersFulfillmentPage() {
       `}</style>
 
       <Page
-        title="Orders & Fulfillment"
+        title="Orders"
         subtitle={`Store: ${shopDomain} • Active Plan: ${
           usageSummary.currentPlan
         } (${
@@ -2726,7 +2752,7 @@ export default function OrdersFulfillmentPage() {
             : []
         }
       >
-        <TitleBar title="Orders & Fulfillment" />
+        <TitleBar title="Orders" />
 
         <Layout>
           {showBanner && actionData?.message && (
@@ -2771,10 +2797,26 @@ export default function OrdersFulfillmentPage() {
             </Layout.Section>
           )}
 
+          {/* VISUAL ANCHORS: Amber Fraud Alert Notice for High-Risk Orders */}
+          {riskyOrdersCount > 0 && (
+            <Layout.Section>
+              <Banner
+                title={`Fraud Risk Notice: ${riskyOrdersCount} Flagged Order${
+                  riskyOrdersCount === 1 ? "" : "s"
+                } Require Review`}
+                tone="warning"
+              >
+                <p>
+                  Customer fraud scoring detected delivery success rates below your {routingConfig.minSuccessRate ?? 70}% safety threshold. These orders are highlighted in amber and locked to protect against courier return fees (RTO). Verify customer details or manually approve before booking.
+                </p>
+              </Banner>
+            </Layout.Section>
+          )}
+
           {/* ==================== TASK 3: TIER-GATED PRINTABLE PACKING SLIPS VIEW ==================== */}
           {showPackingSlipView && bookedSlipsList.length > 0 && (
             <Layout.Section>
-              <Card>
+              <Card padding="500">
                 <BlockStack gap="400">
                   <InlineStack align="space-between" blockAlign="center" wrap>
                     <BlockStack gap="050">
@@ -3655,16 +3697,16 @@ export default function OrdersFulfillmentPage() {
 
           {/* ==================== BULK COURIER FULFILLMENT QUEUE OVERVIEW ==================== */}
           <Layout.Section>
-            <Card>
+            <Card padding="500">
               <InlineStack align="space-between" blockAlign="center" wrap>
                 <BlockStack gap="100">
                   <InlineStack gap="200" blockAlign="center">
                     <Text as="h2" variant="headingMd">
-                      Bulk Courier Fulfillment Queue
+                      Bulk Order Booking
                     </Text>
                     <Badge tone="info">
                       {usageSummary.isUnlimitedBulk
-                        ? `${usageSummary.currentPlan} Plan: Unlimited Bulk Batch`
+                        ? `${usageSummary.currentPlan} Plan: Unlimited Bulk Booking`
                         : `${usageSummary.currentPlan} Plan Cap: Max ${usageSummary.bulkBatchLimit} Orders / Batch`}
                     </Badge>
                     {isProOrEnterprise && (
@@ -3674,8 +3716,7 @@ export default function OrdersFulfillmentPage() {
                     )}
                   </InlineStack>
                   <Text as="p" variant="bodySm" tone="subdued">
-                    Tick row checkboxes to activate the floating batch action bar.
-                    Orders are automatically routed and dispatched to Pathao or Steadfast.
+                    Tick row checkboxes to select orders. Once selected, book parcels with one click and print thermal shipping labels or invoices.
                   </Text>
                 </BlockStack>
 
@@ -3704,10 +3745,9 @@ export default function OrdersFulfillmentPage() {
                       No Unfulfilled Orders Found in This Store
                     </Text>
                     <Text as="p" variant="bodyMd" tone="subdued" alignment="center">
-                      Load sample Bangladeshi COD orders below to test Multi-Select
-                      Bulk Booking, Auto-Routing, Risk Locks, the 3 Tiered
-                      Printable Packing Slip Templates, and Task 4 Cash Mismatch
-                      Verification.
+                      Load sample Bangladeshi COD orders below to test bulk booking,
+                      automatic courier selection, risk protection, and printable shipping
+                      labels and invoices.
                     </Text>
                     <Box paddingBlockStart="200">
                       <Button

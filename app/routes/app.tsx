@@ -129,7 +129,7 @@ export default function App() {
         <Link to={`/app${searchStr}`} rel="home">
           📊 Dashboard
         </Link>
-        <Link to={`/app/orders${searchStr}`}>📦 Orders & Fulfillment</Link>
+        <Link to={`/app/orders${searchStr}`}>📦 Orders</Link>
         <Link to={`/app/courier-settings${searchStr}`}>⚙️ Courier Settings</Link>
         <Link to={`/app/shipping-rates${searchStr}`}>🚚 Shipping Rates</Link>
         <Link to={`/app/integrations${searchStr}`}>🔌 Integrations</Link>

@@ -104,6 +104,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     Math.round((monthlyOrderCount / orderLimit) * 100)
   );
   const remainingOrders = Math.max(0, orderLimit - monthlyOrderCount);
+  const isAiNormalizerEnabled = Boolean(
+    storeConfig?.aiAddressCleaningEnabled ?? true
+  );
 
   return json({
     shopDomain,
@@ -117,6 +120,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       remainingOrders,
       billingStatus,
       badgeLabel: tier.badgeLabel,
+    },
+    aiConfig: {
+      isAiNormalizerEnabled,
     },
     allPlans: SIX_TIER_PRICING_PLANS,
     courierConfig: {
@@ -247,7 +253,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 };
 
 export default function CourierDashboard() {
-  const { shopDomain, subscription, allPlans, courierConfig } =
+  const { shopDomain, subscription, aiConfig, allPlans, courierConfig } =
     useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const submit = useSubmit();
@@ -393,8 +399,8 @@ export default function CourierDashboard() {
 
   return (
     <Page
-      title="Delivery Dashboard"
-      subtitle={`Connected Store: ${shopDomain}`}
+      title="Dashboard"
+      subtitle={`Analytics & Overview • Connected Store: ${shopDomain}`}
     >
       <TitleBar title="Dashboard" />
 
@@ -408,11 +414,11 @@ export default function CourierDashboard() {
           />
         )}
 
-        {/* ==================== 1. PREMIUM HERO BANNER & USAGE PROGRESS BAR ==================== */}
+        {/* ==================== 1. PREMIUM HERO BANNER & COLORED METRIC CARDS ==================== */}
         <Layout>
           <Layout.Section>
             <Card padding="500">
-              <BlockStack gap="400">
+              <BlockStack gap="500">
                 {/* Top Row: Plan Tier Typography + Quick Action Button */}
                 <InlineStack align="space-between" blockAlign="center" wrap>
                   <BlockStack gap="100">
@@ -444,43 +450,149 @@ export default function CourierDashboard() {
 
                 <Divider />
 
-                {/* Quota Exhaustion & Progress Bar */}
-                <BlockStack gap="200">
-                  <InlineStack align="space-between" blockAlign="center" wrap>
-                    <InlineStack gap="200" blockAlign="center">
-                      <Text as="span" variant="bodyMd" fontWeight="semibold">
-                        {`${subscription.monthlyOrderCount} / ${subscription.orderLimit} Orders Used`}
-                      </Text>
-                      <Badge
-                        tone={
-                          subscription.usagePercentage >= 90
-                            ? "critical"
-                            : subscription.usagePercentage >= 75
-                            ? "attention"
-                            : "success"
-                        }
-                      >
-                        {`${subscription.usagePercentage}% Quota Utilized`}
-                      </Badge>
-                    </InlineStack>
+                {/* VISUAL ANCHORS: Colored Summary & Balance Cards */}
+                <Grid>
+                  {/* Card 1: Monthly Usage & Quota */}
+                  <Grid.Cell columnSpan={{ xs: 6, sm: 6, md: 3, lg: 3, xl: 3 }}>
+                    <Box
+                      padding="400"
+                      background="bg-surface-secondary"
+                      borderRadius="300"
+                      borderWidth="025"
+                      borderColor="border-subdued"
+                    >
+                      <BlockStack gap="200">
+                        <InlineStack align="space-between" blockAlign="center">
+                          <Text as="span" variant="bodySm" tone="subdued">
+                            PLAN USAGE
+                          </Text>
+                          <Badge
+                            tone={
+                              subscription.usagePercentage >= 90
+                                ? "critical"
+                                : subscription.usagePercentage >= 75
+                                ? "attention"
+                                : "success"
+                            }
+                          >
+                            {`${subscription.usagePercentage}%`}
+                          </Badge>
+                        </InlineStack>
 
-                    <Text as="span" variant="bodySm" tone="subdued">
-                      {`${subscription.remainingOrders} bookings remaining this cycle`}
-                    </Text>
-                  </InlineStack>
+                        <Text as="p" variant="headingLg" fontWeight="bold">
+                          {`${subscription.monthlyOrderCount} / ${subscription.orderLimit}`}
+                        </Text>
 
-                  <ProgressBar
-                    progress={subscription.usagePercentage}
-                    size="small"
-                    tone={
-                      subscription.usagePercentage >= 90
-                        ? "critical"
-                        : subscription.usagePercentage >= 75
-                        ? "highlight"
-                        : "primary"
-                    }
-                  />
-                </BlockStack>
+                        <ProgressBar
+                          progress={subscription.usagePercentage}
+                          size="small"
+                          tone={
+                            subscription.usagePercentage >= 90
+                              ? "critical"
+                              : subscription.usagePercentage >= 75
+                              ? "highlight"
+                              : "primary"
+                          }
+                        />
+
+                        <Text as="span" variant="bodySm" tone="subdued">
+                          Orders used this billing cycle
+                        </Text>
+                      </BlockStack>
+                    </Box>
+                  </Grid.Cell>
+
+                  {/* Card 2: Remaining Order Credits */}
+                  <Grid.Cell columnSpan={{ xs: 6, sm: 6, md: 3, lg: 3, xl: 3 }}>
+                    <Box
+                      padding="400"
+                      background="bg-surface-success-subdued"
+                      borderRadius="300"
+                      borderWidth="025"
+                      borderColor="border-subdued"
+                    >
+                      <BlockStack gap="200">
+                        <InlineStack align="space-between" blockAlign="center">
+                          <Text as="span" variant="bodySm" tone="subdued">
+                            ORDER BALANCE
+                          </Text>
+                          <Badge tone="success">Available</Badge>
+                        </InlineStack>
+
+                        <Text as="p" variant="headingLg" fontWeight="bold">
+                          {`${subscription.remainingOrders}`}
+                        </Text>
+
+                        <Text as="span" variant="bodySm" tone="subdued">
+                          Bookings remaining before renewal
+                        </Text>
+                      </BlockStack>
+                    </Box>
+                  </Grid.Cell>
+
+                  {/* Card 3: AI Address Correction Status */}
+                  <Grid.Cell columnSpan={{ xs: 6, sm: 6, md: 3, lg: 3, xl: 3 }}>
+                    <Box
+                      padding="400"
+                      background="bg-surface-secondary"
+                      borderRadius="300"
+                      borderWidth="025"
+                      borderColor="border-subdued"
+                    >
+                      <BlockStack gap="200">
+                        <InlineStack align="space-between" blockAlign="center">
+                          <Text as="span" variant="bodySm" tone="subdued">
+                            AI ADDRESS NORMALIZER
+                          </Text>
+                          <Badge
+                            tone={aiConfig.isAiNormalizerEnabled ? "success" : "critical"}
+                            progress={aiConfig.isAiNormalizerEnabled ? "complete" : "incomplete"}
+                          >
+                            {aiConfig.isAiNormalizerEnabled ? "Active" : "Inactive"}
+                          </Badge>
+                        </InlineStack>
+
+                        <Text as="p" variant="headingMd" fontWeight="semibold">
+                          Smart Address Clean
+                        </Text>
+
+                        <Text as="span" variant="bodySm" tone="subdued">
+                          Auto-cleans addresses upon booking
+                        </Text>
+                      </BlockStack>
+                    </Box>
+                  </Grid.Cell>
+
+                  {/* Card 4: Courier Connections Fleet */}
+                  <Grid.Cell columnSpan={{ xs: 6, sm: 6, md: 3, lg: 3, xl: 3 }}>
+                    <Box
+                      padding="400"
+                      background="bg-surface-secondary"
+                      borderRadius="300"
+                      borderWidth="025"
+                      borderColor="border-subdued"
+                    >
+                      <BlockStack gap="200">
+                        <InlineStack align="space-between" blockAlign="center">
+                          <Text as="span" variant="bodySm" tone="subdued">
+                            COURIER FLEET
+                          </Text>
+                          <Badge tone={activeCount > 0 ? "success" : "attention"}>
+                            {`${activeCount} / 3 Connected`}
+                          </Badge>
+                        </InlineStack>
+
+                        <Text as="p" variant="headingMd" fontWeight="semibold">
+                          Pathao • Steadfast • REDX
+                        </Text>
+
+                        <Text as="span" variant="bodySm" tone="subdued">
+                          Instant one-click dispatch &amp; tracking
+                        </Text>
+                      </BlockStack>
+                    </Box>
+                  </Grid.Cell>
+                </Grid>
               </BlockStack>
             </Card>
           </Layout.Section>
@@ -491,13 +603,13 @@ export default function CourierDashboard() {
           <Layout.Section>
             <Grid>
               <Grid.Cell columnSpan={{ xs: 6, sm: 6, md: 3, lg: 3, xl: 3 }}>
-                <Card>
-                  <BlockStack gap="200">
+                <Card padding="500">
+                  <BlockStack gap="300">
                     <Text as="h3" variant="headingSm">
-                      📦 Orders & Fulfillment
+                      📦 Orders
                     </Text>
                     <Text as="p" variant="bodySm" tone="subdued">
-                      Batch process and dispatch orders to courier partners with AI address clean.
+                      Bulk order booking, customer fraud scoring, and courier dispatch with smart address cleaning.
                     </Text>
                     <Link to={`/app/orders${searchStr}`}>
                       <Button variant="plain">Open Orders →</Button>
@@ -507,13 +619,13 @@ export default function CourierDashboard() {
               </Grid.Cell>
 
               <Grid.Cell columnSpan={{ xs: 6, sm: 6, md: 3, lg: 3, xl: 3 }}>
-                <Card>
-                  <BlockStack gap="200">
+                <Card padding="500">
+                  <BlockStack gap="300">
                     <Text as="h3" variant="headingSm">
                       ⚙️ Courier Settings
                     </Text>
                     <Text as="p" variant="bodySm" tone="subdued">
-                      Configure Pathao, Steadfast, and RedX API credentials and routing rules.
+                      Configure Pathao, Steadfast, and REDX API credentials and automatic courier selection.
                     </Text>
                     <Link to={`/app/courier-settings${searchStr}`}>
                       <Button variant="plain">Configure Routing →</Button>
@@ -523,13 +635,13 @@ export default function CourierDashboard() {
               </Grid.Cell>
 
               <Grid.Cell columnSpan={{ xs: 6, sm: 6, md: 3, lg: 3, xl: 3 }}>
-                <Card>
-                  <BlockStack gap="200">
+                <Card padding="500">
+                  <BlockStack gap="300">
                     <Text as="h3" variant="headingSm">
                       🚚 Shipping Rates
                     </Text>
                     <Text as="p" variant="bodySm" tone="subdued">
-                      Set custom weight tiers, Bangladesh zones, and COD fees for checkout.
+                      Delivery charge rules, custom weight tiers, and checkout rates for all 64 districts.
                     </Text>
                     <Link to={`/app/shipping-rates${searchStr}`}>
                       <Button variant="plain">Manage Rates →</Button>
@@ -539,8 +651,8 @@ export default function CourierDashboard() {
               </Grid.Cell>
 
               <Grid.Cell columnSpan={{ xs: 6, sm: 6, md: 3, lg: 3, xl: 3 }}>
-                <Card>
-                  <BlockStack gap="200">
+                <Card padding="500">
+                  <BlockStack gap="300">
                     <Text as="h3" variant="headingSm">
                       🔌 Integrations
                     </Text>
@@ -560,8 +672,8 @@ export default function CourierDashboard() {
         {/* ==================== 3. COURIER PARTNER CONNECTION OVERVIEW ==================== */}
         <Layout>
           <Layout.Section>
-            <Card>
-              <BlockStack gap="300">
+            <Card padding="500">
+              <BlockStack gap="400">
                 <InlineStack align="space-between" blockAlign="center">
                   <InlineStack gap="200" blockAlign="center">
                     <Box>
@@ -597,7 +709,7 @@ export default function CourierDashboard() {
             <Grid>
               {/* 1. Pathao Courier Card */}
               <Grid.Cell columnSpan={{ xs: 6, sm: 6, md: 2, lg: 4, xl: 4 }}>
-                <Card>
+                <Card padding="500">
                   <BlockStack gap="400">
                     <InlineStack align="space-between" blockAlign="center">
                       <InlineStack gap="200" blockAlign="center">
@@ -699,7 +811,7 @@ export default function CourierDashboard() {
 
               {/* 2. Steadfast Courier Card */}
               <Grid.Cell columnSpan={{ xs: 6, sm: 6, md: 2, lg: 4, xl: 4 }}>
-                <Card>
+                <Card padding="500">
                   <BlockStack gap="400">
                     <InlineStack align="space-between" blockAlign="center">
                       <InlineStack gap="200" blockAlign="center">
@@ -794,7 +906,7 @@ export default function CourierDashboard() {
 
               {/* 3. RedX Delivery Card */}
               <Grid.Cell columnSpan={{ xs: 6, sm: 6, md: 2, lg: 4, xl: 4 }}>
-                <Card>
+                <Card padding="500">
                   <BlockStack gap="400">
                     <InlineStack align="space-between" blockAlign="center">
                       <InlineStack gap="200" blockAlign="center">

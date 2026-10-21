@@ -1015,10 +1015,10 @@ export default function CourierSettingsPage() {
         <BlockStack gap="400">
           <BlockStack gap="050">
             <Text as="h2" variant="headingLg">
-              Automation Rules &amp; Smart AI
+              Automatic Courier Selection &amp; Smart AI
             </Text>
             <Text as="p" variant="bodyMd" tone="subdued">
-              Intelligent auto-routing engine for geographic courier assignments and Gemini AI address parsing.
+              Automatic courier selection for district assignments and smart address correction.
             </Text>
           </BlockStack>
 
@@ -1035,6 +1035,12 @@ export default function CourierSettingsPage() {
                       <Text as="h3" variant="headingMd">
                         Gemini AI Address Normalizer
                       </Text>
+                      <Badge
+                        tone={aiAddressCleaningEnabled ? "success" : "critical"}
+                        progress={aiAddressCleaningEnabled ? "complete" : "incomplete"}
+                      >
+                        {aiAddressCleaningEnabled ? "Active" : "Inactive"}
+                      </Badge>
                     </InlineStack>
 
                     <InlineStack gap="200" blockAlign="center">
@@ -1084,7 +1090,7 @@ export default function CourierSettingsPage() {
                         <Grid.Cell columnSpan={{ xs: 6, sm: 6, md: 2, lg: 4, xl: 4 }}>
                           <BlockStack gap="050">
                             <Text as="span" variant="bodySm" fontWeight="semibold">
-                              Speed &amp; Caching Engine
+                              Fast Address Cache
                             </Text>
                             <Text as="span" variant="bodySm" tone="subdued">
                               MongoDB AddressCache (Sub-5ms hits)
@@ -1117,10 +1123,10 @@ export default function CourierSettingsPage() {
                     <BlockStack gap="050">
                       <InlineStack gap="200" blockAlign="center">
                         <Text as="h3" variant="headingMd">
-                          Auto-Routing Rules Manager
+                          Automatic Courier Selection Rules
                         </Text>
                         <Badge tone={isAutoRoutingEnabled ? "success" : "attention"}>
-                          {isAutoRoutingEnabled ? "Active Engine" : "Manual Mode"}
+                          {isAutoRoutingEnabled ? "Active" : "Manual Mode"}
                         </Badge>
                       </InlineStack>
                       <Text as="p" variant="bodySm" tone="subdued">
@@ -1133,7 +1139,7 @@ export default function CourierSettingsPage() {
                       loading={isSavingRoutingSettings}
                       onClick={handleSaveRoutingSettings}
                     >
-                      Save Auto-Routing Rules
+                      Save Courier Selection Rules
                     </Button>
                   </InlineStack>
 
@@ -1146,7 +1152,7 @@ export default function CourierSettingsPage() {
                     borderRadius="200"
                   >
                     <Checkbox
-                      label="Enable Automated Geo-Routing & Fraud Risk Safety Net"
+                      label="Enable Automatic Courier Selection & Fraud Protection"
                       helpText="Incoming orders are evaluated against your fraud threshold and routed to the assigned Division/District courier."
                       checked={isAutoRoutingEnabled}
                       onChange={(newChecked) => setIsAutoRoutingEnabled(newChecked)}
@@ -1330,7 +1336,7 @@ export default function CourierSettingsPage() {
                       loading={isSavingRoutingSettings}
                       onClick={handleSaveRoutingSettings}
                     >
-                      Save Auto-Routing Rules
+                      Save Courier Selection Rules
                     </Button>
                   </InlineStack>
                 </BlockStack>

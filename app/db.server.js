@@ -630,6 +630,11 @@ const systemConfigSchema = new mongoose.Schema(
       default: "+8801346851322",
       trim: true,
     },
+    tutorialLink: {
+      type: String,
+      default: "https://www.youtube.com/@ecomdoctorbd",
+      trim: true,
+    },
   },
   { timestamps: true, collection: "SystemConfig" }
 );
@@ -652,6 +657,7 @@ export async function getSystemConfig() {
           supportEmail: "ecomdoctorbd@gmail.com",
           whatsappHelpline: "01346851322",
           whatsappNumber: "+8801346851322",
+          tutorialLink: "https://www.youtube.com/@ecomdoctorbd",
         },
       },
       { upsert: true, new: true, setDefaultsOnInsert: true }
