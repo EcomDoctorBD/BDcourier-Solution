@@ -30,6 +30,9 @@ import {
   Grid,
   Divider,
   Icon,
+  Popover,
+  ActionList,
+  Spinner,
 } from "@shopify/polaris";
 
 import { authenticate } from "../shopify.server";
@@ -2137,6 +2140,12 @@ export default function OrdersFulfillmentPage() {
     "100% Authentic Bangladeshi Products • Fast Nationwide Delivery"
   );
 
+  // Secondary dropdown for batch document printing (4x6 Shipping Labels vs A4 Invoices)
+  const [isPrintPopoverActive, setIsPrintPopoverActive] = useState(false);
+  const [printDocumentMode, setPrintDocumentMode] = useState<
+    "labels_4x6" | "invoices_a4"
+  >("invoices_a4");
+
   const [showBanner, setShowBanner] = useState(false);
   const [clientBatchError, setClientBatchError] = useState<string | null>(null);
 
@@ -2336,6 +2345,57 @@ export default function OrdersFulfillmentPage() {
     submit(formData, { method: "post" });
   };
 
+  const handlePrintBatchDocuments = (mode: "labels_4x6" | "invoices_a4") => {
+    setIsPrintPopoverActive(false);
+    setPrintDocumentMode(mode);
+
+    const selectedOrdersList = displayedOrders.filter((o) =>
+      selectedResources.includes(o.id)
+    );
+
+    if (selectedOrdersList.length === 0) return;
+
+    setDispatchedOrders((prev) => {
+      const updated = { ...prev };
+      for (const order of selectedOrdersList) {
+        if (!updated[order.id]) {
+          const chosenCourier =
+            selectedCouriersByOrder[order.id] || order.assignedCourier;
+          const courierName =
+            chosenCourier === "pathao"
+              ? "Pathao Courier"
+              : chosenCourier === "steadfast"
+              ? "Steadfast Courier"
+              : "RedX Delivery";
+          updated[order.id] = {
+            orderId: order.id,
+            orderName: order.name,
+            courierName,
+            trackingNumber: `PREVIEW-${order.name.replace(/[^a-zA-Z0-9]/g, "")}`,
+            bookingDate: new Date().toLocaleDateString("en-GB"),
+            customerName: order.customerName,
+            customerPhone: order.customerPhone,
+            shippingAddress: order.shippingAddress,
+            codAmount: order.totalPrice,
+            currencyCode: order.currencyCode,
+            warehouseNote:
+              warehouseNotesByOrder[order.id] ?? order.warehouseNote,
+            lineItems: order.lineItems,
+          };
+        }
+      }
+      return updated;
+    });
+
+    setShowPackingSlipView(true);
+
+    if (typeof window !== "undefined") {
+      setTimeout(() => {
+        window.print();
+      }, 350);
+    }
+  };
+
   const pendingActionType = navigation.formData?.get("actionType");
   const isBulkSubmitting =
     navigation.state === "submitting" &&
@@ -2375,6 +2435,25 @@ export default function OrdersFulfillmentPage() {
     const dispatchedInfo = dispatchedOrders[order.id];
     const isRowSelected = selectedResources.includes(order.id);
 
+    const isRowProcessing =
+      (isBulkSubmitting && isRowSelected && !dispatchedInfo) ||
+      isRowSubmitting;
+
+    let partnerName = "Courier";
+    if (dispatchedInfo) {
+      const courierNameLower = (dispatchedInfo.courierName || "").toLowerCase();
+      partnerName = courierNameLower.includes("pathao")
+        ? "Pathao"
+        : courierNameLower.includes("steadfast")
+        ? "Steadfast"
+        : courierNameLower.includes("redx")
+        ? "RedX"
+        : "Courier";
+    }
+    const sentBadgeText = dispatchedInfo
+      ? `✅ Sent: ${partnerName} [${dispatchedInfo.trackingNumber}]`
+      : "";
+
     const { totalDelivered, totalReturned, successRate } = order.fraudStats;
     const rateBadgeTone = getSuccessRateBadgeTone(successRate);
     const isLockedBySafetyNet =
@@ -2397,28 +2476,35 @@ export default function OrdersFulfillmentPage() {
                 <Checkbox
                   label={order.name}
                   checked={isRowSelected}
+                  disabled={isRowProcessing || isLockedBySafetyNet}
                   onChange={(checked) =>
                     toggleSingleRowCheckbox(order.id, checked)
                   }
                 />
               </InlineStack>
-              <Badge
-                tone={
-                  dispatchedInfo || order.reconciliation.autoSyncedPaidFulfilled
-                    ? "success"
-                    : order.isRiskyLocked || Boolean(lockedRiskOrders[order.id])
-                    ? "attention"
-                    : routingConfig.autoRoutingEnabled
-                    ? "info"
-                    : "attention"
-                }
-              >
-                {dispatchedInfo
-                  ? "Booked"
-                  : order.isRiskyLocked || Boolean(lockedRiskOrders[order.id])
-                  ? "Risky - Review Required"
-                  : order.status}
-              </Badge>
+
+              {/* Status Badge: Processing Spinner / Successfully Sent Badge / Risky Amber Lock / Default */}
+              {isRowProcessing ? (
+                <Badge tone="info" status="info">
+                  <InlineStack gap="100" blockAlign="center">
+                    <Spinner size="small" />
+                    <span>⚡ Dispatching...</span>
+                  </InlineStack>
+                </Badge>
+              ) : dispatchedInfo ? (
+                <Badge tone="success" status="success">
+                  {sentBadgeText}
+                </Badge>
+              ) : isLockedBySafetyNet ? (
+                <Badge tone="warning" status="warning">
+                  ⚠️ Risky: Manual Review
+                </Badge>
+              ) : (
+                <Badge tone={routingConfig.autoRoutingEnabled ? "info" : undefined}>
+                  {order.status}
+                </Badge>
+              )}
+
               <Text variant="bodySm" tone="subdued" as="span">
                 {order.isInsideDhaka ? "📍 Inside Dhaka" : "🚚 Outside Dhaka"}
               </Text>
@@ -2433,9 +2519,9 @@ export default function OrdersFulfillmentPage() {
               <Text variant="bodyMd" fontWeight="semibold" as="span">
                 {order.customerName}
               </Text>
-              {(order.isRiskyLocked || Boolean(lockedRiskOrders[order.id])) && (
-                <Badge tone="attention">
-                  ⚠️ Risky Order / Manual Review Required
+              {isLockedBySafetyNet && (
+                <Badge tone="warning" status="warning">
+                  ⚠️ Risky: Manual Review
                 </Badge>
               )}
             </InlineStack>
@@ -2455,6 +2541,7 @@ export default function OrdersFulfillmentPage() {
                 label="Warehouse Packaging Note"
                 labelHidden
                 value={currentNote}
+                disabled={isRowProcessing || Boolean(dispatchedInfo)}
                 onChange={(val) =>
                   setWarehouseNotesByOrder((prev) => ({
                     ...prev,
@@ -2536,7 +2623,7 @@ export default function OrdersFulfillmentPage() {
                 }
                 disabled={
                   Boolean(dispatchedInfo) ||
-                  isRowSubmitting ||
+                  isRowProcessing ||
                   isLockedBySafetyNet
                 }
               />
@@ -2547,10 +2634,17 @@ export default function OrdersFulfillmentPage() {
         {/* Column 6: Single Dispatch / Unlock / Consignment Badge */}
         <IndexTable.Cell>
           <div onClick={(e) => e.stopPropagation()}>
-            {dispatchedInfo ? (
+            {isRowProcessing ? (
+              <Badge tone="info" status="info">
+                <InlineStack gap="100" blockAlign="center">
+                  <Spinner size="small" />
+                  <span>⚡ Dispatching...</span>
+                </InlineStack>
+              </Badge>
+            ) : dispatchedInfo ? (
               <BlockStack gap="100">
-                <Badge tone="success">
-                  {`Consignment: ${dispatchedInfo.trackingNumber}`}
+                <Badge tone="success" status="success">
+                  {sentBadgeText}
                 </Badge>
                 <Text variant="bodySm" tone="subdued" as="span">
                   Via {dispatchedInfo.courierName}
@@ -2558,7 +2652,9 @@ export default function OrdersFulfillmentPage() {
               </BlockStack>
             ) : isLockedBySafetyNet ? (
               <BlockStack gap="150">
-                <Badge tone="warning">Locked for Manual Review</Badge>
+                <Badge tone="warning" status="warning">
+                  ⚠️ Risky: Manual Review
+                </Badge>
                 <Button
                   size="slim"
                   variant="secondary"
@@ -2608,7 +2704,7 @@ export default function OrdersFulfillmentPage() {
       `}</style>
 
       <Page
-        title="Bulk Courier Fulfillment, Packing Slips & Status Sync"
+        title="Orders & Fulfillment"
         subtitle={`Store: ${shopDomain} • Active Plan: ${
           usageSummary.currentPlan
         } (${
@@ -2616,21 +2712,21 @@ export default function OrdersFulfillmentPage() {
             ? `${usageSummary.monthlyOrderCount} / Unlimited`
             : `${usageSummary.monthlyOrderCount} / ${usageSummary.planLimit}`
         } monthly orders)`}
-        backAction={{ content: "Courier Dashboard", url: "/app" }}
+        backAction={{ content: "Dashboard", url: "/app" }}
         secondaryActions={
           bookedSlipsList.length > 0
             ? [
                 {
                   content: showPackingSlipView
-                    ? "Hide Packing Slips Preview"
-                    : `View Printable Packing Slips (${bookedSlipsList.length})`,
+                    ? "Hide Documents Preview"
+                    : `View Printable Documents (${bookedSlipsList.length})`,
                   onAction: () => setShowPackingSlipView((prev) => !prev),
                 },
               ]
             : []
         }
       >
-        <TitleBar title="Orders & Bulk Fulfillment" />
+        <TitleBar title="Orders & Fulfillment" />
 
         <Layout>
           {showBanner && actionData?.message && (
@@ -2701,7 +2797,7 @@ export default function OrdersFulfillmentPage() {
 
                     <InlineStack gap="200">
                       <Button variant="primary" onClick={() => window.print()}>
-                        🖨️ Print All Packing Slips
+                        🖨️ Print Batch Documents
                       </Button>
                       <Button onClick={() => setShowPackingSlipView(false)}>
                         Close Preview
@@ -2710,35 +2806,67 @@ export default function OrdersFulfillmentPage() {
                   </InlineStack>
 
                   <Grid>
-                    <Grid.Cell columnSpan={{ xs: 6, sm: 6, md: 6, lg: 6, xl: 6 }}>
+                    <Grid.Cell columnSpan={{ xs: 6, sm: 6, md: 4, lg: 4, xl: 4 }}>
                       <Select
-                        label="Packing Slip Template Controller"
-                        options={templateSelectorOptions}
-                        value={selectedSlipTemplate}
-                        disabled={isFreePlan}
+                        label="Document Print Mode"
+                        options={[
+                          {
+                            label: "📄 A4 Customer Invoices & Slips",
+                            value: "invoices_a4",
+                          },
+                          {
+                            label: "🏷️ 4x6 Thermal Shipping Labels",
+                            value: "labels_4x6",
+                          },
+                        ]}
+                        value={printDocumentMode}
                         onChange={(val) =>
-                          setSelectedSlipTemplate(
-                            val as "standard" | "branded" | "tailored"
-                          )
-                        }
-                        helpText={
-                          isFreePlan
-                            ? "Locked to Standard Layout on Free Plan."
-                            : "Instantly switch printable slip layouts."
+                          setPrintDocumentMode(val as "labels_4x6" | "invoices_a4")
                         }
                       />
                     </Grid.Cell>
-                    {selectedSlipTemplate === "branded" && (
-                      <Grid.Cell columnSpan={{ xs: 6, sm: 6, md: 6, lg: 6, xl: 6 }}>
-                        <TextField
-                          label="Custom Brand Slogan (Growth & Pro Slot)"
-                          value={customShopSlogan}
-                          onChange={(val) => setCustomShopSlogan(val)}
-                          autoComplete="off"
-                          helpText="Printed inside the Branded Header Grid."
+                    {printDocumentMode === "invoices_a4" && (
+                      <Grid.Cell
+                        columnSpan={{
+                          xs: 6,
+                          sm: 6,
+                          md: selectedSlipTemplate === "branded" ? 4 : 8,
+                          lg: selectedSlipTemplate === "branded" ? 4 : 8,
+                          xl: selectedSlipTemplate === "branded" ? 4 : 8,
+                        }}
+                      >
+                        <Select
+                          label="Packing Slip Template Controller"
+                          options={templateSelectorOptions}
+                          value={selectedSlipTemplate}
+                          disabled={isFreePlan}
+                          onChange={(val) =>
+                            setSelectedSlipTemplate(
+                              val as "standard" | "branded" | "tailored"
+                            )
+                          }
+                          helpText={
+                            isFreePlan
+                              ? "Locked to Standard Layout on Free Plan."
+                              : "Instantly switch printable slip layouts."
+                          }
                         />
                       </Grid.Cell>
                     )}
+                    {printDocumentMode === "invoices_a4" &&
+                      selectedSlipTemplate === "branded" && (
+                        <Grid.Cell
+                          columnSpan={{ xs: 6, sm: 6, md: 4, lg: 4, xl: 4 }}
+                        >
+                          <TextField
+                            label="Custom Brand Slogan (Growth & Pro Slot)"
+                            value={customShopSlogan}
+                            onChange={(val) => setCustomShopSlogan(val)}
+                            autoComplete="off"
+                            helpText="Printed inside the Branded Header Grid."
+                          />
+                        </Grid.Cell>
+                      )}
                   </Grid>
 
                   <Divider />
@@ -2746,6 +2874,212 @@ export default function OrdersFulfillmentPage() {
                   <div id="printable-packing-slips-zone">
                     <BlockStack gap="400">
                       {bookedSlipsList.map((slip) => {
+                        if (printDocumentMode === "labels_4x6") {
+                          return (
+                            <div
+                              key={`${slip.orderId}-4x6`}
+                              style={{
+                                width: "100mm",
+                                height: "150mm",
+                                boxSizing: "border-box",
+                                border: "2px solid #000000",
+                                borderRadius: "4px",
+                                padding: "8mm",
+                                margin: "0 auto 8mm auto",
+                                background: "#ffffff",
+                                color: "#000000",
+                                fontFamily: "sans-serif",
+                                pageBreakAfter: "always",
+                                display: "flex",
+                                flexDirection: "column",
+                                justifyContent: "space-between",
+                              }}
+                            >
+                              {/* Header */}
+                              <div
+                                style={{
+                                  borderBottom: "2px solid #000000",
+                                  paddingBottom: "6px",
+                                }}
+                              >
+                                <div
+                                  style={{
+                                    display: "flex",
+                                    justifyContent: "space-between",
+                                    alignItems: "center",
+                                  }}
+                                >
+                                  <span
+                                    style={{
+                                      fontSize: "16px",
+                                      fontWeight: "900",
+                                      letterSpacing: "1px",
+                                    }}
+                                  >
+                                    {slip.courierName.toUpperCase()}
+                                  </span>
+                                  <span
+                                    style={{
+                                      fontSize: "14px",
+                                      fontWeight: "800",
+                                    }}
+                                  >
+                                    {slip.orderName}
+                                  </span>
+                                </div>
+                                <div
+                                  style={{
+                                    fontSize: "11px",
+                                    color: "#444444",
+                                    marginTop: "2px",
+                                  }}
+                                >
+                                  Date: {slip.bookingDate} • Mode: Cash on
+                                  Delivery (COD)
+                                </div>
+                              </div>
+
+                              {/* Barcode & Tracking */}
+                              <div
+                                style={{
+                                  textAlign: "center",
+                                  padding: "8px 0",
+                                  borderBottom: "1px solid #000000",
+                                }}
+                              >
+                                <DynamicBarcodeGraphic
+                                  code={slip.trackingNumber}
+                                  height={46}
+                                />
+                                <div
+                                  style={{
+                                    fontSize: "14px",
+                                    fontWeight: "800",
+                                    letterSpacing: "2px",
+                                    marginTop: "4px",
+                                  }}
+                                >
+                                  {slip.trackingNumber}
+                                </div>
+                              </div>
+
+                              {/* Customer Address */}
+                              <div
+                                style={{
+                                  borderBottom: "2px solid #000000",
+                                  padding: "8px 0",
+                                }}
+                              >
+                                <div
+                                  style={{
+                                    fontSize: "10px",
+                                    fontWeight: "700",
+                                    textTransform: "uppercase",
+                                    color: "#555555",
+                                  }}
+                                >
+                                  Deliver To Customer:
+                                </div>
+                                <div
+                                  style={{
+                                    fontSize: "15px",
+                                    fontWeight: "800",
+                                    marginTop: "2px",
+                                  }}
+                                >
+                                  {slip.customerName}
+                                </div>
+                                <div
+                                  style={{
+                                    fontSize: "13px",
+                                    fontWeight: "700",
+                                    marginTop: "2px",
+                                  }}
+                                >
+                                  📞 {slip.customerPhone}
+                                </div>
+                                <div
+                                  style={{
+                                    fontSize: "12px",
+                                    marginTop: "4px",
+                                    lineHeight: "1.3",
+                                  }}
+                                >
+                                  {slip.shippingAddress}
+                                </div>
+                              </div>
+
+                              {/* COD & Items */}
+                              <div
+                                style={{
+                                  display: "flex",
+                                  justifyContent: "space-between",
+                                  alignItems: "center",
+                                  padding: "6px 0",
+                                  borderBottom: "1px solid #000000",
+                                }}
+                              >
+                                <div>
+                                  <div
+                                    style={{
+                                      fontSize: "10px",
+                                      fontWeight: "700",
+                                      textTransform: "uppercase",
+                                      color: "#555555",
+                                    }}
+                                  >
+                                    Total COD Amount
+                                  </div>
+                                  <div
+                                    style={{
+                                      fontSize: "20px",
+                                      fontWeight: "900",
+                                    }}
+                                  >
+                                    {slip.currencyCode} ৳{slip.codAmount}
+                                  </div>
+                                </div>
+                                <div style={{ textAlign: "right" }}>
+                                  <div
+                                    style={{
+                                      fontSize: "10px",
+                                      fontWeight: "700",
+                                      textTransform: "uppercase",
+                                      color: "#555555",
+                                    }}
+                                  >
+                                    Items Total
+                                  </div>
+                                  <div
+                                    style={{
+                                      fontSize: "16px",
+                                      fontWeight: "800",
+                                    }}
+                                  >
+                                    {slip.lineItems.reduce(
+                                      (acc, it) => acc + (it.quantity || 1),
+                                      0
+                                    )}{" "}
+                                    Pcs
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Instructions */}
+                              <div
+                                style={{
+                                  fontSize: "10px",
+                                  color: "#444444",
+                                  paddingTop: "4px",
+                                }}
+                              >
+                                <strong>Note:</strong>{" "}
+                                {slip.warehouseNote ||
+                                  "Handle with care • Fragile"}
+                              </div>
+                            </div>
+                          );
+                        }
                         if (selectedSlipTemplate === "standard") {
                           return (
                             <div
@@ -3231,7 +3565,95 @@ export default function OrdersFulfillmentPage() {
             </Layout.Section>
           )}
 
-          {/* ==================== TASK 3 & TASK 4: CONTEXTUAL BULK ACTION & SYNC HEADER ==================== */}
+          {/* ==================== 1. STICKY BATCH BULK ACTION HEADER ==================== */}
+          {selectedResources.length > 0 && (
+            <Layout.Section>
+              <div
+                style={{
+                  position: "sticky",
+                  top: "12px",
+                  zIndex: 50,
+                  borderRadius: "12px",
+                  boxShadow:
+                    "0 6px 20px rgba(0, 0, 0, 0.12), 0 2px 4px rgba(0, 0, 0, 0.06)",
+                  border: "1px solid var(--p-color-border, #c9cccf)",
+                  background: "var(--p-color-bg-surface, #ffffff)",
+                  padding: "14px 20px",
+                  backdropFilter: "blur(8px)",
+                }}
+              >
+                <InlineStack align="space-between" blockAlign="center" wrap gap="300">
+                  {/* Left: Counter & Clear Selection */}
+                  <InlineStack gap="300" blockAlign="center">
+                    <Badge
+                      tone={isBatchOverPlanCap ? "critical" : "info"}
+                      size="large"
+                    >
+                      {`${selectedResources.length} Order${
+                        selectedResources.length === 1 ? "" : "s"
+                      } Selected`}
+                    </Badge>
+                    <Button variant="plain" onClick={() => setSelectedResources([])}>
+                      Deselect All
+                    </Button>
+                    {isBatchOverPlanCap && (
+                      <Text variant="bodySm" tone="critical">
+                        ⚠️ Limit exceeded (Max {usageSummary.bulkBatchLimit} per batch)
+                      </Text>
+                    )}
+                  </InlineStack>
+
+                  {/* Right: Print Selector Dropdown + Send Selected Button */}
+                  <InlineStack gap="300" blockAlign="center" wrap>
+                    {/* Secondary dropdown resource selector: Print Batch Documents */}
+                    <Popover
+                      active={isPrintPopoverActive}
+                      activator={
+                        <Button
+                          disclosure
+                          onClick={() => setIsPrintPopoverActive((prev) => !prev)}
+                        >
+                          🖨️ Print Batch Documents
+                        </Button>
+                      }
+                      onClose={() => setIsPrintPopoverActive(false)}
+                    >
+                      <ActionList
+                        actionRole="menuitem"
+                        items={[
+                          {
+                            content: "🏷️ 4x6 Shipping Labels",
+                            helpText: "Compact thermal barcode labels (100x150mm)",
+                            onAction: () =>
+                              handlePrintBatchDocuments("labels_4x6"),
+                          },
+                          {
+                            content: "📄 A4 Invoices",
+                            helpText: "Full-page itemized packing slip invoices",
+                            onAction: () =>
+                              handlePrintBatchDocuments("invoices_a4"),
+                          },
+                        ]}
+                      />
+                    </Popover>
+
+                    {/* Primary Prominent Button: Send (X) Selected to Courier */}
+                    <Button
+                      variant="primary"
+                      size="large"
+                      loading={isBulkSubmitting}
+                      onClick={handleBulkSendToCourier}
+                      disabled={isBatchOverPlanCap}
+                    >
+                      {`📦 Send (${selectedResources.length}) Selected to Courier`}
+                    </Button>
+                  </InlineStack>
+                </InlineStack>
+              </div>
+            </Layout.Section>
+          )}
+
+          {/* ==================== BULK COURIER FULFILLMENT QUEUE OVERVIEW ==================== */}
           <Layout.Section>
             <Card>
               <InlineStack align="space-between" blockAlign="center" wrap>
@@ -3247,44 +3669,27 @@ export default function OrdersFulfillmentPage() {
                     </Badge>
                     {isProOrEnterprise && (
                       <Badge tone="success">
-                        Task 4 Auto Status Sync &amp; Cash Verification: Active
+                        Live Status Sync &amp; Cash Verification: Active
                       </Badge>
                     )}
                   </InlineStack>
                   <Text as="p" variant="bodySm" tone="subdued">
-                    Select multiple orders using the table checkboxes below and
-                    click &quot;Bulk Send to Courier&quot; to dispatch and generate
-                    printable packing slips.
+                    Tick row checkboxes to activate the floating batch action bar.
+                    Orders are automatically routed and dispatched to Pathao or Steadfast.
                   </Text>
                 </BlockStack>
 
-                {selectedResources.length > 0 ? (
-                  <InlineStack gap="200" blockAlign="center">
-                    <Badge tone={isBatchOverPlanCap ? "critical" : "success"}>
-                      {`${selectedResources.length} Selected`}
-                    </Badge>
-                    <Button
-                      variant="primary"
-                      loading={isBulkSubmitting}
-                      onClick={handleBulkSendToCourier}
-                    >
-                      {`Bulk Send to Courier (${selectedResources.length})`}
-                    </Button>
-                    <Button onClick={() => setSelectedResources([])}>Clear</Button>
-                  </InlineStack>
-                ) : (
-                  <InlineStack gap="200">
-                    <Badge tone={activeCouriers.pathao ? "success" : undefined}>
-                      {`Pathao: ${activeCouriers.pathao ? "Ready" : "Off"}`}
-                    </Badge>
-                    <Badge tone={activeCouriers.steadfast ? "success" : undefined}>
-                      {`Steadfast: ${activeCouriers.steadfast ? "Ready" : "Off"}`}
-                    </Badge>
-                    <Badge tone={activeCouriers.redx ? "success" : undefined}>
-                      {`RedX: ${activeCouriers.redx ? "Ready" : "Off"}`}
-                    </Badge>
-                  </InlineStack>
-                )}
+                <InlineStack gap="200">
+                  <Badge tone={activeCouriers.pathao ? "success" : undefined}>
+                    {`Pathao: ${activeCouriers.pathao ? "Ready" : "Off"}`}
+                  </Badge>
+                  <Badge tone={activeCouriers.steadfast ? "success" : undefined}>
+                    {`Steadfast: ${activeCouriers.steadfast ? "Ready" : "Off"}`}
+                  </Badge>
+                  <Badge tone={activeCouriers.redx ? "success" : undefined}>
+                    {`RedX: ${activeCouriers.redx ? "Ready" : "Off"}`}
+                  </Badge>
+                </InlineStack>
               </InlineStack>
             </Card>
           </Layout.Section>

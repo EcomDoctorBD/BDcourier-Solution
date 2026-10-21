@@ -117,8 +117,8 @@ export default function App() {
           📊 Dashboard
         </Link>
         <Link to={`/app/orders${searchStr}`}>📦 Orders & Fulfillment</Link>
-        <Link to={`/app/settings${searchStr}`}>⚙️ Courier Settings</Link>
-        <Link to={`/app/shipping${searchStr}`}>🚚 Shipping Rates</Link>
+        <Link to={`/app/courier-settings${searchStr}`}>⚙️ Courier Settings</Link>
+        <Link to={`/app/shipping-rates${searchStr}`}>🚚 Shipping Rates</Link>
         <Link to={`/app/integrations${searchStr}`}>🔌 Integrations</Link>
         <Link to={`/app/help${searchStr}`}>💬 Help & Support</Link>
       </NavMenu>

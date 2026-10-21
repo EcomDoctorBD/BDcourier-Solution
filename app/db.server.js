@@ -172,6 +172,10 @@ const courierConfigSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    aiAddressCleaningEnabled: {
+      type: Boolean,
+      default: true,
+    },
     insideDhakaCourier: {
       type: String,
       enum: ["pathao", "steadfast", "redx"],
