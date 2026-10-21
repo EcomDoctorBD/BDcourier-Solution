@@ -514,6 +514,89 @@ if (mongoose.models.AddressCache) {
 
 export const AddressCache = mongoose.model("AddressCache", addressCacheSchema);
 
+/**
+ * 5. Google Sheets Integration Matrix (MerchantIntegrations)
+ */
+const merchantIntegrationsSchema = new mongoose.Schema(
+  {
+    merchantId: {
+      type: String,
+      required: true,
+      unique: true,
+      index: true,
+      trim: true,
+    },
+    googleRefreshToken: {
+      type: String,
+      default: "",
+    },
+    googleAccessToken: {
+      type: String,
+      default: "",
+    },
+    googleTokenExpiry: {
+      type: Date,
+    },
+    googleUserEmail: {
+      type: String,
+      default: "",
+    },
+    googleUserName: {
+      type: String,
+      default: "",
+    },
+    spreadsheetId: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+    spreadsheetName: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+    sheetName: {
+      type: String,
+      default: "Delivery1 Orders",
+      trim: true,
+    },
+    spreadsheetUrl: {
+      type: String,
+      default: "",
+    },
+    autoSyncEnabled: {
+      type: Boolean,
+      default: true,
+    },
+    lastSyncAt: {
+      type: Date,
+    },
+    lastSyncStatus: {
+      type: String,
+      enum: ["SUCCESS", "FAILED", "IDLE"],
+      default: "IDLE",
+    },
+    lastSyncError: {
+      type: String,
+      default: "",
+    },
+    totalOrdersSynced: {
+      type: Number,
+      default: 0,
+    },
+  },
+  { timestamps: true }
+);
+
+if (mongoose.models.MerchantIntegrations) {
+  delete mongoose.models.MerchantIntegrations;
+}
+
+export const MerchantIntegrations = mongoose.model(
+  "MerchantIntegrations",
+  merchantIntegrationsSchema
+);
+
 export default CourierConfig;
 
 

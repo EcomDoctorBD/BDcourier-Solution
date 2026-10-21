@@ -41,6 +41,7 @@ import CourierConfig, {
   ShipmentBooking,
 } from "../db.server";
 import { cleanAndCacheAddress } from "../clean-address.server";
+import { syncOrderToGoogleSheet } from "../google-sheets.server";
 
 /**
  * 1. HIERARCHICAL BANGLADESH LOCATION DATA (8 Divisions -> 64 Districts)
@@ -1229,6 +1230,21 @@ async function dispatchSingleOrderToCourier(params: {
       },
     },
     { upsert: true, new: true }
+  );
+
+  // Background Google Sheets Auto-Sync (Real-time append)
+  syncOrderToGoogleSheet(shopDomain, {
+    orderId: orderName || orderId,
+    timestamp: bookedAtIso,
+    customerName,
+    phoneNumber: cleanPhone,
+    rawAddress: shippingAddress,
+    cleanedDistrict: addressResolution?.district || "Dhaka",
+    cleanedThana: addressResolution?.thana || "",
+    courierPartner: courierDisplayName,
+    courierTrackingId: finalTracking,
+  }).catch((sheetErr: any) =>
+    console.warn("Google Sheets background auto-sync error:", sheetErr.message)
   );
 
   return {

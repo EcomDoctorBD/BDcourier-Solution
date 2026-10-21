@@ -7,26 +7,26 @@ import {
 } from "@shopify/shopify-app-remix/server";
 import { MongoDBSessionStorage } from "@shopify/shopify-app-session-storage-mongodb";
 
+const fallbackUri = "mongodb://127.0.0.1:27017/shopify_app";
 const mongoUri =
   process.env.MONGODB_URI?.trim() ||
-  process.env.DATABASE_URL?.trim();
+  process.env.DATABASE_URL?.trim() ||
+  fallbackUri;
 
-if (!process.env.DATABASE_URL && mongoUri) {
+if (!process.env.DATABASE_URL) {
   process.env.DATABASE_URL = mongoUri;
 }
-if (!process.env.MONGODB_URI && mongoUri) {
+if (!process.env.MONGODB_URI) {
   process.env.MONGODB_URI = mongoUri;
 }
 
 // Parse the database name from DATABASE_URL (falls back to "shopify_app" if no db name is in the URI path)
 let mongoDbName = "shopify_app";
-if (mongoUri) {
-  try {
-    const parsedMongoUrl = new URL(mongoUri);
-    mongoDbName = parsedMongoUrl.pathname.replace(/^\//, "") || "shopify_app";
-  } catch (e) {
-    // fallback to shopify_app
-  }
+try {
+  const parsedMongoUrl = new URL(mongoUri);
+  mongoDbName = parsedMongoUrl.pathname.replace(/^\//, "") || "shopify_app";
+} catch (e) {
+  // fallback to shopify_app
 }
 
 const shopify = shopifyApp({
