@@ -34,10 +34,16 @@ import {
   Banner,
   ProgressBar,
   Modal,
+  Select,
 } from "@shopify/polaris";
 
 import { authenticate } from "../shopify.server";
-import CourierConfig, { connectDB } from "../db.server";
+import CourierConfig, {
+  connectDB,
+  decryptCourierConfig,
+  encryptSecret,
+  ensureWebhookSecret,
+} from "../db.server";
 import {
   SIX_TIER_PRICING_PLANS,
   getPricingTier,
@@ -91,7 +97,12 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   await connectDB();
 
-  const storeConfig: any = await CourierConfig.findOne({ shopDomain }).lean();
+  const rawStoreConfig: any = await CourierConfig.findOne({ shopDomain }).lean();
+  const storeConfig = decryptCourierConfig(rawStoreConfig);
+  const webhookSecret = await ensureWebhookSecret(
+    shopDomain,
+    storeConfig?.webhookSecret
+  );
 
   const currentPlan = String(storeConfig?.currentPlan || "Free");
   const monthlyOrderCount = Number(storeConfig?.monthlyOrderCount ?? 0);
@@ -128,15 +139,24 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     courierConfig: {
       shopDomain,
       // Pathao fields
+      pathaoEnvironment: storeConfig?.pathaoEnvironment || "production",
       pathaoClientId: storeConfig?.pathaoClientId || "",
       pathaoSecret: storeConfig?.pathaoSecret || "",
+      pathaoUsername: storeConfig?.pathaoUsername || "",
+      pathaoPassword: storeConfig?.pathaoPassword || "",
       pathaoStoreId: storeConfig?.pathaoStoreId || "",
+      pathaoStoreName: storeConfig?.pathaoStoreName || "",
       // Steadfast fields
       steadfastApiKey: storeConfig?.steadfastApiKey || "",
       steadfastSecretKey: storeConfig?.steadfastSecretKey || "",
       // RedX fields
+      redxEnvironment: storeConfig?.redxEnvironment || "production",
+      redxAccessToken: storeConfig?.redxAccessToken || "",
+      redxPickupStoreId: storeConfig?.redxPickupStoreId || storeConfig?.redxLocationId || "",
+      redxPickupStoreName: storeConfig?.redxPickupStoreName || "",
       redxProfileId: storeConfig?.redxProfileId || "",
-      redxLocationId: storeConfig?.redxLocationId || "",
+      redxLocationId: storeConfig?.redxLocationId || storeConfig?.redxPickupStoreId || "",
+      webhookSecret,
     },
   });
 };
@@ -177,20 +197,27 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     });
   }
 
-  let updateFields: Record<string, string> = {};
+  let updateFields: Record<string, any> = {};
   let courierLabel = "";
   let isFullyConfigured = false;
 
   if (actionType === "savePathao") {
+    const pathaoEnvironment = String(formData.get("pathaoEnvironment") || "production").trim();
     const pathaoClientId = String(formData.get("pathaoClientId") || "").trim();
     const pathaoSecret = String(formData.get("pathaoSecret") || "").trim();
+    const pathaoUsername = String(formData.get("pathaoUsername") || "").trim();
+    const pathaoPassword = String(formData.get("pathaoPassword") || "").trim();
     const pathaoStoreId = String(formData.get("pathaoStoreId") || "").trim();
 
     updateFields = {
+      pathaoEnvironment: pathaoEnvironment === "sandbox" ? "sandbox" : "production",
       pathaoClientId,
-      pathaoSecret,
+      pathaoUsername,
       pathaoStoreId,
     };
+    if (pathaoSecret) updateFields.pathaoSecret = encryptSecret(pathaoSecret);
+    if (pathaoPassword) updateFields.pathaoPassword = encryptSecret(pathaoPassword);
+
     courierLabel = "Pathao Courier";
     isFullyConfigured = Boolean(
       pathaoClientId && pathaoSecret && pathaoStoreId
@@ -205,20 +232,33 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
     updateFields = {
       steadfastApiKey,
-      steadfastSecretKey,
     };
+    if (steadfastSecretKey) updateFields.steadfastSecretKey = encryptSecret(steadfastSecretKey);
+
     courierLabel = "Steadfast Courier";
     isFullyConfigured = Boolean(steadfastApiKey && steadfastSecretKey);
   } else if (actionType === "saveRedX") {
+    const redxEnvironment = String(formData.get("redxEnvironment") || "production").trim();
+    const redxAccessToken = String(formData.get("redxAccessToken") || "").trim();
+    const redxPickupStoreId = String(formData.get("redxPickupStoreId") || "").trim();
     const redxProfileId = String(formData.get("redxProfileId") || "").trim();
     const redxLocationId = String(formData.get("redxLocationId") || "").trim();
 
+    const pickupId = redxPickupStoreId || redxLocationId;
+    const profileId = redxProfileId || pickupId;
+
     updateFields = {
-      redxProfileId,
-      redxLocationId,
+      redxEnvironment: redxEnvironment === "sandbox" ? "sandbox" : "production",
+      redxPickupStoreId: pickupId,
+      redxProfileId: profileId,
+      redxLocationId: pickupId,
     };
+    if (redxAccessToken) updateFields.redxAccessToken = encryptSecret(redxAccessToken);
+
     courierLabel = "RedX Delivery";
-    isFullyConfigured = Boolean(redxProfileId && redxLocationId);
+    isFullyConfigured = Boolean(
+      (redxAccessToken && pickupId) || (redxProfileId && redxLocationId)
+    );
   } else {
     return json({
       success: false,
@@ -272,13 +312,24 @@ export default function CourierDashboard() {
   const [showRedxForm, setShowRedxForm] = useState(false);
 
   // Pathao Input States
+  const [pathaoEnvironment, setPathaoEnvironment] = useState(
+    courierConfig.pathaoEnvironment || "production"
+  );
   const [pathaoClientId, setPathaoClientId] = useState(
     courierConfig.pathaoClientId
   );
   const [pathaoSecret, setPathaoSecret] = useState(courierConfig.pathaoSecret);
+  const [pathaoUsername, setPathaoUsername] = useState(
+    courierConfig.pathaoUsername || ""
+  );
+  const [pathaoPassword, setPathaoPassword] = useState(
+    courierConfig.pathaoPassword || ""
+  );
   const [pathaoStoreId, setPathaoStoreId] = useState(
     courierConfig.pathaoStoreId
   );
+  const [showPathaoSecret, setShowPathaoSecret] = useState(false);
+  const [showPathaoPassword, setShowPathaoPassword] = useState(false);
 
   // Steadfast Input States
   const [steadfastApiKey, setSteadfastApiKey] = useState(
@@ -287,35 +338,58 @@ export default function CourierDashboard() {
   const [steadfastSecretKey, setSteadfastSecretKey] = useState(
     courierConfig.steadfastSecretKey
   );
+  const [showSteadfastSecret, setShowSteadfastSecret] = useState(false);
 
   // RedX Input States
+  const [redxEnvironment, setRedxEnvironment] = useState(
+    courierConfig.redxEnvironment || "production"
+  );
+  const [redxAccessToken, setRedxAccessToken] = useState(
+    courierConfig.redxAccessToken || ""
+  );
+  const [redxPickupStoreId, setRedxPickupStoreId] = useState(
+    courierConfig.redxPickupStoreId || courierConfig.redxLocationId || ""
+  );
   const [redxProfileId, setRedxProfileId] = useState(
     courierConfig.redxProfileId
   );
   const [redxLocationId, setRedxLocationId] = useState(
-    courierConfig.redxLocationId
+    courierConfig.redxLocationId || courierConfig.redxPickupStoreId || ""
   );
+  const [showRedxToken, setShowRedxToken] = useState(false);
 
   // Feedback Banner
   const [showBanner, setShowBanner] = useState(false);
 
   // Sync inputs when loader data changes
   useEffect(() => {
+    setPathaoEnvironment(courierConfig.pathaoEnvironment || "production");
     setPathaoClientId(courierConfig.pathaoClientId);
     setPathaoSecret(courierConfig.pathaoSecret);
+    setPathaoUsername(courierConfig.pathaoUsername || "");
+    setPathaoPassword(courierConfig.pathaoPassword || "");
     setPathaoStoreId(courierConfig.pathaoStoreId);
 
     setSteadfastApiKey(courierConfig.steadfastApiKey);
     setSteadfastSecretKey(courierConfig.steadfastSecretKey);
 
+    setRedxEnvironment(courierConfig.redxEnvironment || "production");
+    setRedxAccessToken(courierConfig.redxAccessToken || "");
+    setRedxPickupStoreId(courierConfig.redxPickupStoreId || courierConfig.redxLocationId || "");
     setRedxProfileId(courierConfig.redxProfileId);
-    setRedxLocationId(courierConfig.redxLocationId);
+    setRedxLocationId(courierConfig.redxLocationId || courierConfig.redxPickupStoreId || "");
   }, [
+    courierConfig.pathaoEnvironment,
     courierConfig.pathaoClientId,
     courierConfig.pathaoSecret,
+    courierConfig.pathaoUsername,
+    courierConfig.pathaoPassword,
     courierConfig.pathaoStoreId,
     courierConfig.steadfastApiKey,
     courierConfig.steadfastSecretKey,
+    courierConfig.redxEnvironment,
+    courierConfig.redxAccessToken,
+    courierConfig.redxPickupStoreId,
     courierConfig.redxProfileId,
     courierConfig.redxLocationId,
   ]);
@@ -333,18 +407,19 @@ export default function CourierDashboard() {
   }, [actionData]);
 
   const isPathaoConnected = Boolean(
-    courierConfig.pathaoClientId.trim() &&
-      courierConfig.pathaoSecret.trim() &&
-      courierConfig.pathaoStoreId.trim()
+    courierConfig.pathaoClientId?.trim() &&
+      courierConfig.pathaoSecret?.trim() &&
+      courierConfig.pathaoStoreId?.trim()
   );
 
   const isSteadfastConnected = Boolean(
-    courierConfig.steadfastApiKey.trim() &&
-      courierConfig.steadfastSecretKey.trim()
+    courierConfig.steadfastApiKey?.trim() &&
+      courierConfig.steadfastSecretKey?.trim()
   );
 
   const isRedxConnected = Boolean(
-    courierConfig.redxProfileId.trim() && courierConfig.redxLocationId.trim()
+    (courierConfig.redxAccessToken?.trim() && courierConfig.redxPickupStoreId?.trim()) ||
+    (courierConfig.redxProfileId?.trim() && courierConfig.redxLocationId?.trim())
   );
 
   const activeCount = [
@@ -368,8 +443,11 @@ export default function CourierDashboard() {
   const handleSavePathao = () => {
     const formData = new FormData();
     formData.append("actionType", "savePathao");
+    formData.append("pathaoEnvironment", pathaoEnvironment);
     formData.append("pathaoClientId", pathaoClientId);
     formData.append("pathaoSecret", pathaoSecret);
+    formData.append("pathaoUsername", pathaoUsername);
+    formData.append("pathaoPassword", pathaoPassword);
     formData.append("pathaoStoreId", pathaoStoreId);
     submit(formData, { method: "post" });
   };
@@ -385,8 +463,11 @@ export default function CourierDashboard() {
   const handleSaveRedX = () => {
     const formData = new FormData();
     formData.append("actionType", "saveRedX");
-    formData.append("redxProfileId", redxProfileId);
-    formData.append("redxLocationId", redxLocationId);
+    formData.append("redxEnvironment", redxEnvironment);
+    formData.append("redxAccessToken", redxAccessToken);
+    formData.append("redxPickupStoreId", redxPickupStoreId);
+    formData.append("redxProfileId", redxProfileId || redxPickupStoreId);
+    formData.append("redxLocationId", redxPickupStoreId);
     submit(formData, { method: "post" });
   };
 
@@ -743,7 +824,7 @@ export default function CourierDashboard() {
                       </Text>
 
                       <Text as="p" variant="bodySm" tone="subdued">
-                        Required: <strong>Client ID, Client Secret, Store ID</strong>
+                        Required: <strong>Client ID, Client Secret, Username, Password, Store ID</strong>
                       </Text>
                     </BlockStack>
 
@@ -771,6 +852,15 @@ export default function CourierDashboard() {
                         <Divider />
                         <Form onSubmit={handleSavePathao}>
                           <FormLayout>
+                            <Select
+                              label="API Environment"
+                              options={[
+                                { label: "Production (Hermes Live)", value: "production" },
+                                { label: "Sandbox / Test API", value: "sandbox" },
+                              ]}
+                              value={pathaoEnvironment}
+                              onChange={(val) => setPathaoEnvironment(val)}
+                            />
                             <TextField
                               label="Client ID"
                               value={pathaoClientId}
@@ -780,10 +870,42 @@ export default function CourierDashboard() {
                             />
                             <TextField
                               label="Client Secret"
+                              type={showPathaoSecret ? "text" : "password"}
                               value={pathaoSecret}
                               onChange={(val) => setPathaoSecret(val)}
                               placeholder="Enter Pathao Client Secret..."
                               autoComplete="off"
+                              connectedRight={
+                                <Button
+                                  variant="plain"
+                                  onClick={() => setShowPathaoSecret((prev) => !prev)}
+                                >
+                                  {showPathaoSecret ? "Hide" : "Show"}
+                                </Button>
+                              }
+                            />
+                            <TextField
+                              label="Merchant Username (Email)"
+                              value={pathaoUsername}
+                              onChange={(val) => setPathaoUsername(val)}
+                              placeholder="merchant@example.com"
+                              autoComplete="off"
+                            />
+                            <TextField
+                              label="Merchant Password"
+                              type={showPathaoPassword ? "text" : "password"}
+                              value={pathaoPassword}
+                              onChange={(val) => setPathaoPassword(val)}
+                              placeholder="••••••••••••••••"
+                              autoComplete="off"
+                              connectedRight={
+                                <Button
+                                  variant="plain"
+                                  onClick={() => setShowPathaoPassword((prev) => !prev)}
+                                >
+                                  {showPathaoPassword ? "Hide" : "Show"}
+                                </Button>
+                              }
                             />
                             <TextField
                               label="Store ID"
@@ -791,6 +913,7 @@ export default function CourierDashboard() {
                               onChange={(val) => setPathaoStoreId(val)}
                               placeholder="Enter Pathao Store ID..."
                               autoComplete="off"
+                              helpText="For store lookup dropdown, visit Courier Settings page."
                             />
                             <InlineStack align="end">
                               <Button
@@ -882,10 +1005,19 @@ export default function CourierDashboard() {
                             />
                             <TextField
                               label="Secret Key"
+                              type={showSteadfastSecret ? "text" : "password"}
                               value={steadfastSecretKey}
                               onChange={(val) => setSteadfastSecretKey(val)}
                               placeholder="Enter Steadfast Secret Key..."
                               autoComplete="off"
+                              connectedRight={
+                                <Button
+                                  variant="plain"
+                                  onClick={() => setShowSteadfastSecret((prev) => !prev)}
+                                >
+                                  {showSteadfastSecret ? "Hide" : "Show"}
+                                </Button>
+                              }
                             />
                             <InlineStack align="end">
                               <Button
@@ -938,7 +1070,7 @@ export default function CourierDashboard() {
                       </Text>
 
                       <Text as="p" variant="bodySm" tone="subdued">
-                        Required: <strong>Profile ID, Location ID</strong>
+                        Required: <strong>API Access Token, Pickup Store ID</strong>
                       </Text>
                     </BlockStack>
 
@@ -966,19 +1098,38 @@ export default function CourierDashboard() {
                         <Divider />
                         <Form onSubmit={handleSaveRedX}>
                           <FormLayout>
-                            <TextField
-                              label="Profile ID"
-                              value={redxProfileId}
-                              onChange={(val) => setRedxProfileId(val)}
-                              placeholder="Enter RedX Profile ID..."
-                              autoComplete="off"
+                            <Select
+                              label="API Environment"
+                              options={[
+                                { label: "Production (OpenAPI Live)", value: "production" },
+                                { label: "Sandbox / Test API", value: "sandbox" },
+                              ]}
+                              value={redxEnvironment}
+                              onChange={(val) => setRedxEnvironment(val)}
                             />
                             <TextField
-                              label="Location ID"
-                              value={redxLocationId}
-                              onChange={(val) => setRedxLocationId(val)}
-                              placeholder="Enter RedX Location ID..."
+                              label="API Access Token"
+                              type={showRedxToken ? "text" : "password"}
+                              value={redxAccessToken}
+                              onChange={(val) => setRedxAccessToken(val)}
+                              placeholder="Enter REDX API Access Token..."
                               autoComplete="off"
+                              connectedRight={
+                                <Button
+                                  variant="plain"
+                                  onClick={() => setShowRedxToken((prev) => !prev)}
+                                >
+                                  {showRedxToken ? "Hide" : "Show"}
+                                </Button>
+                              }
+                            />
+                            <TextField
+                              label="Pickup Store ID"
+                              value={redxPickupStoreId}
+                              onChange={(val) => setRedxPickupStoreId(val)}
+                              placeholder="Enter RedX Pickup Store ID..."
+                              autoComplete="off"
+                              helpText="For pickup store auto-fetch, visit Courier Settings page."
                             />
                             <InlineStack align="end">
                               <Button

@@ -6,6 +6,11 @@ export interface CleanAddressResult {
   thana: string;
   confidence: "HIGH" | "MEDIUM" | "LOW";
   source: "cache" | "gemini" | "fallback";
+  pathaoCityId?: number | null;
+  pathaoZoneId?: number | null;
+  pathaoAreaId?: number | null;
+  redxAreaId?: number | null;
+  redxAreaName?: string;
 }
 
 /**
@@ -142,7 +147,7 @@ export async function cleanAndCacheAddress(
   // STEP A: Cache Check (Sub-5ms Execution)
   // -------------------------------------------------------------
   try {
-    const cached = await AddressCache.findOne({ rawInput: normalizedRaw }).lean();
+    const cached: any = await AddressCache.findOne({ rawInput: normalizedRaw }).lean();
     if (cached) {
       return {
         cleanAddress: cached.cleanAddress,
@@ -150,6 +155,11 @@ export async function cleanAndCacheAddress(
         thana: cached.thana || "",
         confidence: (cached.confidence as any) || "HIGH",
         source: "cache",
+        pathaoCityId: cached.pathaoCityId ?? null,
+        pathaoZoneId: cached.pathaoZoneId ?? null,
+        pathaoAreaId: cached.pathaoAreaId ?? null,
+        redxAreaId: cached.redxAreaId ?? null,
+        redxAreaName: cached.redxAreaName || "",
       };
     }
   } catch (cacheErr) {

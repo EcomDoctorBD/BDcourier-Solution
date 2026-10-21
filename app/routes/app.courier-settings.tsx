@@ -35,7 +35,19 @@ import {
 } from "@shopify/polaris";
 
 import { authenticate } from "../shopify.server";
-import CourierConfig, { connectDB, AddressCache } from "../db.server";
+import CourierConfig, {
+  connectDB,
+  AddressCache,
+  decryptCourierConfig,
+  encryptSecret,
+  ensureWebhookSecret,
+} from "../db.server";
+import {
+  fetchPathaoStores,
+  fetchRedxStores,
+  type PathaoStore,
+  type RedxStore,
+} from "../services/courier-auth.server";
 
 export interface CustomRouteRule {
   division: string;
@@ -55,13 +67,22 @@ export interface AutoRoutingConfig {
 }
 
 export interface CourierCredentials {
+  pathaoEnvironment: string;
   pathaoClientId: string;
   pathaoSecret: string;
+  pathaoUsername: string;
+  pathaoPassword: string;
   pathaoStoreId: string;
+  pathaoStoreName: string;
   steadfastApiKey: string;
   steadfastSecretKey: string;
+  redxEnvironment: string;
+  redxAccessToken: string;
+  redxPickupStoreId: string;
+  redxPickupStoreName: string;
   redxProfileId: string;
   redxLocationId: string;
+  webhookSecret: string;
 }
 
 export interface AiConfig {
@@ -212,7 +233,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   await connectDB();
 
-  const storeConfig: any = await CourierConfig.findOne({ shopDomain }).lean();
+  const rawConfig: any = await CourierConfig.findOne({ shopDomain }).lean();
+  const storeConfig = decryptCourierConfig(rawConfig);
   const currentPlan = storeConfig?.currentPlan || "Free";
   const planLower = String(currentPlan).trim().toLowerCase();
   const isProOrEnterprise =
@@ -255,14 +277,32 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     customRoutes: rawCustomRoutes,
   };
 
+  const webhookSecret = await ensureWebhookSecret(
+    shopDomain,
+    storeConfig?.webhookSecret
+  );
+
+  const appUrl =
+    process.env.SHOPIFY_APP_URL?.trim().replace(/\/$/, "") ||
+    new URL(request.url).origin;
+
   const courierConfig: CourierCredentials = {
+    pathaoEnvironment: storeConfig?.pathaoEnvironment || "production",
     pathaoClientId: storeConfig?.pathaoClientId || "",
     pathaoSecret: storeConfig?.pathaoSecret || "",
+    pathaoUsername: storeConfig?.pathaoUsername || "",
+    pathaoPassword: storeConfig?.pathaoPassword || "",
     pathaoStoreId: storeConfig?.pathaoStoreId || "",
+    pathaoStoreName: storeConfig?.pathaoStoreName || "",
     steadfastApiKey: storeConfig?.steadfastApiKey || "",
     steadfastSecretKey: storeConfig?.steadfastSecretKey || "",
+    redxEnvironment: storeConfig?.redxEnvironment || "production",
+    redxAccessToken: storeConfig?.redxAccessToken || "",
+    redxPickupStoreId: storeConfig?.redxPickupStoreId || storeConfig?.redxLocationId || "",
+    redxPickupStoreName: storeConfig?.redxPickupStoreName || "",
     redxProfileId: storeConfig?.redxProfileId || "",
-    redxLocationId: storeConfig?.redxLocationId || "",
+    redxLocationId: storeConfig?.redxLocationId || storeConfig?.redxPickupStoreId || "",
+    webhookSecret,
   };
 
   let addressCacheCount = 0;
@@ -288,6 +328,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     courierConfig,
     routingConfig,
     aiConfig,
+    appUrl,
   });
 };
 
@@ -302,20 +343,28 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   // ==================== 1. SAVE PATHAO CREDENTIALS ====================
   if (actionType === "savePathao") {
+    const pathaoEnvironment = String(formData.get("pathaoEnvironment") || "production").trim();
     const pathaoClientId = String(formData.get("pathaoClientId") || "").trim();
     const pathaoSecret = String(formData.get("pathaoSecret") || "").trim();
+    const pathaoUsername = String(formData.get("pathaoUsername") || "").trim();
+    const pathaoPassword = String(formData.get("pathaoPassword") || "").trim();
     const pathaoStoreId = String(formData.get("pathaoStoreId") || "").trim();
+    const pathaoStoreName = String(formData.get("pathaoStoreName") || "").trim();
+
+    const updateSet: Record<string, any> = {
+      shopDomain,
+      pathaoEnvironment: pathaoEnvironment === "sandbox" ? "sandbox" : "production",
+      pathaoClientId,
+      pathaoUsername,
+      pathaoStoreId,
+      pathaoStoreName,
+    };
+    if (pathaoSecret) updateSet.pathaoSecret = encryptSecret(pathaoSecret);
+    if (pathaoPassword) updateSet.pathaoPassword = encryptSecret(pathaoPassword);
 
     await CourierConfig.findOneAndUpdate(
       { shopDomain },
-      {
-        $set: {
-          shopDomain,
-          pathaoClientId,
-          pathaoSecret,
-          pathaoStoreId,
-        },
-      },
+      { $set: updateSet },
       { upsert: true, new: true, setDefaultsOnInsert: true }
     );
 
@@ -332,6 +381,47 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     });
   }
 
+  // ==================== 1B. VERIFY & FETCH PATHAO STORES ====================
+  if (actionType === "fetchPathaoStores") {
+    const pathaoEnvironment = String(formData.get("pathaoEnvironment") || "production").trim();
+    const pathaoClientId = String(formData.get("pathaoClientId") || "").trim();
+    const pathaoSecret = String(formData.get("pathaoSecret") || "").trim();
+    const pathaoUsername = String(formData.get("pathaoUsername") || "").trim();
+    const pathaoPassword = String(formData.get("pathaoPassword") || "").trim();
+
+    const updateSet: Record<string, any> = {
+      shopDomain,
+      pathaoEnvironment: pathaoEnvironment === "sandbox" ? "sandbox" : "production",
+    };
+    if (pathaoClientId) updateSet.pathaoClientId = pathaoClientId;
+    if (pathaoUsername) updateSet.pathaoUsername = pathaoUsername;
+    if (pathaoSecret) updateSet.pathaoSecret = encryptSecret(pathaoSecret);
+    if (pathaoPassword) updateSet.pathaoPassword = encryptSecret(pathaoPassword);
+
+    await CourierConfig.findOneAndUpdate(
+      { shopDomain },
+      { $set: updateSet },
+      { upsert: true, new: true, setDefaultsOnInsert: true }
+    );
+
+    const storesResult = await fetchPathaoStores(shopDomain);
+    if (!storesResult.success) {
+      return json({
+        success: false,
+        actionType: "fetchPathaoStores",
+        message: storesResult.error || "Failed to fetch Pathao stores.",
+        stores: [] as PathaoStore[],
+      });
+    }
+
+    return json({
+      success: true,
+      actionType: "fetchPathaoStores",
+      message: `Verified credentials and retrieved ${storesResult.stores.length} store(s) from Pathao.`,
+      stores: storesResult.stores,
+    });
+  }
+
   // ==================== 2. SAVE STEADFAST CREDENTIALS ====================
   if (actionType === "saveSteadfast") {
     const steadfastApiKey = String(
@@ -341,15 +431,17 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       formData.get("steadfastSecretKey") || ""
     ).trim();
 
+    const updateSet: Record<string, any> = {
+      shopDomain,
+      steadfastApiKey,
+    };
+    if (steadfastSecretKey) {
+      updateSet.steadfastSecretKey = encryptSecret(steadfastSecretKey);
+    }
+
     await CourierConfig.findOneAndUpdate(
       { shopDomain },
-      {
-        $set: {
-          shopDomain,
-          steadfastApiKey,
-          steadfastSecretKey,
-        },
-      },
+      { $set: updateSet },
       { upsert: true, new: true, setDefaultsOnInsert: true }
     );
 
@@ -366,22 +458,37 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   // ==================== 3. SAVE REDX CREDENTIALS ====================
   if (actionType === "saveRedX") {
+    const redxEnvironment = String(formData.get("redxEnvironment") || "production").trim();
+    const redxAccessToken = String(formData.get("redxAccessToken") || "").trim();
+    const redxPickupStoreId = String(formData.get("redxPickupStoreId") || "").trim();
+    const redxPickupStoreName = String(formData.get("redxPickupStoreName") || "").trim();
     const redxProfileId = String(formData.get("redxProfileId") || "").trim();
     const redxLocationId = String(formData.get("redxLocationId") || "").trim();
 
+    const pickupId = redxPickupStoreId || redxLocationId;
+    const profileId = redxProfileId || redxPickupStoreName || pickupId;
+
+    const updateSet: Record<string, any> = {
+      shopDomain,
+      redxEnvironment: redxEnvironment === "sandbox" ? "sandbox" : "production",
+      redxPickupStoreId: pickupId,
+      redxPickupStoreName,
+      redxProfileId: profileId,
+      redxLocationId: pickupId,
+    };
+    if (redxAccessToken) {
+      updateSet.redxAccessToken = encryptSecret(redxAccessToken);
+    }
+
     await CourierConfig.findOneAndUpdate(
       { shopDomain },
-      {
-        $set: {
-          shopDomain,
-          redxProfileId,
-          redxLocationId,
-        },
-      },
+      { $set: updateSet },
       { upsert: true, new: true, setDefaultsOnInsert: true }
     );
 
-    const isFullyConnected = Boolean(redxProfileId && redxLocationId);
+    const isFullyConnected = Boolean(
+      (redxAccessToken && pickupId) || (redxProfileId && redxLocationId)
+    );
 
     return json({
       success: true,
@@ -389,6 +496,43 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       message: isFullyConnected
         ? "REDX Delivery credentials saved and connected successfully."
         : "REDX configuration saved (some fields were left blank).",
+    });
+  }
+
+  // ==================== 3B. VERIFY & FETCH REDX STORES ====================
+  if (actionType === "fetchRedxStores") {
+    const redxEnvironment = String(formData.get("redxEnvironment") || "production").trim();
+    const redxAccessToken = String(formData.get("redxAccessToken") || "").trim();
+
+    const updateSet: Record<string, any> = {
+      shopDomain,
+      redxEnvironment: redxEnvironment === "sandbox" ? "sandbox" : "production",
+    };
+    if (redxAccessToken) {
+      updateSet.redxAccessToken = encryptSecret(redxAccessToken);
+    }
+
+    await CourierConfig.findOneAndUpdate(
+      { shopDomain },
+      { $set: updateSet },
+      { upsert: true, new: true, setDefaultsOnInsert: true }
+    );
+
+    const storesResult = await fetchRedxStores(shopDomain);
+    if (!storesResult.success) {
+      return json({
+        success: false,
+        actionType: "fetchRedxStores",
+        message: storesResult.error || "Failed to fetch RedX pickup stores.",
+        stores: [] as RedxStore[],
+      });
+    }
+
+    return json({
+      success: true,
+      actionType: "fetchRedxStores",
+      message: `Verified Access Token and retrieved ${storesResult.stores.length} store(s) from RedX.`,
+      stores: storesResult.stores,
     });
   }
 
@@ -535,6 +679,7 @@ export default function CourierSettingsPage() {
     courierConfig,
     routingConfig,
     aiConfig,
+    appUrl,
   } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const submit = useSubmit();
@@ -544,18 +689,34 @@ export default function CourierSettingsPage() {
   const searchStr = searchParams.toString() ? `?${searchParams.toString()}` : "";
 
   const [showBanner, setShowBanner] = useState(false);
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (actionData) {
-      setShowBanner(true);
+  const copyToClipboard = (text: string, key: string) => {
+    if (typeof navigator !== "undefined" && navigator.clipboard) {
+      navigator.clipboard.writeText(text);
+      setCopiedKey(key);
+      setTimeout(() => setCopiedKey(null), 2500);
     }
-  }, [actionData]);
+  };
+
+  const pathaoWebhookUrl = `${appUrl}/api/webhooks/pathao?shop=${encodeURIComponent(shopDomain)}`;
+  const steadfastWebhookUrl = `${appUrl}/api/webhooks/steadfast?shop=${encodeURIComponent(shopDomain)}`;
+  const redxWebhookUrl = `${appUrl}/api/webhooks/redx?shop=${encodeURIComponent(shopDomain)}`;
+  const webhookSecret = courierConfig.webhookSecret || "";
 
   // ==================== 1. PATHAO GATEWAY STATE ====================
+  const [pathaoEnvironment, setPathaoEnvironment] = useState(
+    courierConfig.pathaoEnvironment || "production"
+  );
   const [pathaoClientId, setPathaoClientId] = useState(courierConfig.pathaoClientId);
   const [pathaoSecret, setPathaoSecret] = useState(courierConfig.pathaoSecret);
+  const [pathaoUsername, setPathaoUsername] = useState(courierConfig.pathaoUsername || "");
+  const [pathaoPassword, setPathaoPassword] = useState(courierConfig.pathaoPassword || "");
   const [pathaoStoreId, setPathaoStoreId] = useState(courierConfig.pathaoStoreId);
+  const [pathaoStoreName, setPathaoStoreName] = useState(courierConfig.pathaoStoreName || "");
   const [showPathaoSecret, setShowPathaoSecret] = useState(false);
+  const [showPathaoPassword, setShowPathaoPassword] = useState(false);
+  const [pathaoStores, setPathaoStores] = useState<PathaoStore[]>([]);
 
   const isPathaoConnected = Boolean(
     pathaoClientId.trim() && pathaoSecret.trim() && pathaoStoreId.trim()
@@ -565,12 +726,31 @@ export default function CourierSettingsPage() {
     navigation.state === "submitting" &&
     navigation.formData?.get("actionType") === "savePathao";
 
+  const isFetchingPathaoStores =
+    navigation.state === "submitting" &&
+    navigation.formData?.get("actionType") === "fetchPathaoStores";
+
+  const handleFetchPathaoStores = () => {
+    const formData = new FormData();
+    formData.append("actionType", "fetchPathaoStores");
+    formData.append("pathaoEnvironment", pathaoEnvironment);
+    formData.append("pathaoClientId", pathaoClientId);
+    formData.append("pathaoSecret", pathaoSecret);
+    formData.append("pathaoUsername", pathaoUsername);
+    formData.append("pathaoPassword", pathaoPassword);
+    submit(formData, { method: "post" });
+  };
+
   const handleSavePathao = () => {
     const formData = new FormData();
     formData.append("actionType", "savePathao");
+    formData.append("pathaoEnvironment", pathaoEnvironment);
     formData.append("pathaoClientId", pathaoClientId);
     formData.append("pathaoSecret", pathaoSecret);
+    formData.append("pathaoUsername", pathaoUsername);
+    formData.append("pathaoPassword", pathaoPassword);
     formData.append("pathaoStoreId", pathaoStoreId);
+    formData.append("pathaoStoreName", pathaoStoreName);
     submit(formData, { method: "post" });
   };
 
@@ -596,24 +776,77 @@ export default function CourierSettingsPage() {
   };
 
   // ==================== 3. REDX GATEWAY STATE ====================
-  const [redxProfileId, setRedxProfileId] = useState(courierConfig.redxProfileId);
-  const [redxLocationId, setRedxLocationId] = useState(courierConfig.redxLocationId);
+  const [redxEnvironment, setRedxEnvironment] = useState(
+    courierConfig.redxEnvironment || "production"
+  );
+  const [redxAccessToken, setRedxAccessToken] = useState(courierConfig.redxAccessToken || "");
+  const [redxPickupStoreId, setRedxPickupStoreId] = useState(
+    courierConfig.redxPickupStoreId || courierConfig.redxLocationId || ""
+  );
+  const [redxPickupStoreName, setRedxPickupStoreName] = useState(
+    courierConfig.redxPickupStoreName || ""
+  );
+  const [redxProfileId, setRedxProfileId] = useState(courierConfig.redxProfileId || "");
+  const [redxLocationId, setRedxLocationId] = useState(
+    courierConfig.redxLocationId || courierConfig.redxPickupStoreId || ""
+  );
+  const [showRedxToken, setShowRedxToken] = useState(false);
+  const [redxStores, setRedxStores] = useState<RedxStore[]>([]);
 
   const isRedxConnected = Boolean(
-    redxProfileId.trim() && redxLocationId.trim()
+    (redxAccessToken.trim() && redxPickupStoreId.trim()) ||
+    (redxProfileId.trim() && redxLocationId.trim())
   );
 
   const isSubmittingRedx =
     navigation.state === "submitting" &&
     navigation.formData?.get("actionType") === "saveRedX";
 
+  const isFetchingRedxStores =
+    navigation.state === "submitting" &&
+    navigation.formData?.get("actionType") === "fetchRedxStores";
+
+  const handleFetchRedxStores = () => {
+    const formData = new FormData();
+    formData.append("actionType", "fetchRedxStores");
+    formData.append("redxEnvironment", redxEnvironment);
+    formData.append("redxAccessToken", redxAccessToken);
+    submit(formData, { method: "post" });
+  };
+
   const handleSaveRedX = () => {
     const formData = new FormData();
     formData.append("actionType", "saveRedX");
-    formData.append("redxProfileId", redxProfileId);
-    formData.append("redxLocationId", redxLocationId);
+    formData.append("redxEnvironment", redxEnvironment);
+    formData.append("redxAccessToken", redxAccessToken);
+    formData.append("redxPickupStoreId", redxPickupStoreId);
+    formData.append("redxPickupStoreName", redxPickupStoreName);
+    formData.append("redxProfileId", redxProfileId || redxPickupStoreName || redxPickupStoreId);
+    formData.append("redxLocationId", redxLocationId || redxPickupStoreId);
     submit(formData, { method: "post" });
   };
+
+  useEffect(() => {
+    if (actionData) {
+      setShowBanner(true);
+      if (actionData.actionType === "fetchPathaoStores" && (actionData as any).stores) {
+        const fetched = (actionData as any).stores as PathaoStore[];
+        setPathaoStores(fetched);
+        if (fetched.length > 0 && !pathaoStoreId) {
+          setPathaoStoreId(fetched[0].store_id);
+          setPathaoStoreName(fetched[0].store_name);
+        }
+      }
+      if (actionData.actionType === "fetchRedxStores" && (actionData as any).stores) {
+        const fetched = (actionData as any).stores as RedxStore[];
+        setRedxStores(fetched);
+        if (fetched.length > 0 && !redxPickupStoreId) {
+          setRedxPickupStoreId(fetched[0].id);
+          setRedxPickupStoreName(fetched[0].name);
+        }
+      }
+    }
+  }, [actionData]);
 
   // ==================== 4. AI ADDRESS NORMALIZER STATE ====================
   const [aiAddressCleaningEnabled, setAiAddressCleaningEnabled] = useState(
@@ -820,6 +1053,16 @@ export default function CourierSettingsPage() {
                   <Divider />
 
                   <BlockStack gap="300">
+                    <Select
+                      label="API Environment"
+                      options={[
+                        { label: "Production (Hermes Live)", value: "production" },
+                        { label: "Sandbox / Test API", value: "sandbox" },
+                      ]}
+                      value={pathaoEnvironment}
+                      onChange={(val) => setPathaoEnvironment(val)}
+                    />
+
                     <TextField
                       label="Client ID"
                       value={pathaoClientId}
@@ -843,7 +1086,70 @@ export default function CourierSettingsPage() {
                           {showPathaoSecret ? "Hide" : "Show"}
                         </Button>
                       }
+                      helpText="Stored encrypted with AES-256-GCM."
                     />
+
+                    <TextField
+                      label="Merchant Username (Email)"
+                      value={pathaoUsername}
+                      onChange={(val) => setPathaoUsername(val)}
+                      placeholder="merchant@example.com"
+                      autoComplete="off"
+                      helpText="Merchant Portal login email (used for OAuth token authorization)."
+                    />
+
+                    <TextField
+                      label="Merchant Password"
+                      type={showPathaoPassword ? "text" : "password"}
+                      value={pathaoPassword}
+                      onChange={(val) => setPathaoPassword(val)}
+                      placeholder="••••••••••••••••"
+                      autoComplete="off"
+                      connectedRight={
+                        <Button
+                          variant="plain"
+                          onClick={() => setShowPathaoPassword((prev) => !prev)}
+                        >
+                          {showPathaoPassword ? "Hide" : "Show"}
+                        </Button>
+                      }
+                      helpText="Stored encrypted with AES-256-GCM. Used to renew OAuth tokens."
+                    />
+
+                    <InlineStack align="start">
+                      <Button
+                        size="medium"
+                        loading={isFetchingPathaoStores}
+                        onClick={handleFetchPathaoStores}
+                        disabled={!pathaoClientId || !pathaoSecret || !pathaoUsername || !pathaoPassword}
+                      >
+                        Verify &amp; Fetch Stores
+                      </Button>
+                    </InlineStack>
+
+                    {pathaoStores.length > 0 && (
+                      <Select
+                        label="Pickup Store"
+                        options={[
+                          { label: "-- Select a Pickup Store --", value: "" },
+                          ...pathaoStores.map((s) => ({
+                            label: `${s.store_name} (${s.store_address || "ID: " + s.store_id})`,
+                            value: s.store_id,
+                          })),
+                        ]}
+                        value={pathaoStoreId}
+                        onChange={(val) => {
+                          setPathaoStoreId(val);
+                          const matched = pathaoStores.find((s) => s.store_id === val);
+                          if (matched) setPathaoStoreName(matched.store_name);
+                        }}
+                        helpText={
+                          pathaoStoreName
+                            ? `Selected: ${pathaoStoreName} (ID: ${pathaoStoreId})`
+                            : "Choose from verified stores"
+                        }
+                      />
+                    )}
 
                     <TextField
                       label="Store ID"
@@ -851,8 +1157,57 @@ export default function CourierSettingsPage() {
                       onChange={(val) => setPathaoStoreId(val)}
                       placeholder="e.g. 10248"
                       autoComplete="off"
-                      helpText="Find this in Pathao Merchant Portal under Store Settings."
+                      helpText={
+                        pathaoStoreName
+                          ? `Connected store: ${pathaoStoreName}`
+                          : "Manual fallback or click 'Verify & Fetch Stores' above."
+                      }
                     />
+
+                    <Divider />
+
+                    <BlockStack gap="200">
+                      <InlineStack align="space-between" blockAlign="center">
+                        <Text as="h4" variant="headingSm">
+                          Real-Time Webhook (Two-Way Status Sync)
+                        </Text>
+                        <Badge tone="info">Live Webhook</Badge>
+                      </InlineStack>
+                      <Text as="p" variant="bodyXs" tone="subdued">
+                        Paste in Pathao Developer API &rarr; Webhook Integration:
+                      </Text>
+                      <TextField
+                        label="Callback URL"
+                        value={pathaoWebhookUrl}
+                        readOnly
+                        autoComplete="off"
+                        connectedRight={
+                          <Button
+                            onClick={() =>
+                              copyToClipboard(pathaoWebhookUrl, "pathao_url")
+                            }
+                          >
+                            {copiedKey === "pathao_url" ? "Copied!" : "Copy URL"}
+                          </Button>
+                        }
+                      />
+                      <TextField
+                        label="Webhook Secret"
+                        value={webhookSecret}
+                        readOnly
+                        autoComplete="off"
+                        connectedRight={
+                          <Button
+                            onClick={() =>
+                              copyToClipboard(webhookSecret, "pathao_secret")
+                            }
+                          >
+                            {copiedKey === "pathao_secret" ? "Copied!" : "Copy Secret"}
+                          </Button>
+                        }
+                        helpText="Required for automated verification handshake in Pathao developer portal."
+                      />
+                    </BlockStack>
                   </BlockStack>
 
                   <InlineStack align="end">
@@ -923,11 +1278,54 @@ export default function CourierSettingsPage() {
                           {showSteadfastSecret ? "Hide" : "Show"}
                         </Button>
                       }
-                      helpText="Found under Steadfast Merchant Dashboard -> API Integration."
+                      helpText="Found under Steadfast Merchant Dashboard -> API Integration. Stored encrypted."
                     />
                   </BlockStack>
 
-                  <Box minHeight="72px" />
+                  <Divider />
+
+                  <BlockStack gap="200">
+                    <InlineStack align="space-between" blockAlign="center">
+                      <Text as="h4" variant="headingSm">
+                        Real-Time Webhook (Two-Way Status Sync)
+                      </Text>
+                      <Badge tone="info">Live Webhook</Badge>
+                    </InlineStack>
+                    <Text as="p" variant="bodyXs" tone="subdued">
+                      Paste in Steadfast Merchant Portal &rarr; API &rarr; Webhook:
+                    </Text>
+                    <TextField
+                      label="Callback URL"
+                      value={steadfastWebhookUrl}
+                      readOnly
+                      autoComplete="off"
+                      connectedRight={
+                        <Button
+                          onClick={() =>
+                            copyToClipboard(steadfastWebhookUrl, "steadfast_url")
+                          }
+                        >
+                          {copiedKey === "steadfast_url" ? "Copied!" : "Copy URL"}
+                        </Button>
+                      }
+                    />
+                    <TextField
+                      label="Bearer Token / Secret"
+                      value={webhookSecret}
+                      readOnly
+                      autoComplete="off"
+                      connectedRight={
+                        <Button
+                          onClick={() =>
+                            copyToClipboard(webhookSecret, "steadfast_secret")
+                          }
+                        >
+                          {copiedKey === "steadfast_secret" ? "Copied!" : "Copy Token"}
+                        </Button>
+                      }
+                      helpText="Paste in Steadfast Webhook Bearer Token / Secret field."
+                    />
+                  </BlockStack>
 
                   <InlineStack align="end">
                     <Button
@@ -974,25 +1372,134 @@ export default function CourierSettingsPage() {
                   <Divider />
 
                   <BlockStack gap="300">
-                    <TextField
-                      label="Profile ID"
-                      value={redxProfileId}
-                      onChange={(val) => setRedxProfileId(val)}
-                      placeholder="e.g. redx_prof_..."
-                      autoComplete="off"
+                    <Select
+                      label="API Environment"
+                      options={[
+                        { label: "Production (OpenAPI Live)", value: "production" },
+                        { label: "Sandbox / Test API", value: "sandbox" },
+                      ]}
+                      value={redxEnvironment}
+                      onChange={(val) => setRedxEnvironment(val)}
                     />
 
                     <TextField
-                      label="Location ID"
-                      value={redxLocationId}
-                      onChange={(val) => setRedxLocationId(val)}
-                      placeholder="e.g. loc_dhaka_01"
+                      label="API Access Token (JWT)"
+                      type={showRedxToken ? "text" : "password"}
+                      value={redxAccessToken}
+                      onChange={(val) => setRedxAccessToken(val)}
+                      placeholder="••••••••••••••••"
                       autoComplete="off"
-                      helpText="Assigned by REDX enterprise account managers for parcel pickup."
+                      connectedRight={
+                        <Button
+                          variant="plain"
+                          onClick={() => setShowRedxToken((prev) => !prev)}
+                        >
+                          {showRedxToken ? "Hide" : "Show"}
+                        </Button>
+                      }
+                      helpText="Your REDX Open API token (stored encrypted with AES-256-GCM)."
                     />
+
+                    <InlineStack align="start">
+                      <Button
+                        size="medium"
+                        loading={isFetchingRedxStores}
+                        onClick={handleFetchRedxStores}
+                        disabled={!redxAccessToken}
+                      >
+                        Verify &amp; Fetch Stores
+                      </Button>
+                    </InlineStack>
+
+                    {redxStores.length > 0 && (
+                      <Select
+                        label="Pickup Store"
+                        options={[
+                          { label: "-- Select a Pickup Store --", value: "" },
+                          ...redxStores.map((s) => ({
+                            label: `${s.name} (${s.address || "ID: " + s.id})`,
+                            value: s.id,
+                          })),
+                        ]}
+                        value={redxPickupStoreId}
+                        onChange={(val) => {
+                          setRedxPickupStoreId(val);
+                          setRedxLocationId(val);
+                          const matched = redxStores.find((s) => s.id === val);
+                          if (matched) {
+                            setRedxPickupStoreName(matched.name);
+                            setRedxProfileId(matched.name);
+                          }
+                        }}
+                        helpText={
+                          redxPickupStoreName
+                            ? `Selected: ${redxPickupStoreName} (ID: ${redxPickupStoreId})`
+                            : "Choose from registered RedX stores"
+                        }
+                      />
+                    )}
+
+                    <TextField
+                      label="Pickup Store ID"
+                      value={redxPickupStoreId}
+                      onChange={(val) => {
+                        setRedxPickupStoreId(val);
+                        setRedxLocationId(val);
+                      }}
+                      placeholder="e.g. 12948"
+                      autoComplete="off"
+                      helpText={
+                        redxPickupStoreName
+                          ? `Connected store: ${redxPickupStoreName}`
+                          : "Manual ID fallback or click 'Verify & Fetch Stores' above."
+                      }
+                    />
+
+                    <Divider />
+
+                    <BlockStack gap="200">
+                      <InlineStack align="space-between" blockAlign="center">
+                        <Text as="h4" variant="headingSm">
+                          Real-Time Webhook (Two-Way Status Sync)
+                        </Text>
+                        <Badge tone="info">Live Webhook</Badge>
+                      </InlineStack>
+                      <Text as="p" variant="bodyXs" tone="subdued">
+                        Paste in RedX Partner Portal &rarr; Settings &rarr; Webhook:
+                      </Text>
+                      <TextField
+                        label="Callback URL"
+                        value={redxWebhookUrl}
+                        readOnly
+                        autoComplete="off"
+                        connectedRight={
+                          <Button
+                            onClick={() =>
+                              copyToClipboard(redxWebhookUrl, "redx_url")
+                            }
+                          >
+                            {copiedKey === "redx_url" ? "Copied!" : "Copy URL"}
+                          </Button>
+                        }
+                      />
+                      <TextField
+                        label="Webhook Secret"
+                        value={webhookSecret}
+                        readOnly
+                        autoComplete="off"
+                        connectedRight={
+                          <Button
+                            onClick={() =>
+                              copyToClipboard(webhookSecret, "redx_secret")
+                            }
+                          >
+                            {copiedKey === "redx_secret" ? "Copied!" : "Copy Secret"}
+                          </Button>
+                        }
+                        helpText="Paste in RedX Webhook Secret field."
+                      />
+                    </BlockStack>
                   </BlockStack>
-
-                  <Box minHeight="72px" />
 
                   <InlineStack align="end">
                     <Button

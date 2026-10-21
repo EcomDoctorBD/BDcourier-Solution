@@ -33,18 +33,30 @@ import {
   Popover,
   ActionList,
   Spinner,
+  Link,
 } from "@shopify/polaris";
 
-import { authenticate } from "../shopify.server";
+import { authenticate, unauthenticated } from "../shopify.server";
+import { getCourierTrackingUrl } from "../services/shopify-sync.server";
 import CourierConfig, {
   connectDB,
   getPlanLimit,
   getBulkBatchLimit,
   GlobalFraudNetwork,
   ShipmentBooking,
+  decryptCourierConfig,
 } from "../db.server";
 import { cleanAndCacheAddress } from "../clean-address.server";
 import { syncOrderToGoogleSheet } from "../google-sheets.server";
+import {
+  getValidPathaoToken,
+  getPathaoBaseUrl,
+  getRedxBaseUrl,
+} from "../services/courier-auth.server";
+import {
+  resolvePathaoLocation,
+  resolveRedxLocation,
+} from "../services/location-resolver.server";
 
 /**
  * 1. HIERARCHICAL BANGLADESH LOCATION DATA (8 Divisions -> 64 Districts)
@@ -189,6 +201,41 @@ export interface CourierReconciliationInfo {
   autoSyncedPaidFulfilled: boolean;
 }
 
+/**
+ * Helper to calculate the true Cash on Delivery (COD) amount for an order.
+ * Prevents double-charging customers who already paid online (bKash/Nagad/Cards/SSLCommerz).
+ */
+export function calculateCodAmount(order: {
+  displayFinancialStatus?: string;
+  totalOutstandingSet?: { shopMoney?: { amount?: string | number } };
+  totalOutstanding?: string | number;
+  totalPrice?: string | number;
+  [key: string]: any;
+}): number {
+  const financialStatus = String(order.displayFinancialStatus || "").toUpperCase().trim();
+  if (financialStatus === "PAID" || financialStatus === "REFUNDED") {
+    return 0;
+  }
+
+  const outstandingRaw =
+    order.totalOutstandingSet?.shopMoney?.amount ??
+    order.totalOutstanding;
+
+  if (
+    outstandingRaw !== undefined &&
+    outstandingRaw !== null &&
+    String(outstandingRaw).trim() !== ""
+  ) {
+    const parsedOutstanding = Number(outstandingRaw);
+    if (!Number.isNaN(parsedOutstanding)) {
+      return Math.max(0, Math.round(parsedOutstanding));
+    }
+  }
+
+  const priceRaw = Number(order.totalPrice || 0);
+  return Math.max(0, Math.round(Number.isNaN(priceRaw) ? 0 : priceRaw));
+}
+
 interface RawShopifyOrder {
   id: string;
   name: string;
@@ -201,6 +248,9 @@ interface RawShopifyOrder {
   totalPrice: string;
   currencyCode: string;
   fulfillmentStatus: string;
+  displayFinancialStatus: string;
+  totalOutstanding: string;
+  codAmount: number;
   warehouseNote: string;
   lineItems: OrderLineItem[];
 }
@@ -219,6 +269,7 @@ export interface DispatchedSlipRecord {
   orderId: string;
   orderName: string;
   trackingNumber: string;
+  trackingUrl?: string;
   courierName: string;
   customerName: string;
   customerPhone: string;
@@ -295,9 +346,14 @@ async function syncOrderPaidAndFulfilledInShopify(
   admin: any,
   orderId: string,
   trackingNumber: string,
-  courierName: string
+  courierName: string,
+  trackingUrl?: string
 ): Promise<boolean> {
   try {
+    const formattedOrderId = orderId.startsWith("gid://shopify/Order/")
+      ? orderId
+      : `gid://shopify/Order/${orderId.replace(/\D/g, "")}`;
+
     // 1. Mark Shopify Order as Paid
     const MARK_PAID_MUTATION = `#graphql
       mutation OrderMarkAsPaid($input: OrderMarkAsPaidInput!) {
@@ -314,7 +370,7 @@ async function syncOrderPaidAndFulfilledInShopify(
       }
     `;
     await admin.graphql(MARK_PAID_MUTATION, {
-      variables: { input: { id: orderId } },
+      variables: { input: { id: formattedOrderId } },
     });
 
     // 2. Fetch open FulfillmentOrder IDs and mark Fulfilled with tracking info
@@ -332,7 +388,7 @@ async function syncOrderPaidAndFulfilledInShopify(
         }
       }
     `;
-    const foRes = await admin.graphql(FO_QUERY, { variables: { id: orderId } });
+    const foRes = await admin.graphql(FO_QUERY, { variables: { id: formattedOrderId } });
     const foJson: any = await foRes.json();
     const foEdges = foJson?.data?.order?.fulfillmentOrders?.edges || [];
     const openFo = foEdges.find(
@@ -354,20 +410,67 @@ async function syncOrderPaidAndFulfilledInShopify(
           }
         }
       `;
+      const trackingInfo: { company: string; number: string; url?: string } = {
+        company: courierName,
+        number: trackingNumber,
+      };
+      if (trackingUrl && trackingUrl.trim()) {
+        trackingInfo.url = trackingUrl.trim();
+      }
+
       await admin.graphql(FULFILL_MUTATION, {
         variables: {
           fulfillment: {
             notifyCustomer: false,
-            trackingInfo: {
-              company: courierName,
-              number: trackingNumber,
-            },
+            trackingInfo,
             lineItemsByFulfillmentOrder: [
               { fulfillmentOrderId: openFo.node.id },
             ],
           },
         },
       });
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Non-blocking helper to add tags to a Shopify Order via Admin GraphQL API
+ */
+async function addShopifyOrderTags(
+  admin: any,
+  orderId: string,
+  tags: string[]
+): Promise<boolean> {
+  try {
+    if (!admin || !orderId || !Array.isArray(tags) || tags.length === 0) {
+      return false;
+    }
+    const orderGid = orderId.startsWith("gid://shopify/Order/")
+      ? orderId
+      : `gid://shopify/Order/${orderId.replace(/\D/g, "")}`;
+
+    const TAGS_ADD_MUTATION = `#graphql
+      mutation AddOrderTags($id: ID!, $tags: [String!]!) {
+        tagsAdd(id: $id, tags: $tags) {
+          node {
+            id
+          }
+          userErrors {
+            field
+            message
+          }
+        }
+      }
+    `;
+    const res = await admin.graphql(TAGS_ADD_MUTATION, {
+      variables: { id: orderGid, tags },
+    });
+    const data: any = await res.json();
+    if (data?.errors && data.errors.length > 0) {
+      return false;
     }
     return true;
   } catch {
@@ -397,12 +500,15 @@ async function evaluateOrderStatusAndCashDiscrepancy(params: {
     cachedPathaoTokenRef,
   } = params;
 
-  const expectedAmount = Number(order.totalPrice || 0);
+  const expectedAmount =
+    typeof order.codAmount === "number"
+      ? order.codAmount
+      : calculateCodAmount(order);
 
   if (!isProOrEnterprise) {
     return {
       courierStatus: "locked_tier",
-      courierCashCollected: order.totalPrice,
+      courierCashCollected: String(expectedAmount),
       hasCashDiscrepancy: false,
       discrepancyDelta: "0.00",
       autoSyncedPaidFulfilled: false,
@@ -466,36 +572,14 @@ async function evaluateOrderStatusAndCashDiscrepancy(params: {
       try {
         if (!cachedPathaoTokenRef.token && !cachedPathaoTokenRef.attempted) {
           cachedPathaoTokenRef.attempted = true;
-          const tRes = await fetch(
-            "https://courier-api-sandbox.pathao.com/aladdin/api/v1/issue-token",
-            {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                Accept: "application/json",
-              },
-              body: JSON.stringify({
-                client_id: storeConfig.pathaoClientId,
-                client_secret: storeConfig.pathaoSecret,
-                username: process.env.PATHAO_USERNAME || "test@pathao.com",
-                password: process.env.PATHAO_PASSWORD || "lovePathao",
-                grant_type: "password",
-              }),
-              signal: AbortSignal.timeout(3000),
-            }
-          );
-          if (tRes.ok) {
-            const tJson: any = await tRes.json();
-            cachedPathaoTokenRef.token =
-              tJson?.access_token || tJson?.data?.access_token || null;
-          }
+          const tokenRes = await getValidPathaoToken(storeConfig.shopDomain || "");
+          cachedPathaoTokenRef.token = tokenRes.token;
         }
 
         if (cachedPathaoTokenRef.token) {
+          const baseUrl = getPathaoBaseUrl(storeConfig?.pathaoEnvironment);
           const ptRes = await fetch(
-            `https://courier-api-sandbox.pathao.com/aladdin/api/v1/orders/${encodeURIComponent(
-              cid
-            )}`,
+            `${baseUrl}/aladdin/api/v1/orders/${encodeURIComponent(cid)}`,
             {
               method: "GET",
               headers: {
@@ -528,18 +612,60 @@ async function evaluateOrderStatusAndCashDiscrepancy(params: {
       } catch {
         // Fallback to stored/sandbox status
       }
+    } else if (
+      courierKey === "redx" &&
+      storeConfig?.redxAccessToken
+    ) {
+      try {
+        const baseUrl = getRedxBaseUrl(storeConfig?.redxEnvironment);
+        const rdxRes = await fetch(
+          `${baseUrl}/v1.0.0-beta/parcels/info/${encodeURIComponent(cid)}`,
+          {
+            method: "GET",
+            headers: {
+              Accept: "application/json",
+              "API-ACCESS-TOKEN": `Bearer ${storeConfig.redxAccessToken}`,
+            },
+            signal: AbortSignal.timeout(3000),
+          }
+        );
+        if (rdxRes.ok) {
+          const rdxData: any = await rdxRes.json();
+          const parcelInfo = rdxData?.parcel || rdxData?.data || rdxData;
+          liveStatus = String(
+            parcelInfo?.status ||
+              parcelInfo?.delivery_status ||
+              liveStatus ||
+              "delivered"
+          ).toLowerCase();
+          const apiCollected = Number(
+            parcelInfo?.cash_collection_amount ??
+              parcelInfo?.collected_amount ??
+              parcelInfo?.cod_amount ??
+              NaN
+          );
+          if (!Number.isNaN(apiCollected)) {
+            collectedAmount = apiCollected;
+          }
+        }
+      } catch {
+        // Fallback to stored/sandbox status
+      }
     }
   }
 
   // Deterministic sandbox fallback so Pro/Enterprise merchants can immediately see
-  // both a Matched Delivered order (#1001) and a Cash Discrepancy Disbursed order (#1002)
+  // both a Matched Delivered order (#1001) and a Cash Discrepancy Disbursed order (#1003)
   if (!liveStatus) {
     if (order.name === "#1001") {
       liveStatus = "delivered";
       collectedAmount = expectedAmount;
     } else if (order.name === "#1002") {
+      liveStatus = "delivered";
+      collectedAmount = expectedAmount; // prepaid: 0
+    } else if (order.name === "#1003") {
       liveStatus = "disbursed";
-      collectedAmount = Math.max(0, expectedAmount - 130); // Triggers Cash Mismatch badge
+      collectedAmount = Math.max(0, expectedAmount - 100); // Triggers Cash Mismatch badge
     } else {
       liveStatus = "in_transit";
       collectedAmount = expectedAmount;
@@ -561,13 +687,35 @@ async function evaluateOrderStatusAndCashDiscrepancy(params: {
 
   // If courier status indicates 'delivered' or 'disbursed', mutate Shopify order to Paid & Fulfilled
   if (isDeliveredOrDisbursed && !autoSyncedPaidFulfilled) {
+    const courierLower = (bookingDoc?.courierKey || bookingDoc?.courierName || "").toLowerCase();
+    const partnerName = courierLower.includes("pathao")
+      ? "Pathao"
+      : courierLower.includes("steadfast")
+      ? "Steadfast"
+      : courierLower.includes("redx")
+      ? "RedX"
+      : bookingDoc?.courierName || "Courier";
+
+    const trkNumber = bookingDoc?.trackingNumber || `TRK-${order.name.replace("#", "")}`;
+    const trkUrl =
+      bookingDoc?.trackingUrl ||
+      getCourierTrackingUrl(
+        bookingDoc?.courierKey || bookingDoc?.courierName,
+        trkNumber,
+        bookingDoc?.customerPhone || order.customerPhone
+      );
+
     const synced = await syncOrderPaidAndFulfilledInShopify(
       admin,
       order.id,
-      bookingDoc?.trackingNumber || `TRK-${order.name.replace("#", "")}`,
-      bookingDoc?.courierName || "BD Courier Partner"
+      trkNumber,
+      bookingDoc?.courierName || "BD Courier Partner",
+      trkUrl
     );
     autoSyncedPaidFulfilled = synced || true;
+
+    // Non-blocking Shopify order delivery tag
+    addShopifyOrderTags(admin, order.id, [`${partnerName} Delivered`]).catch(() => {});
 
     if (bookingDoc?._id) {
       await ShipmentBooking.updateOne(
@@ -577,6 +725,7 @@ async function evaluateOrderStatusAndCashDiscrepancy(params: {
             courierStatus: normalizedStatus,
             courierCashCollected: collectedAmount.toFixed(2),
             shopifySyncedPaidFulfilled: true,
+            trackingUrl: trkUrl,
           },
         }
       );
@@ -843,29 +992,8 @@ async function resolveCustomerFraudProfile(
     if (!cachedPathaoTokenRef.attempted) {
       cachedPathaoTokenRef.attempted = true;
       try {
-        const tokenRes = await fetch(
-          "https://courier-api-sandbox.pathao.com/aladdin/api/v1/issue-token",
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Accept: "application/json",
-            },
-            body: JSON.stringify({
-              client_id: clientId,
-              client_secret: clientSecret,
-              username: process.env.PATHAO_USERNAME || "test@pathao.com",
-              password: process.env.PATHAO_PASSWORD || "lovePathao",
-              grant_type: "password",
-            }),
-            signal: AbortSignal.timeout(3500),
-          }
-        );
-        if (tokenRes.ok) {
-          const tokenJson: any = await tokenRes.json();
-          cachedPathaoTokenRef.token =
-            tokenJson?.access_token || tokenJson?.data?.access_token || null;
-        }
+        const tokenRes = await getValidPathaoToken(storeConfig.shopDomain || "");
+        cachedPathaoTokenRef.token = tokenRes.token;
       } catch {
         cachedPathaoTokenRef.token = null;
       }
@@ -873,9 +1001,8 @@ async function resolveCustomerFraudProfile(
 
     if (!cachedPathaoTokenRef.token) return null;
 
-    const historyUrl = new URL(
-      "https://courier-api-sandbox.pathao.com/aladdin/api/v1/user-history"
-    );
+    const baseUrl = getPathaoBaseUrl(storeConfig?.pathaoEnvironment);
+    const historyUrl = new URL(`${baseUrl}/aladdin/api/v1/user-history`);
     historyUrl.searchParams.set("phone", cleanPhone);
 
     const response = await fetch(historyUrl.toString(), {
@@ -989,6 +1116,11 @@ async function dispatchSingleOrderToCourier(params: {
   warehouseNote: string;
   lineItems: OrderLineItem[];
   sharedPathaoTokenRef: { token: string | null; attempted: boolean };
+  manualCityId?: number | null;
+  manualZoneId?: number | null;
+  manualAreaId?: number | null;
+  manualAreaName?: string | null;
+  admin?: any;
 }): Promise<{
   success: boolean;
   orderId: string;
@@ -1013,6 +1145,10 @@ async function dispatchSingleOrderToCourier(params: {
     warehouseNote,
     lineItems,
     sharedPathaoTokenRef,
+    manualCityId,
+    manualZoneId,
+    manualAreaId,
+    manualAreaName,
   } = params;
 
   // --------------------------------------------------------------------------
@@ -1074,26 +1210,8 @@ async function dispatchSingleOrderToCourier(params: {
     try {
       if (!sharedPathaoTokenRef.attempted) {
         sharedPathaoTokenRef.attempted = true;
-        const tokenResponse = await fetch(
-          "https://courier-api-sandbox.pathao.com/aladdin/api/v1/issue-token",
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Accept: "application/json",
-            },
-            body: JSON.stringify({
-              client_id: clientId,
-              client_secret: clientSecret,
-              username: process.env.PATHAO_USERNAME || "test@pathao.com",
-              password: process.env.PATHAO_PASSWORD || "lovePathao",
-              grant_type: "password",
-            }),
-          }
-        );
-        const tokenData: any = await tokenResponse.json();
-        sharedPathaoTokenRef.token =
-          tokenData?.access_token || tokenData?.data?.access_token || null;
+        const tokenRes = await getValidPathaoToken(shopDomain);
+        sharedPathaoTokenRef.token = tokenRes.token;
       }
 
       if (!sharedPathaoTokenRef.token) {
@@ -1103,12 +1221,36 @@ async function dispatchSingleOrderToCourier(params: {
           orderName,
           courierName: courierDisplayName,
           trackingNumber: "",
-          message: `Pathao Auth Token failed for ${orderName}.`,
+          message: `Pathao Auth Token failed for ${orderName}. Please check your Merchant credentials in Courier Settings.`,
         };
       }
 
+      // Resolve Pathao City & Zone IDs (respecting manual override if provided)
+      let recipientCity: number;
+      let recipientZone: number;
+
+      if (
+        manualCityId &&
+        manualZoneId &&
+        Number(manualCityId) > 0 &&
+        Number(manualZoneId) > 0
+      ) {
+        recipientCity = Number(manualCityId);
+        recipientZone = Number(manualZoneId);
+      } else {
+        const resolvedPathao = await resolvePathaoLocation(
+          shopDomain,
+          resolvedDistrict,
+          addressResolution.thana,
+          cleanAddress
+        );
+        recipientCity = resolvedPathao.recipient_city || 1;
+        recipientZone = resolvedPathao.recipient_zone || 1;
+      }
+
+      const baseUrl = getPathaoBaseUrl(storeConfig?.pathaoEnvironment);
       const orderResponse = await fetch(
-        "https://courier-api-sandbox.pathao.com/aladdin/api/v1/orders",
+        `${baseUrl}/aladdin/api/v1/orders`,
         {
           method: "POST",
           headers: {
@@ -1122,6 +1264,8 @@ async function dispatchSingleOrderToCourier(params: {
             recipient_name: customerName,
             recipient_phone: cleanPhone,
             recipient_address: cleanAddress,
+            recipient_city: recipientCity,
+            recipient_zone: recipientZone,
             delivery_type: 48,
             item_type: 2,
             special_instruction: warehouseNote || `Shopify Order ${orderName}`,
@@ -1168,36 +1312,206 @@ async function dispatchSingleOrderToCourier(params: {
     }
   } else if (activeCourier === "steadfast") {
     courierDisplayName = "Steadfast Courier";
-    if (
-      !storeConfig?.steadfastApiKey?.trim() ||
-      !storeConfig?.steadfastSecretKey?.trim()
-    ) {
+    const apiKey = storeConfig?.steadfastApiKey?.trim();
+    const secretKey = storeConfig?.steadfastSecretKey?.trim();
+
+    if (!apiKey || !secretKey) {
       return {
         success: false,
         orderId,
         orderName,
         courierName: courierDisplayName,
         trackingNumber: "",
-        message: `Steadfast credentials missing for ${orderName}.`,
+        message: `Steadfast credentials missing for ${orderName}. Please configure API Key and Secret Key in Courier Settings.`,
       };
     }
-    finalTracking = `SF-${Math.floor(100000 + Math.random() * 900000)}`;
+
+    try {
+      const sanitizedInvoice = String(orderName || orderId).replace(/[^a-zA-Z0-9_-]/g, "");
+      const payload = {
+        invoice: sanitizedInvoice,
+        recipient_name: customerName,
+        recipient_phone: cleanPhone,
+        recipient_address: cleanAddress,
+        cod_amount: amountToCollect,
+        note: warehouseNote || `Shopify Order ${orderName}`,
+      };
+
+      let sfResponse = await fetch("https://packzy.com/api/v1/create_order", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+          "Api-Key": apiKey,
+          "Secret-Key": secretKey,
+        },
+        body: JSON.stringify(payload),
+        signal: AbortSignal.timeout(8000),
+      });
+
+      // Secondary fallback to steadfast portal if packzy encounters 5xx server issues
+      if (!sfResponse.ok && sfResponse.status >= 500) {
+        try {
+          sfResponse = await fetch(
+            "https://portal.steadfast.com.bd/api/v1/create_order",
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Accept: "application/json",
+                "Api-Key": apiKey,
+                "Secret-Key": secretKey,
+              },
+              body: JSON.stringify(payload),
+              signal: AbortSignal.timeout(8000),
+            }
+          );
+        } catch {
+          // retain initial packzy response
+        }
+      }
+
+      const sfData: any = await sfResponse.json();
+      const trackingCode =
+        sfData?.consignment?.tracking_code ||
+        sfData?.consignment?.consignment_id ||
+        sfData?.tracking_code;
+
+      if (!sfResponse.ok || !trackingCode || (sfData.status && sfData.status !== 200)) {
+        const validationErrors = sfData?.errors
+          ? Object.values(sfData.errors).flat().join(" | ")
+          : "";
+        return {
+          success: false,
+          orderId,
+          orderName,
+          courierName: courierDisplayName,
+          trackingNumber: "",
+          message: `Steadfast Order Creation Failed (${orderName}): ${
+            validationErrors || sfData?.message || `HTTP ${sfResponse.status}`
+          }`,
+        };
+      }
+
+      finalTracking = String(trackingCode);
+    } catch (err: any) {
+      return {
+        success: false,
+        orderId,
+        orderName,
+        courierName: courierDisplayName,
+        trackingNumber: "",
+        message: `Steadfast network error on ${orderName}: ${
+          err?.message || "Unknown"
+        }`,
+      };
+    }
   } else if (activeCourier === "redx") {
     courierDisplayName = "RedX Delivery";
-    if (
-      !storeConfig?.redxProfileId?.trim() ||
-      !storeConfig?.redxLocationId?.trim()
-    ) {
+    const token = storeConfig?.redxAccessToken?.trim();
+
+    if (!token) {
       return {
         success: false,
         orderId,
         orderName,
         courierName: courierDisplayName,
         trackingNumber: "",
-        message: `RedX credentials missing for ${orderName}.`,
+        message: `RedX credentials missing for ${orderName}. Please configure API Access Token in Courier Settings.`,
       };
     }
-    finalTracking = `RDX-${Math.floor(100000 + Math.random() * 900000)}`;
+
+    try {
+      const baseUrl = getRedxBaseUrl(storeConfig?.redxEnvironment);
+      const rawStoreId = storeConfig?.redxPickupStoreId || storeConfig?.redxLocationId;
+      const pickupStoreId = rawStoreId ? Number(rawStoreId) : undefined;
+
+      // Resolve RedX Delivery Area ID & Name (respecting manual override if provided)
+      let deliveryAreaId: number;
+      let deliveryArea: string;
+
+      if (
+        manualAreaId &&
+        manualAreaName &&
+        Number(manualAreaId) > 0 &&
+        String(manualAreaName).trim()
+      ) {
+        deliveryAreaId = Number(manualAreaId);
+        deliveryArea = String(manualAreaName).trim();
+      } else {
+        const resolvedRedx = await resolveRedxLocation(
+          shopDomain,
+          resolvedDistrict,
+          addressResolution.thana,
+          cleanAddress
+        );
+        deliveryAreaId = resolvedRedx.delivery_area_id || 1;
+        deliveryArea = resolvedRedx.delivery_area || resolvedDistrict || "Dhaka";
+      }
+
+      const payload: Record<string, any> = {
+        customer_name: customerName,
+        customer_phone: cleanPhone,
+        delivery_area: deliveryArea,
+        delivery_area_id: deliveryAreaId,
+        customer_address: cleanAddress,
+        merchant_invoice_id: String(orderName || orderId).replace("#", ""),
+        cash_collection_amount: String(amountToCollect),
+        parcel_weight: 500,
+        instruction: warehouseNote || `Shopify Order ${orderName}`,
+        value: amountToCollect || 100,
+      };
+
+      if (pickupStoreId && !Number.isNaN(pickupStoreId)) {
+        payload.pickup_store_id = pickupStoreId;
+      }
+
+      const rdxResponse = await fetch(`${baseUrl}/v1.0.0-beta/parcels`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+          "API-ACCESS-TOKEN": `Bearer ${token}`,
+        },
+        body: JSON.stringify(payload),
+        signal: AbortSignal.timeout(8000),
+      });
+
+      const rdxData: any = await rdxResponse.json();
+      const trackingId =
+        rdxData?.tracking_id ||
+        rdxData?.data?.tracking_id ||
+        rdxData?.parcel?.tracking_id;
+
+      if (!rdxResponse.ok || !trackingId) {
+        const errorDetail =
+          rdxData?.message ||
+          rdxData?.error ||
+          (rdxData?.errors ? Object.values(rdxData.errors).flat().join(" | ") : "") ||
+          `HTTP ${rdxResponse.status}`;
+        return {
+          success: false,
+          orderId,
+          orderName,
+          courierName: courierDisplayName,
+          trackingNumber: "",
+          message: `RedX Order Creation Failed (${orderName}): ${errorDetail}`,
+        };
+      }
+
+      finalTracking = String(trackingId);
+    } catch (err: any) {
+      return {
+        success: false,
+        orderId,
+        orderName,
+        courierName: courierDisplayName,
+        trackingNumber: "",
+        message: `RedX network error on ${orderName}: ${
+          err?.message || "Unknown"
+        }`,
+      };
+    }
   } else {
     return {
       success: false,
@@ -1210,6 +1524,16 @@ async function dispatchSingleOrderToCourier(params: {
   }
 
   const bookedAtIso = new Date().toISOString();
+  const trackingUrl = getCourierTrackingUrl(activeCourier, finalTracking, cleanPhone);
+
+  const partnerName =
+    activeCourier === "pathao"
+      ? "Pathao"
+      : activeCourier === "steadfast"
+      ? "Steadfast"
+      : activeCourier === "redx"
+      ? "RedX"
+      : courierDisplayName;
 
   await ShipmentBooking.findOneAndUpdate(
     { shopDomain, orderId },
@@ -1221,6 +1545,7 @@ async function dispatchSingleOrderToCourier(params: {
         courierKey: activeCourier,
         courierName: courierDisplayName,
         trackingNumber: finalTracking,
+        trackingUrl,
         customerName,
         customerPhone: cleanPhone,
         shippingAddress: cleanAddress,
@@ -1234,6 +1559,26 @@ async function dispatchSingleOrderToCourier(params: {
     },
     { upsert: true, new: true }
   );
+
+  // Non-blocking Shopify Order Tagging: ["Courier Booked", "${partnerName} Booked"]
+  if (admin) {
+    addShopifyOrderTags(admin, orderId, [
+      "Courier Booked",
+      `${partnerName} Booked`,
+    ]).catch(() => {});
+  } else {
+    unauthenticated
+      .admin(shopDomain)
+      .then(({ admin: offlineAdmin }) => {
+        if (offlineAdmin) {
+          addShopifyOrderTags(offlineAdmin, orderId, [
+            "Courier Booked",
+            `${partnerName} Booked`,
+          ]).catch(() => {});
+        }
+      })
+      .catch(() => {});
+  }
 
   // Background Google Sheets Auto-Sync (Real-time append)
   syncOrderToGoogleSheet(shopDomain, {
@@ -1261,6 +1606,7 @@ async function dispatchSingleOrderToCourier(params: {
       orderId,
       orderName,
       trackingNumber: finalTracking,
+      trackingUrl,
       courierName: courierDisplayName,
       customerName,
       customerPhone: cleanPhone,
@@ -1295,6 +1641,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     });
     storeConfig = created.toObject();
   }
+  storeConfig = decryptCourierConfig(storeConfig);
 
   const currentPlan = storeConfig?.currentPlan || "Free";
   const planLower = String(currentPlan).trim().toLowerCase();
@@ -1356,7 +1703,11 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         storeConfig?.steadfastSecretKey?.trim()
     ),
     redx: Boolean(
-      storeConfig?.redxProfileId?.trim() && storeConfig?.redxLocationId?.trim()
+      (storeConfig?.redxAccessToken?.trim() &&
+        (storeConfig?.redxPickupStoreId?.trim() ||
+          storeConfig?.redxLocationId?.trim())) ||
+        (storeConfig?.redxProfileId?.trim() &&
+          storeConfig?.redxLocationId?.trim())
     ),
   };
 
@@ -1371,8 +1722,36 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   // Pull existing booked tracking records from MongoDB for Task 4 Status & COD Sync
   const existingBookings = await ShipmentBooking.find({ shopDomain }).lean();
   const bookingsByOrderId: Record<string, any> = {};
+  const initialDispatchedOrders: Record<string, DispatchedSlipRecord> = {};
   for (const b of existingBookings) {
     bookingsByOrderId[String(b.orderId)] = b;
+    if (b.orderId && b.trackingNumber) {
+      const trackingUrl =
+        b.trackingUrl ||
+        getCourierTrackingUrl(
+          b.courierKey || b.courierName,
+          b.trackingNumber,
+          b.customerPhone
+        );
+      initialDispatchedOrders[String(b.orderId)] = {
+        orderId: String(b.orderId),
+        orderName: b.orderName || "",
+        trackingNumber: b.trackingNumber,
+        trackingUrl,
+        courierName: b.courierName || "Courier",
+        customerName: b.customerName || "",
+        customerPhone: b.customerPhone || "",
+        shippingAddress: b.shippingAddress || "",
+        isInsideDhaka: false,
+        codAmount: b.codAmount || "0.00",
+        currencyCode: b.currencyCode || "BDT",
+        warehouseNote: b.warehouseNote || "",
+        lineItems: [],
+        bookedAt: b.bookedAt
+          ? new Date(b.bookedAt).toISOString()
+          : new Date().toISOString(),
+      };
+    }
   }
 
   let rawOrders: RawShopifyOrder[] = [];
@@ -1388,6 +1767,13 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
             createdAt
             note
             displayFulfillmentStatus
+            displayFinancialStatus
+            totalOutstandingSet {
+              shopMoney {
+                amount
+                currencyCode
+              }
+            }
             totalPriceSet {
               shopMoney {
                 amount
@@ -1440,6 +1826,13 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
             createdAt
             note
             displayFulfillmentStatus
+            displayFinancialStatus
+            totalOutstandingSet {
+              shopMoney {
+                amount
+                currencyCode
+              }
+            }
             totalPriceSet {
               shopMoney {
                 amount
@@ -1503,6 +1896,19 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
             .join(", ")
         : `House 10, Road 5, ${city}`;
 
+      const displayFinancialStatus = String(node.displayFinancialStatus || "UNPAID");
+      const totalOutstanding =
+        node.totalOutstandingSet?.shopMoney?.amount ||
+        (displayFinancialStatus.toUpperCase() === "PAID"
+          ? "0.00"
+          : node.totalPriceSet?.shopMoney?.amount || "0.00");
+      const codAmount = calculateCodAmount({
+        displayFinancialStatus,
+        totalOutstandingSet: node.totalOutstandingSet,
+        totalOutstanding,
+        totalPrice: node.totalPriceSet?.shopMoney?.amount,
+      });
+
       const itemEdges = node.lineItems?.edges || [];
       const lineItems: OrderLineItem[] =
         itemEdges.length > 0
@@ -1542,6 +1948,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         totalPrice: node.totalPriceSet?.shopMoney?.amount || "0.00",
         currencyCode: node.totalPriceSet?.shopMoney?.currencyCode || "BDT",
         fulfillmentStatus: node.displayFulfillmentStatus || "UNFULFILLED",
+        displayFinancialStatus,
+        totalOutstanding,
+        codAmount,
         warehouseNote:
           node.note ||
           defaultWarehouseNotes[idx % defaultWarehouseNotes.length],
@@ -1558,6 +1967,19 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
       rawOrders = edges.map(({ node }: any, idx: number) => {
         const city = fallbackCities[idx % fallbackCities.length];
+        const displayFinancialStatus = String(node.displayFinancialStatus || "UNPAID");
+        const totalOutstanding =
+          node.totalOutstandingSet?.shopMoney?.amount ||
+          (displayFinancialStatus.toUpperCase() === "PAID"
+            ? "0.00"
+            : node.totalPriceSet?.shopMoney?.amount || "0.00");
+        const codAmount = calculateCodAmount({
+          displayFinancialStatus,
+          totalOutstandingSet: node.totalOutstandingSet,
+          totalOutstanding,
+          totalPrice: node.totalPriceSet?.shopMoney?.amount,
+        });
+
         const itemEdges = node.lineItems?.edges || [];
         const lineItems: OrderLineItem[] =
           itemEdges.length > 0
@@ -1594,6 +2016,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
           totalPrice: node.totalPriceSet?.shopMoney?.amount || "0.00",
           currencyCode: node.totalPriceSet?.shopMoney?.currencyCode || "BDT",
           fulfillmentStatus: node.displayFulfillmentStatus || "UNFULFILLED",
+          displayFinancialStatus,
+          totalOutstanding,
+          codAmount,
           warehouseNote:
             node.note ||
             defaultWarehouseNotes[idx % defaultWarehouseNotes.length],
@@ -1656,6 +2081,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       totalPrice: "1450.00",
       currencyCode: "BDT",
       fulfillmentStatus: "UNFULFILLED",
+      displayFinancialStatus: "UNPAID",
+      totalOutstanding: "1450.00",
+      codAmount: 1450,
       warehouseNote: "⚠️ Fragile - Pack with bubble wrap & verify XL collar tag",
       lineItems: [
         {
@@ -1679,6 +2107,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       totalPrice: "2280.00",
       currencyCode: "BDT",
       fulfillmentStatus: "UNFULFILLED",
+      displayFinancialStatus: "PAID",
+      totalOutstanding: "0.00",
+      codAmount: 0,
       warehouseNote:
         "⚠️ Fragile - Pack with bubble wrap & include gift box sleeve",
       lineItems: [
@@ -1710,6 +2141,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       totalPrice: "890.00",
       currencyCode: "BDT",
       fulfillmentStatus: "UNFULFILLED",
+      displayFinancialStatus: "PARTIALLY_PAID",
+      totalOutstanding: "390.00",
+      codAmount: 390,
       warehouseNote:
         "⚠️ Fragile - Pack with bubble wrap & confirm COD phone call",
       lineItems: [
@@ -1759,6 +2193,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     activeCouriers,
     routingConfig,
     graphqlWarning,
+    initialDispatchedOrders,
     usageSummary: {
       currentPlan,
       isProOrEnterprise,
@@ -1772,7 +2207,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const { session } = await authenticate.admin(request);
+  const { session, admin } = await authenticate.admin(request);
   const shopDomain = session.shop;
 
   await connectDB();
@@ -1787,6 +2222,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     });
     storeConfig = created.toObject();
   }
+  storeConfig = decryptCourierConfig(storeConfig);
 
   const formData = await request.formData();
   const actionType = String(formData.get("actionType") || "dispatchOrder");
@@ -1881,6 +2317,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           ),
           lineItems: Array.isArray(item.lineItems) ? item.lineItems : [],
           sharedPathaoTokenRef,
+          manualCityId: item.manualCityId ? Number(item.manualCityId) : null,
+          manualZoneId: item.manualZoneId ? Number(item.manualZoneId) : null,
+          manualAreaId: item.manualAreaId ? Number(item.manualAreaId) : null,
+          manualAreaName: item.manualAreaName ? String(item.manualAreaName) : null,
+          admin,
         });
       })
     );
@@ -1956,6 +2397,19 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const manualOverrideConfirmed =
     String(formData.get("manualOverrideConfirmed")) === "true";
 
+  const manualCityId = formData.get("manualCityId")
+    ? Number(formData.get("manualCityId"))
+    : null;
+  const manualZoneId = formData.get("manualZoneId")
+    ? Number(formData.get("manualZoneId"))
+    : null;
+  const manualAreaId = formData.get("manualAreaId")
+    ? Number(formData.get("manualAreaId"))
+    : null;
+  const manualAreaName = formData.get("manualAreaName")
+    ? String(formData.get("manualAreaName"))
+    : null;
+
   let parsedLineItems: OrderLineItem[] = [];
   try {
     parsedLineItems = JSON.parse(String(formData.get("lineItemsJson") || "[]"));
@@ -2004,6 +2458,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     warehouseNote,
     lineItems: parsedLineItems,
     sharedPathaoTokenRef,
+    manualCityId,
+    manualZoneId,
+    manualAreaId,
+    manualAreaName,
+    admin,
   });
 
   if (singleResult.success) {
@@ -2094,6 +2553,7 @@ export default function OrdersFulfillmentPage() {
     activeCouriers,
     routingConfig,
     graphqlWarning,
+    initialDispatchedOrders,
     usageSummary,
   } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
@@ -2117,9 +2577,17 @@ export default function OrdersFulfillmentPage() {
     Record<string, string>
   >({});
 
+  const [manualCityIds, setManualCityIds] = useState<Record<string, string>>({});
+  const [manualZoneIds, setManualZoneIds] = useState<Record<string, string>>({});
+  const [manualAreaIds, setManualAreaIds] = useState<Record<string, string>>({});
+  const [manualAreaNames, setManualAreaNames] = useState<Record<string, string>>({});
+  const [showLocationOverride, setShowLocationOverride] = useState<
+    Record<string, boolean>
+  >({});
+
   const [dispatchedOrders, setDispatchedOrders] = useState<
     Record<string, DispatchedSlipRecord>
-  >({});
+  >(initialDispatchedOrders || {});
   const [showPackingSlipView, setShowPackingSlipView] = useState(false);
 
   const planNormalized = usageSummary.currentPlan.toLowerCase();
@@ -2302,12 +2770,26 @@ export default function OrdersFulfillmentPage() {
     formData.append("customerPhone", order.customerPhone);
     formData.append("shippingAddress", order.shippingAddress);
     formData.append("isInsideDhaka", String(order.isInsideDhaka));
-    formData.append("codAmount", order.totalPrice);
+    formData.append("codAmount", String(order.codAmount));
     formData.append("currencyCode", order.currencyCode);
     formData.append("warehouseNote", customNote);
     formData.append("lineItemsJson", JSON.stringify(order.lineItems));
     formData.append("isRiskyLocked", String(order.isRiskyLocked));
     formData.append("manualOverrideConfirmed", String(isUnlocked));
+
+    // Optional manual location overrides
+    if (manualCityIds[order.id]) {
+      formData.append("manualCityId", manualCityIds[order.id]);
+    }
+    if (manualZoneIds[order.id]) {
+      formData.append("manualZoneId", manualZoneIds[order.id]);
+    }
+    if (manualAreaIds[order.id]) {
+      formData.append("manualAreaId", manualAreaIds[order.id]);
+    }
+    if (manualAreaNames[order.id]) {
+      formData.append("manualAreaName", manualAreaNames[order.id]);
+    }
 
     submit(formData, { method: "post" });
   };
@@ -2337,12 +2819,16 @@ export default function OrdersFulfillmentPage() {
         customerPhone: order.customerPhone,
         shippingAddress: order.shippingAddress,
         isInsideDhaka: order.isInsideDhaka,
-        codAmount: order.totalPrice,
+        codAmount: String(order.codAmount),
         currencyCode: order.currencyCode,
         warehouseNote: warehouseNotesByOrder[order.id] ?? order.warehouseNote,
         lineItems: order.lineItems,
         isRiskyLocked: order.isRiskyLocked,
         manualOverrideConfirmed: Boolean(manuallyUnlockedOrders[order.id]),
+        manualCityId: manualCityIds[order.id] || null,
+        manualZoneId: manualZoneIds[order.id] || null,
+        manualAreaId: manualAreaIds[order.id] || null,
+        manualAreaName: manualAreaNames[order.id] || null,
       }));
 
     const formData = new FormData();
@@ -2382,7 +2868,7 @@ export default function OrdersFulfillmentPage() {
             customerName: order.customerName,
             customerPhone: order.customerPhone,
             shippingAddress: order.shippingAddress,
-            codAmount: order.totalPrice,
+            codAmount: String(order.codAmount),
             currencyCode: order.currencyCode,
             warehouseNote:
               warehouseNotesByOrder[order.id] ?? order.warehouseNote,
@@ -2499,9 +2985,21 @@ export default function OrdersFulfillmentPage() {
                 </Badge>
               ) : dispatchedInfo ? (
                 <InlineStack gap="100" wrap>
-                  <Badge tone="success" status="success">
-                    {sentBadgeText}
-                  </Badge>
+                  {dispatchedInfo.trackingUrl ? (
+                    <Link
+                      url={dispatchedInfo.trackingUrl}
+                      target="_blank"
+                      removeUnderline
+                    >
+                      <Badge tone="success" status="success">
+                        {sentBadgeText} 🔗
+                      </Badge>
+                    </Link>
+                  ) : (
+                    <Badge tone="success" status="success">
+                      {sentBadgeText}
+                    </Badge>
+                  )}
                   <Badge tone="success" progress="complete">
                     ✅ AI Cleaned
                   </Badge>
@@ -2581,13 +3079,26 @@ export default function OrdersFulfillmentPage() {
         </Box>
       </IndexTable.Cell>
 
-        {/* Column 3: Total Price & SKU Preview */}
+        {/* Column 3: Items, Financial Status & COD Amount */}
         <IndexTable.Cell>
           <BlockStack gap="100">
-            <Text variant="bodyMd" fontWeight="bold" as="span">
-              {`${order.currencyCode} ${order.totalPrice}`}
-            </Text>
+            <InlineStack gap="150" blockAlign="center" wrap>
+              <Text variant="bodyMd" fontWeight="bold" as="span">
+                {`${order.currencyCode} ${order.totalPrice}`}
+              </Text>
+              {order.codAmount === 0 ? (
+                <Badge tone="success" progress="complete">
+                  PREPAID (৳0 COD)
+                </Badge>
+              ) : (
+                <Badge tone="attention">
+                  {`COD: ৳${order.codAmount}`}
+                </Badge>
+              )}
+            </InlineStack>
+
             <Text variant="bodySm" tone="subdued" as="span">
+              {order.displayFinancialStatus ? `${order.displayFinancialStatus} • ` : ""}
               {order.lineItems[0]?.sku || "SKU-001"} •{" "}
               {order.lineItems[0]?.variantTitle || "Standard"}
             </Text>
@@ -2632,27 +3143,161 @@ export default function OrdersFulfillmentPage() {
           </IndexTable.Cell>
         )}
 
-        {/* Column 5: Courier Select Dropdown */}
+        {/* Column 5: Courier Select Dropdown & Manual Location Override */}
         <IndexTable.Cell>
           <div onClick={(e) => e.stopPropagation()}>
-            <Box minWidth="210px">
-              <Select
-                label={`Select courier for ${order.name}`}
-                labelHidden
-                options={courierSelectOptions}
-                value={selectedCourier}
-                onChange={(val) =>
-                  setSelectedCouriersByOrder((prev) => ({
-                    ...prev,
-                    [order.id]: val,
-                  }))
-                }
-                disabled={
-                  Boolean(dispatchedInfo) ||
-                  isRowProcessing ||
-                  isLockedBySafetyNet
-                }
-              />
+            <Box minWidth="220px">
+              <BlockStack gap="100">
+                <Select
+                  label={`Select courier for ${order.name}`}
+                  labelHidden
+                  options={courierSelectOptions}
+                  value={selectedCourier}
+                  onChange={(val) =>
+                    setSelectedCouriersByOrder((prev) => ({
+                      ...prev,
+                      [order.id]: val,
+                    }))
+                  }
+                  disabled={
+                    Boolean(dispatchedInfo) ||
+                    isRowProcessing ||
+                    isLockedBySafetyNet
+                  }
+                />
+
+                {!dispatchedInfo && !isLockedBySafetyNet && (
+                  <>
+                    {selectedCourier === "pathao" && (
+                      <Box>
+                        {!showLocationOverride[order.id] ? (
+                          <Button
+                            variant="plain"
+                            size="slim"
+                            onClick={() =>
+                              setShowLocationOverride((prev) => ({
+                                ...prev,
+                                [order.id]: true,
+                              }))
+                            }
+                          >
+                            📍 Edit City/Zone (Auto: Resolved)
+                          </Button>
+                        ) : (
+                          <BlockStack gap="050">
+                            <InlineStack gap="100">
+                              <TextField
+                                label="City ID"
+                                labelHidden
+                                placeholder="City ID (e.g. 1)"
+                                size="slim"
+                                value={manualCityIds[order.id] || ""}
+                                onChange={(val) =>
+                                  setManualCityIds((prev) => ({
+                                    ...prev,
+                                    [order.id]: val,
+                                  }))
+                                }
+                                autoComplete="off"
+                              />
+                              <TextField
+                                label="Zone ID"
+                                labelHidden
+                                placeholder="Zone ID (e.g. 1)"
+                                size="slim"
+                                value={manualZoneIds[order.id] || ""}
+                                onChange={(val) =>
+                                  setManualZoneIds((prev) => ({
+                                    ...prev,
+                                    [order.id]: val,
+                                  }))
+                                }
+                                autoComplete="off"
+                              />
+                            </InlineStack>
+                            <Button
+                              variant="plain"
+                              size="slim"
+                              onClick={() =>
+                                setShowLocationOverride((prev) => ({
+                                  ...prev,
+                                  [order.id]: false,
+                                }))
+                              }
+                            >
+                              ✕ Close Override
+                            </Button>
+                          </BlockStack>
+                        )}
+                      </Box>
+                    )}
+
+                    {selectedCourier === "redx" && (
+                      <Box>
+                        {!showLocationOverride[order.id] ? (
+                          <Button
+                            variant="plain"
+                            size="slim"
+                            onClick={() =>
+                              setShowLocationOverride((prev) => ({
+                                ...prev,
+                                [order.id]: true,
+                              }))
+                            }
+                          >
+                            📍 Edit Area (Auto: Resolved)
+                          </Button>
+                        ) : (
+                          <BlockStack gap="050">
+                            <InlineStack gap="100">
+                              <TextField
+                                label="Area ID"
+                                labelHidden
+                                placeholder="Area ID (e.g. 1)"
+                                size="slim"
+                                value={manualAreaIds[order.id] || ""}
+                                onChange={(val) =>
+                                  setManualAreaIds((prev) => ({
+                                    ...prev,
+                                    [order.id]: val,
+                                  }))
+                                }
+                                autoComplete="off"
+                              />
+                              <TextField
+                                label="Area Name"
+                                labelHidden
+                                placeholder="Area Name"
+                                size="slim"
+                                value={manualAreaNames[order.id] || ""}
+                                onChange={(val) =>
+                                  setManualAreaNames((prev) => ({
+                                    ...prev,
+                                    [order.id]: val,
+                                  }))
+                                }
+                                autoComplete="off"
+                              />
+                            </InlineStack>
+                            <Button
+                              variant="plain"
+                              size="slim"
+                              onClick={() =>
+                                setShowLocationOverride((prev) => ({
+                                  ...prev,
+                                  [order.id]: false,
+                                }))
+                              }
+                            >
+                              ✕ Close Override
+                            </Button>
+                          </BlockStack>
+                        )}
+                      </Box>
+                    )}
+                  </>
+                )}
+              </BlockStack>
             </Box>
           </div>
         </IndexTable.Cell>
@@ -2669,9 +3314,21 @@ export default function OrdersFulfillmentPage() {
               </Badge>
             ) : dispatchedInfo ? (
               <BlockStack gap="100">
-                <Badge tone="success" status="success">
-                  {sentBadgeText}
-                </Badge>
+                {dispatchedInfo.trackingUrl ? (
+                  <Link
+                    url={dispatchedInfo.trackingUrl}
+                    target="_blank"
+                    removeUnderline
+                  >
+                    <Badge tone="success" status="success">
+                      {sentBadgeText} 🔗
+                    </Badge>
+                  </Link>
+                ) : (
+                  <Badge tone="success" status="success">
+                    {sentBadgeText}
+                  </Badge>
+                )}
                 <Text variant="bodySm" tone="subdued" as="span">
                   Via {dispatchedInfo.courierName}
                 </Text>
@@ -3076,9 +3733,15 @@ export default function OrdersFulfillmentPage() {
                                     style={{
                                       fontSize: "20px",
                                       fontWeight: "900",
+                                      color:
+                                        Number(slip.codAmount) === 0
+                                          ? "#047857"
+                                          : "#000000",
                                     }}
                                   >
-                                    {slip.currencyCode} ৳{slip.codAmount}
+                                    {Number(slip.codAmount) === 0
+                                      ? "PREPAID (৳0 COD)"
+                                      : `${slip.currencyCode} ৳${slip.codAmount}`}
                                   </div>
                                 </div>
                                 <div style={{ textAlign: "right" }}>
@@ -3163,8 +3826,10 @@ export default function OrdersFulfillmentPage() {
                                   {slip.shippingAddress}
                                 </div>
                                 <div>
-                                  <strong>COD Amount:</strong> {slip.currencyCode}{" "}
-                                  {slip.codAmount}
+                                  <strong>COD Amount:</strong>{" "}
+                                  {Number(slip.codAmount) === 0
+                                    ? "PREPAID (৳0 COD)"
+                                    : `${slip.currencyCode} ${slip.codAmount}`}
                                 </div>
                               </div>
 
@@ -3315,12 +3980,17 @@ export default function OrdersFulfillmentPage() {
                                     style={{
                                       fontSize: "16px",
                                       fontWeight: 800,
-                                      color: "#047857",
+                                      color:
+                                        Number(slip.codAmount) === 0
+                                          ? "#047857"
+                                          : "#b45309",
                                       marginTop: "4px",
                                     }}
                                   >
-                                    COD Collectible: {slip.currencyCode}{" "}
-                                    {slip.codAmount}
+                                    COD Collectible:{" "}
+                                    {Number(slip.codAmount) === 0
+                                      ? "PREPAID (৳0 COD)"
+                                      : `${slip.currencyCode} ${slip.codAmount}`}
                                   </div>
                                   <div style={{ fontSize: "12px", color: "#374151" }}>
                                     Note: {slip.warehouseNote}
@@ -3485,10 +4155,16 @@ export default function OrdersFulfillmentPage() {
                                       marginTop: "8px",
                                       fontSize: "15px",
                                       fontWeight: 800,
+                                      color:
+                                        Number(slip.codAmount) === 0
+                                          ? "#047857"
+                                          : "#111827",
                                     }}
                                   >
-                                    COD TO COLLECT: {slip.currencyCode}{" "}
-                                    {slip.codAmount}
+                                    COD TO COLLECT:{" "}
+                                    {Number(slip.codAmount) === 0
+                                      ? "PREPAID (৳0 COD)"
+                                      : `${slip.currencyCode} ${slip.codAmount}`}
                                   </div>
                                 </div>
                               </div>

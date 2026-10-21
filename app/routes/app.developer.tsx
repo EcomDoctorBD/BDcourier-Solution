@@ -40,6 +40,8 @@ import CourierConfig, {
   ShippingZone,
   GlobalFraudNetwork,
   MerchantIntegrations,
+  CourierLocationCache,
+  decryptCourierConfig,
 } from "../db.server";
 
 // ==================== ICONS ====================
@@ -133,6 +135,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   let addressCacheCount = 0;
   let shippingZoneCount = 0;
   let fraudRecordsCount = 0;
+  let courierLocationCacheCount = 0;
 
   try {
     const conn = await connectDB();
@@ -150,14 +153,16 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       mongoLatencyMs = Date.now() - pingStart;
     }
 
-    const [acCount, szCount, frCount] = await Promise.all([
+    const [acCount, szCount, frCount, clcCount] = await Promise.all([
       AddressCache.countDocuments().catch(() => 0),
       ShippingZone.countDocuments({ merchantId: shopDomain }).catch(() => 0),
       GlobalFraudNetwork.countDocuments().catch(() => 0),
+      CourierLocationCache.countDocuments().catch(() => 0),
     ]);
     addressCacheCount = acCount;
     shippingZoneCount = szCount;
     fraudRecordsCount = frCount;
+    courierLocationCacheCount = clcCount;
   } catch (err: any) {
     console.error("Diagnostic MongoDB error:", err.message);
   }
@@ -170,7 +175,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     process.env.GEMINI_MODEL?.trim() || "gemini-1.5-flash";
 
   // 3. COURIER HANDSHAKES & CREDENTIALS
-  const storeConfig: any = await CourierConfig.findOne({ shopDomain }).lean();
+  const rawStoreConfig: any = await CourierConfig.findOne({ shopDomain }).lean();
+  const storeConfig = decryptCourierConfig(rawStoreConfig);
 
   const pathaoReady = Boolean(
     storeConfig?.pathaoClientId?.trim() &&
@@ -182,31 +188,55 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       storeConfig?.steadfastSecretKey?.trim()
   );
   const redxReady = Boolean(
-    storeConfig?.redxProfileId?.trim() && storeConfig?.redxLocationId?.trim()
+    storeConfig?.redxAccessToken?.trim() ||
+      (storeConfig?.redxProfileId?.trim() && storeConfig?.redxLocationId?.trim())
   );
+  const webhookReady = Boolean(storeConfig?.webhookSecret?.trim());
 
   const couriersDiagnostic = {
     pathao: {
       name: "Pathao Courier",
       ready: pathaoReady,
       clientIdMasked: maskSecret(storeConfig?.pathaoClientId, 4, 3),
+      username: storeConfig?.pathaoUsername?.trim() || "Not Set",
       secretMasked: maskSecret(storeConfig?.pathaoSecret, 3, 3),
       storeId: storeConfig?.pathaoStoreId?.trim() || "Not Set",
-      endpoint: "https://api-hermes.pathao.com",
+      environment: storeConfig?.pathaoEnvironment || "production",
+      endpoint:
+        storeConfig?.pathaoEnvironment === "sandbox"
+          ? "https://courier-api-sandbox.pathao.com"
+          : "https://api-hermes.pathao.com",
     },
     steadfast: {
       name: "Steadfast Courier",
       ready: steadfastReady,
       apiKeyMasked: maskSecret(storeConfig?.steadfastApiKey, 4, 3),
       secretKeyMasked: maskSecret(storeConfig?.steadfastSecretKey, 3, 3),
-      endpoint: "https://portal.steadfast.com.bd/api/v1",
+      endpoint: "https://packzy.com/api/v1 (fallback: portal.steadfast.com.bd)",
     },
     redx: {
       name: "REDX Delivery",
       ready: redxReady,
-      profileIdMasked: maskSecret(storeConfig?.redxProfileId, 4, 3),
-      locationId: storeConfig?.redxLocationId?.trim() || "Not Set",
-      endpoint: "https://openapi.redx.com.bd/v1.0.0-beta",
+      accessTokenMasked: maskSecret(
+        storeConfig?.redxAccessToken || storeConfig?.redxProfileId,
+        4,
+        3
+      ),
+      pickupStoreId:
+        storeConfig?.redxPickupStoreId?.trim() ||
+        storeConfig?.redxLocationId?.trim() ||
+        "Not Set",
+      environment: storeConfig?.redxEnvironment || "production",
+      endpoint:
+        storeConfig?.redxEnvironment === "sandbox"
+          ? "https://sandbox.redx.com.bd"
+          : "https://openapi.redx.com.bd/v1.0.0-beta",
+    },
+    webhook: {
+      name: "Two-Way Webhook Gateway",
+      ready: webhookReady,
+      secretMasked: maskSecret(storeConfig?.webhookSecret, 6, 4),
+      endpoint: "/api/webhooks/{pathao,steadfast,redx}",
     },
   };
 
@@ -245,6 +275,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       addressCacheCount,
       shippingZoneCount,
       fraudRecordsCount,
+      courierLocationCacheCount,
     },
     gemini: {
       configured: isGeminiConfigured,
@@ -503,7 +534,7 @@ export default function DeveloperDiagnosticPage() {
 
             <IndexTable
               resourceName={{ singular: "parameter", plural: "parameters" }}
-              itemCount={6}
+              itemCount={7}
               selectable={false}
               headings={[
                 { title: "Mongoose Pool Parameter" },
@@ -598,6 +629,20 @@ export default function DeveloperDiagnosticPage() {
                 </IndexTable.Cell>
                 <IndexTable.Cell>
                   <Badge tone="info">Active Rate Engine</Badge>
+                </IndexTable.Cell>
+              </IndexTable.Row>
+
+              <IndexTable.Row id="row-pool-7" position={6}>
+                <IndexTable.Cell>
+                  <Text as="span" fontWeight="bold">
+                    CourierLocationCache (7-Day Geo-Cache)
+                  </Text>
+                </IndexTable.Cell>
+                <IndexTable.Cell>
+                  <Text as="span">{`${mongo.courierLocationCacheCount || 0} cached location sets`}</Text>
+                </IndexTable.Cell>
+                <IndexTable.Cell>
+                  <Badge tone="success">Fast Geo-Lookups Active</Badge>
                 </IndexTable.Cell>
               </IndexTable.Row>
             </IndexTable>
@@ -721,7 +766,7 @@ export default function DeveloperDiagnosticPage() {
 
             <IndexTable
               resourceName={{ singular: "gateway", plural: "gateways" }}
-              itemCount={3}
+              itemCount={4}
               selectable={false}
               headings={[
                 { title: "Courier Gateway" },
@@ -748,7 +793,10 @@ export default function DeveloperDiagnosticPage() {
                       {`Client ID: ${couriers.pathao.clientIdMasked}`}
                     </Text>
                     <Text as="span" variant="bodySm">
-                      {`Store ID: ${couriers.pathao.storeId}`}
+                      {`Username: ${couriers.pathao.username}`}
+                    </Text>
+                    <Text as="span" variant="bodySm">
+                      {`Store ID: ${couriers.pathao.storeId} (${couriers.pathao.environment})`}
                     </Text>
                   </BlockStack>
                 </IndexTable.Cell>
@@ -803,16 +851,45 @@ export default function DeveloperDiagnosticPage() {
                 <IndexTable.Cell>
                   <BlockStack gap="050">
                     <Text as="span" variant="bodySm">
-                      {`Profile ID: ${couriers.redx.profileIdMasked}`}
+                      {`Access Token: ${couriers.redx.accessTokenMasked}`}
                     </Text>
                     <Text as="span" variant="bodySm">
-                      {`Location ID: ${couriers.redx.locationId}`}
+                      {`Store ID: ${couriers.redx.pickupStoreId} (${couriers.redx.environment})`}
                     </Text>
                   </BlockStack>
                 </IndexTable.Cell>
                 <IndexTable.Cell>
                   <Badge tone={couriers.redx.ready ? "success" : "attention"}>
                     {couriers.redx.ready ? "Ready for Booking" : "Incomplete Config"}
+                  </Badge>
+                </IndexTable.Cell>
+              </IndexTable.Row>
+
+              {/* Webhook Gateway */}
+              <IndexTable.Row id="row-courier-webhook" position={3}>
+                <IndexTable.Cell>
+                  <Text as="span" fontWeight="bold">
+                    {couriers.webhook.name}
+                  </Text>
+                </IndexTable.Cell>
+                <IndexTable.Cell>
+                  <Text as="span" variant="bodySm" tone="subdued">
+                    {couriers.webhook.endpoint}
+                  </Text>
+                </IndexTable.Cell>
+                <IndexTable.Cell>
+                  <BlockStack gap="050">
+                    <Text as="span" variant="bodySm">
+                      {`Secret: ${couriers.webhook.secretMasked}`}
+                    </Text>
+                    <Text as="span" variant="bodySm">
+                      Two-Way Status &amp; COD Sync
+                    </Text>
+                  </BlockStack>
+                </IndexTable.Cell>
+                <IndexTable.Cell>
+                  <Badge tone={couriers.webhook.ready ? "success" : "attention"}>
+                    {couriers.webhook.ready ? "Active (Protected)" : "Secret Unset"}
                   </Badge>
                 </IndexTable.Cell>
               </IndexTable.Row>

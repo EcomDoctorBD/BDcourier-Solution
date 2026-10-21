@@ -1,4 +1,8 @@
 import mongoose from "mongoose";
+import crypto from "crypto";
+import { encryptSecret, decryptSecret } from "./utils/crypto.server";
+
+export { encryptSecret, decryptSecret };
 
 const MONGODB_URI =
   process.env.MONGODB_URI?.trim() ||
@@ -101,7 +105,12 @@ const courierConfigSchema = new mongoose.Schema(
       index: true,
       trim: true,
     },
-    // Pathao Credentials
+    // Pathao Production & Sandbox Credentials
+    pathaoEnvironment: {
+      type: String,
+      enum: ["sandbox", "production"],
+      default: "production",
+    },
     pathaoClientId: {
       type: String,
       default: "",
@@ -112,10 +121,37 @@ const courierConfigSchema = new mongoose.Schema(
       default: "",
       trim: true,
     },
+    pathaoUsername: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+    pathaoPassword: {
+      type: String,
+      default: "",
+      trim: true,
+    },
     pathaoStoreId: {
       type: String,
       default: "",
       trim: true,
+    },
+    pathaoStoreName: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+    pathaoAccessToken: {
+      type: String,
+      default: "",
+    },
+    pathaoRefreshToken: {
+      type: String,
+      default: "",
+    },
+    pathaoTokenExpiresAt: {
+      type: Date,
+      default: null,
     },
     // Steadfast Credentials
     steadfastApiKey: {
@@ -128,13 +164,39 @@ const courierConfigSchema = new mongoose.Schema(
       default: "",
       trim: true,
     },
-    // RedX Credentials
+    // RedX Production & Sandbox Credentials
+    redxEnvironment: {
+      type: String,
+      enum: ["sandbox", "production"],
+      default: "production",
+    },
+    redxAccessToken: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+    redxPickupStoreId: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+    redxPickupStoreName: {
+      type: String,
+      default: "",
+      trim: true,
+    },
     redxProfileId: {
       type: String,
       default: "",
       trim: true,
     },
     redxLocationId: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+    // Webhook Security Token (Unique 32-char hex secret per merchant)
+    webhookSecret: {
       type: String,
       default: "",
       trim: true,
@@ -249,6 +311,43 @@ export const CourierConfig = mongoose.model(
 export const ShopSubscription = CourierConfig;
 
 /**
+ * Helper to decrypt sensitive credentials stored in CourierConfig
+ */
+export function decryptCourierConfig(config) {
+  if (!config) return config;
+  const doc = typeof config.toObject === "function" ? config.toObject() : { ...config };
+  if (doc.pathaoSecret) doc.pathaoSecret = decryptSecret(doc.pathaoSecret);
+  if (doc.pathaoPassword) doc.pathaoPassword = decryptSecret(doc.pathaoPassword);
+  if (doc.pathaoAccessToken) doc.pathaoAccessToken = decryptSecret(doc.pathaoAccessToken);
+  if (doc.pathaoRefreshToken) doc.pathaoRefreshToken = decryptSecret(doc.pathaoRefreshToken);
+  if (doc.steadfastSecretKey) doc.steadfastSecretKey = decryptSecret(doc.steadfastSecretKey);
+  if (doc.redxAccessToken) doc.redxAccessToken = decryptSecret(doc.redxAccessToken);
+  return doc;
+}
+
+/**
+ * Ensures a merchant has a persistent, unique 32-character webhook secret
+ */
+export async function ensureWebhookSecret(shopDomain, existingSecret) {
+  if (
+    existingSecret &&
+    typeof existingSecret === "string" &&
+    existingSecret.trim().length >= 16
+  ) {
+    return existingSecret.trim();
+  }
+  const generatedSecret = crypto.randomBytes(16).toString("hex");
+  if (shopDomain) {
+    await CourierConfig.updateOne(
+      { shopDomain },
+      { $set: { webhookSecret: generatedSecret } },
+      { upsert: true }
+    );
+  }
+  return generatedSecret;
+}
+
+/**
  * Mongoose Schema: GlobalFraudNetwork
  * Caches aggregated delivery & return history per Bangladeshi customer phone number
  */
@@ -350,6 +449,7 @@ const shipmentBookingSchema = new mongoose.Schema(
     courierKey: { type: String, required: true },
     courierName: { type: String, required: true },
     trackingNumber: { type: String, required: true },
+    trackingUrl: { type: String, default: "" },
     customerName: { type: String, default: "" },
     customerPhone: { type: String, default: "" },
     shippingAddress: { type: String, default: "" },
@@ -503,6 +603,27 @@ const addressCacheSchema = new mongoose.Schema(
       enum: ["HIGH", "MEDIUM", "LOW"],
       default: "HIGH",
     },
+    // Courier Specific Location IDs for Instant Booking
+    pathaoCityId: {
+      type: Number,
+      default: null,
+    },
+    pathaoZoneId: {
+      type: Number,
+      default: null,
+    },
+    pathaoAreaId: {
+      type: Number,
+      default: null,
+    },
+    redxAreaId: {
+      type: Number,
+      default: null,
+    },
+    redxAreaName: {
+      type: String,
+      default: "",
+    },
     createdAt: {
       type: Date,
       default: Date.now,
@@ -517,6 +638,46 @@ if (mongoose.models.AddressCache) {
 }
 
 export const AddressCache = mongoose.model("AddressCache", addressCacheSchema);
+
+/**
+ * Courier Location Lists Cache (Pathao Cities/Zones & RedX Areas)
+ * Prevents redundant external API lookups and preserves rate limits (7-day cache)
+ */
+const courierLocationCacheSchema = new mongoose.Schema(
+  {
+    courier: {
+      type: String,
+      enum: ["pathao_cities", "pathao_zones", "redx_areas"],
+      required: true,
+      index: true,
+    },
+    parentId: {
+      type: Number,
+      default: 0,
+      index: true,
+    },
+    data: {
+      type: mongoose.Schema.Types.Mixed,
+      required: true,
+    },
+    updatedAt: {
+      type: Date,
+      default: Date.now,
+    },
+  },
+  { timestamps: false, collection: "CourierLocationCache" }
+);
+
+courierLocationCacheSchema.index({ courier: 1, parentId: 1 }, { unique: true });
+
+if (mongoose.models.CourierLocationCache) {
+  delete mongoose.models.CourierLocationCache;
+}
+
+export const CourierLocationCache = mongoose.model(
+  "CourierLocationCache",
+  courierLocationCacheSchema
+);
 
 /**
  * 5. Google Sheets Integration Matrix (MerchantIntegrations)
