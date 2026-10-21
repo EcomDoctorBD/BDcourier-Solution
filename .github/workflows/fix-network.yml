@@ -41,7 +41,7 @@ jobs:
           echo "Current AssignPublicIp: $ASSIGN_PUBLIC_IP"
           echo "Current Target Group ARN: $TG_ARN"
 
-          echo "=== [2/5] Ensuring All Outbound Traffic (0.0.0.0/0) on Security Groups ==="
+          echo "=== [2/5] Ensuring All Outbound & Inbound Traffic on ECS Task Security Groups ==="
           for sg in $SG_IDS; do
             echo "Checking egress rules for Security Group: $sg"
             aws ec2 describe-security-groups --group-ids "$sg" --query "SecurityGroups[0].IpPermissionsEgress"
@@ -51,7 +51,14 @@ jobs:
               --group-id "$sg" \
               --protocol -1 \
               --port -1 \
-              --cidr 0.0.0.0/0 2>&1 || echo "Rule already exists or allowed."
+              --cidr 0.0.0.0/0 2>&1 || echo "Egress rule already exists or allowed."
+
+            echo "Authorizing inbound traffic on port 3000 to $sg from ALB / 0.0.0.0/0..."
+            aws ec2 authorize-security-group-ingress \
+              --group-id "$sg" \
+              --protocol tcp \
+              --port 3000 \
+              --cidr 0.0.0.0/0 2>&1 || echo "Inbound port 3000 rule already exists."
           done
 
           echo "=== [3/5] Updating ECS Service to Assign Public IP ==="
@@ -84,6 +91,28 @@ jobs:
             aws ec2 authorize-security-group-ingress --group-id "$asg" --protocol tcp --port 80 --cidr 0.0.0.0/0 2>&1 || true
             aws ec2 authorize-security-group-ingress --group-id "$asg" --protocol tcp --port 443 --cidr 0.0.0.0/0 2>&1 || true
           done
+
+          echo "=== [4.2] Checking ALB Listeners & ACM Certificates ==="
+          echo "Current ALB Listeners:"
+          aws elbv2 describe-listeners --load-balancer-arn "$ALB_ARN"
+
+          echo "Checking Available ACM SSL Certificates in ap-southeast-2:"
+          ACM_CERTS=$(aws acm list-certificates --region ap-southeast-2)
+          echo "$ACM_CERTS"
+
+          ISSUED_CERT_ARN=$(echo "$ACM_CERTS" | jq -r '.CertificateSummaryList[] | select(.Status=="ISSUED") | .CertificateArn' | head -n 1)
+          if [ -n "$ISSUED_CERT_ARN" ]; then
+            echo "Found Issued SSL Certificate: $ISSUED_CERT_ARN. Ensuring HTTPS:443 Listener is created..."
+            aws elbv2 create-listener \
+              --load-balancer-arn "$ALB_ARN" \
+              --protocol HTTPS \
+              --port 443 \
+              --certificates CertificateArn="$ISSUED_CERT_ARN" \
+              --default-actions Type=forward,TargetGroupArn="$TG_ARN" 2>&1 || echo "HTTPS Listener may already exist or error."
+          else
+            echo "NOTICE: No ISSUED ACM Certificate found in ap-southeast-2."
+            echo "AWS ALB cannot terminate HTTPS on port 443 without an ACM certificate for a verified custom domain."
+          fi
 
           echo "=== [5/5] Checking ECS Tasks and Recent Container Logs ==="
           TASK_ARNS=$(aws ecs list-tasks --cluster delivery1-cluster --service-name delivery1-service --query "taskArns[]" --output text)
