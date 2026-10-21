@@ -1,0 +1,68 @@
+name: Deploy AWS CloudFront HTTPS Distribution
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/deploy-cloudfront.yml'
+      - 'cloudfront-config.json'
+
+jobs:
+  deploy-cloudfront:
+    name: Provision CloudFront Distribution for ALB
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ap-southeast-2
+
+      - name: Create or Locate CloudFront Distribution
+        id: cf
+        run: |
+          ALB_HOST="delivery1-alb-1581793960.ap-southeast-2.elb.amazonaws.com"
+          echo "Checking existing CloudFront distributions for origin: $ALB_HOST..."
+          
+          EXISTING_CF=$(aws cloudfront list-distributions --query "DistributionList.Items[?Origins.Items[?DomainName=='$ALB_HOST']].[Id,DomainName,Status]" --output text || true)
+          
+          if [ -n "$EXISTING_CF" ]; then
+            CF_ID=$(echo "$EXISTING_CF" | awk '{print $1}')
+            CF_DOMAIN=$(echo "$EXISTING_CF" | awk '{print $2}')
+            echo "Existing CloudFront Distribution found: ID=$CF_ID, Domain=$CF_DOMAIN"
+          else
+            echo "No existing distribution found. Creating new CloudFront distribution..."
+            # Replace placeholder CallerReference with timestamp
+            UNIQUE_REF="delivery1-cf-$(date +%s)"
+            sed -i "s/\"delivery1-cf-init\"/\"$UNIQUE_REF\"/g" cloudfront-config.json
+
+            CREATE_OUTPUT=$(aws cloudfront create-distribution --distribution-config file://cloudfront-config.json)
+            echo "$CREATE_OUTPUT" > cf-create-output.json
+
+            CF_ID=$(jq -r '.Distribution.Id' cf-create-output.json)
+            CF_DOMAIN=$(jq -r '.Distribution.DomainName' cf-create-output.json)
+            echo "Successfully created CloudFront Distribution!"
+            echo "ID: $CF_ID"
+            echo "DomainName: $CF_DOMAIN"
+          fi
+
+          echo "cf_id=$CF_ID" >> $GITHUB_OUTPUT
+          echo "cf_domain=$CF_DOMAIN" >> $GITHUB_OUTPUT
+
+          echo "================================================================="
+          echo "🎉 SECURE CLOUDFRONT HTTPS ENDPOINT READY:"
+          echo "https://$CF_DOMAIN"
+          echo "================================================================="
+          echo "Shopify Partner Dashboard Configurations:"
+          echo "App URL: https://$CF_DOMAIN"
+          echo "Allowed redirection URLs:"
+          echo "  https://$CF_DOMAIN/auth/callback"
+          echo "  https://$CF_DOMAIN/auth/shopify/callback"
+          echo "  https://$CF_DOMAIN/api/auth/callback"
+          echo "================================================================="
