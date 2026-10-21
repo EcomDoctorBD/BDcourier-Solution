@@ -515,7 +515,7 @@ export default function CourierDashboard() {
                     <Text as="p" variant="bodySm" tone="subdued">
                       Configure Pathao, Steadfast, and RedX API credentials and routing rules.
                     </Text>
-                    <Link to={`/app/settings${searchStr}`}>
+                    <Link to={`/app/courier-settings${searchStr}`}>
                       <Button variant="plain">Configure Routing →</Button>
                     </Link>
                   </BlockStack>
@@ -531,7 +531,7 @@ export default function CourierDashboard() {
                     <Text as="p" variant="bodySm" tone="subdued">
                       Set custom weight tiers, Bangladesh zones, and COD fees for checkout.
                     </Text>
-                    <Link to={`/app/shipping${searchStr}`}>
+                    <Link to={`/app/shipping-rates${searchStr}`}>
                       <Button variant="plain">Manage Rates →</Button>
                     </Link>
                   </BlockStack>
