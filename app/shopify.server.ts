@@ -46,7 +46,7 @@ const appUrl =
   process.env.SHOPIFY_APP_URL ||
   (process.env.VERCEL_URL
     ? `https://${process.env.VERCEL_URL}`
-    : "https://bdcourier-solution.vercel.app");
+    : "https://b-dcourier-solution.vercel.app");
 
 const shopify = shopifyApp({
   apiKey: process.env.SHOPIFY_API_KEY || "bc8cab60c84e1dcbb55b4c057645e5c8",

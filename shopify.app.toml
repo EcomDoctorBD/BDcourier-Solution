@@ -2,7 +2,7 @@
 
 client_id = "bc8cab60c84e1dcbb55b4c057645e5c8"
 name = "Delivery1"
-application_url = "https://bdcourier-solution.vercel.app"
+application_url = "https://b-dcourier-solution.vercel.app"
 embedded = true
 
 [build]
@@ -17,7 +17,7 @@ scopes = "read_orders,write_orders,write_products,read_fulfillments,write_fulfil
 
 [auth]
 redirect_urls = [
-  "https://bdcourier-solution.vercel.app/auth/callback",
-  "https://bdcourier-solution.vercel.app/auth/shopify/callback",
-  "https://bdcourier-solution.vercel.app/api/auth/callback"
+  "https://b-dcourier-solution.vercel.app/auth/callback",
+  "https://b-dcourier-solution.vercel.app/auth/shopify/callback",
+  "https://b-dcourier-solution.vercel.app/api/auth/callback"
 ]

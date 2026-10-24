@@ -53,7 +53,7 @@ export function getOAuth2Client(redirectUri?: string) {
     process.env.HOST ||
     (process.env.VERCEL_URL
       ? `https://${process.env.VERCEL_URL}`
-      : "https://bdcourier-solution.vercel.app");
+      : "https://b-dcourier-solution.vercel.app");
 
   const defaultRedirect = `${appUrl.replace(/\/$/, "")}/api/google/callback`;
   const finalRedirectUri = redirectUri || process.env.GOOGLE_REDIRECT_URI || defaultRedirect;
