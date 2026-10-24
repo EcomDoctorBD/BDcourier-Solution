@@ -2,7 +2,7 @@
 
 client_id = "bc8cab60c84e1dcbb55b4c057645e5c8"
 name = "Delivery1"
-application_url = "https://delivery1-alb-1581793960.ap-southeast-2.elb.amazonaws.com"
+application_url = "https://bdcourier-solution.vercel.app"
 embedded = true
 
 [build]
@@ -17,7 +17,7 @@ scopes = "read_orders,write_orders,write_products,read_fulfillments,write_fulfil
 
 [auth]
 redirect_urls = [
-  "https://delivery1-alb-1581793960.ap-southeast-2.elb.amazonaws.com/auth/callback",
-  "https://delivery1-alb-1581793960.ap-southeast-2.elb.amazonaws.com/auth/shopify/callback",
-  "https://delivery1-alb-1581793960.ap-southeast-2.elb.amazonaws.com/api/auth/callback"
+  "https://bdcourier-solution.vercel.app/auth/callback",
+  "https://bdcourier-solution.vercel.app/auth/shopify/callback",
+  "https://bdcourier-solution.vercel.app/api/auth/callback"
 ]

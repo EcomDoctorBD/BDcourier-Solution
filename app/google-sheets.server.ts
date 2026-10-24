@@ -51,7 +51,9 @@ export function getOAuth2Client(redirectUri?: string) {
   const appUrl =
     process.env.SHOPIFY_APP_URL ||
     process.env.HOST ||
-    "https://delivery1-alb-1581793960.ap-southeast-2.elb.amazonaws.com";
+    (process.env.VERCEL_URL
+      ? `https://${process.env.VERCEL_URL}`
+      : "https://bdcourier-solution.vercel.app");
 
   const defaultRedirect = `${appUrl.replace(/\/$/, "")}/api/google/callback`;
   const finalRedirectUri = redirectUri || process.env.GOOGLE_REDIRECT_URI || defaultRedirect;

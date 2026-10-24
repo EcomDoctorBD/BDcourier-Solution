@@ -16,14 +16,22 @@ if (!process.env.MONGODB_URI && MONGODB_URI) {
   process.env.MONGODB_URI = MONGODB_URI;
 }
 
-let cached = global.__mongooseCache;
+// Serverless connection caching on globalThis to reuse MongoDB connections across lambda warmups
+let cached = globalThis.__mongooseCache;
 
 if (!cached) {
-  cached = global.__mongooseCache = { conn: null, promise: null };
+  cached = globalThis.__mongooseCache = { conn: null, promise: null };
 }
 
 export async function connectDB() {
+  // If already connected, reuse the active connection immediately
   if (cached.conn && mongoose.connection.readyState === 1) {
+    return cached.conn;
+  }
+
+  // If a connection attempt is in-flight, await that promise
+  if (cached.promise && mongoose.connection.readyState === 2) {
+    cached.conn = await cached.promise;
     return cached.conn;
   }
 
@@ -34,23 +42,25 @@ export async function connectDB() {
 
   if (!activeUri) {
     throw new Error(
-      "Missing MONGODB_URI or DATABASE_URL environment variable. Please verify container environment configuration."
+      "Missing MONGODB_URI or DATABASE_URL environment variable. Please configure this in your Vercel project environment settings."
     );
   }
 
-  if (!cached.promise || mongoose.connection.readyState === 0) {
-    const opts = {
-      bufferCommands: true,
-      maxPoolSize: 10,
-      minPoolSize: 2,
-      serverSelectionTimeoutMS: 10000,
-      socketTimeoutMS: 45000,
-    };
+  // Optimize pooling for serverless (prevent socket exhaustion during concurrent checkouts)
+  const opts = {
+    bufferCommands: false,
+    maxPoolSize: 10,
+    minPoolSize: 0,
+    serverSelectionTimeoutMS: 5000,
+    connectTimeoutMS: 10000,
+    socketTimeoutMS: 45000,
+  };
 
+  if (!cached.promise || mongoose.connection.readyState === 0 || mongoose.connection.readyState === 3) {
     cached.promise = mongoose
       .connect(activeUri, opts)
       .then((mongooseInstance) => {
-        console.log("✅ Connected to MongoDB successfully (Mongoose pool reused).");
+        console.log("✅ Connected to MongoDB successfully (Serverless pool reused).");
         return mongooseInstance;
       })
       .catch((error) => {
@@ -60,7 +70,14 @@ export async function connectDB() {
       });
   }
 
-  cached.conn = await cached.promise;
+  try {
+    cached.conn = await cached.promise;
+  } catch (err) {
+    cached.promise = null;
+    cached.conn = null;
+    throw err;
+  }
+
   return cached.conn;
 }
 

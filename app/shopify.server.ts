@@ -29,6 +29,25 @@ try {
   // fallback to shopify_app
 }
 
+// Global connection caching for MongoDBSessionStorage to prevent open connection exhaustion in serverless
+interface GlobalWithSessionStorage {
+  __shopifySessionStorage?: MongoDBSessionStorage;
+}
+const globalForSession = globalThis as unknown as GlobalWithSessionStorage;
+if (!globalForSession.__shopifySessionStorage) {
+  globalForSession.__shopifySessionStorage = new MongoDBSessionStorage(
+    new URL(mongoUri),
+    mongoDbName
+  );
+}
+const cachedSessionStorage = globalForSession.__shopifySessionStorage;
+
+const appUrl =
+  process.env.SHOPIFY_APP_URL ||
+  (process.env.VERCEL_URL
+    ? `https://${process.env.VERCEL_URL}`
+    : "https://bdcourier-solution.vercel.app");
+
 const shopify = shopifyApp({
   apiKey: process.env.SHOPIFY_API_KEY || "bc8cab60c84e1dcbb55b4c057645e5c8",
   apiSecretKey: process.env.SHOPIFY_API_SECRET || "",
@@ -50,11 +69,9 @@ const shopify = shopifyApp({
         "write_shipping",
         "write_products",
       ],
-  appUrl:
-    process.env.SHOPIFY_APP_URL ||
-    "https://delivery1-alb-1581793960.ap-southeast-2.elb.amazonaws.com",
+  appUrl,
   authPathPrefix: "/auth",
-  sessionStorage: new MongoDBSessionStorage(new URL(mongoUri), mongoDbName) as any,
+  sessionStorage: cachedSessionStorage as any,
   distribution: AppDistribution.AppStore,
   isEmbeddedApp: true,
   billing: {
