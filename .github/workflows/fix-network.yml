@@ -2,9 +2,6 @@ name: Fix ECS Network & Security Groups
 
 on:
   workflow_dispatch:
-  push:
-    paths:
-      - '.github/workflows/fix-network.yml'
 
 jobs:
   configure-network:

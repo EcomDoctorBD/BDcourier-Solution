@@ -2,10 +2,6 @@ name: Deploy AWS CloudFront HTTPS Distribution
 
 on:
   workflow_dispatch:
-  push:
-    paths:
-      - '.github/workflows/deploy-cloudfront.yml'
-      - 'cloudfront-config.json'
 
 jobs:
   deploy-cloudfront:
