@@ -5,6 +5,7 @@ import {
   Scripts,
   ScrollRestoration,
 } from "@remix-run/react";
+import { Analytics } from "@vercel/analytics/remix";
 
 export default function App() {
   return (
@@ -24,6 +25,7 @@ export default function App() {
         <Outlet />
         <ScrollRestoration />
         <Scripts />
+        <Analytics />
       </body>
     </html>
   );
