@@ -8,6 +8,7 @@ import {
   useRouteError,
 } from "@remix-run/react";
 import { Analytics } from "@vercel/analytics/remix";
+import { SpeedInsights } from "@vercel/speed-insights/remix";
 
 export default function App() {
   return (
@@ -28,6 +29,7 @@ export default function App() {
         <ScrollRestoration />
         <Scripts />
         <Analytics />
+        <SpeedInsights />
       </body>
     </html>
   );

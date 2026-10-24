@@ -1,6 +1,5 @@
-import "@shopify/shopify-api";
-import "@shopify/shopify-api/adapters/node";
 import "@shopify/shopify-app-remix/adapters/node";
+import "@shopify/shopify-api";
 import {
   ApiVersion,
   AppDistribution,
@@ -127,6 +126,7 @@ const shopify = shopifyApp({
     },
   },
   future: {
+    unstable_newEmbeddedAuthStrategy: true,
     expiringOfflineAccessTokens: true,
   },
   ...(process.env.SHOP_CUSTOM_DOMAIN
