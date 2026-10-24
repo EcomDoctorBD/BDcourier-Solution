@@ -8,10 +8,27 @@ import {
 import { MongoDBSessionStorage } from "@shopify/shopify-app-session-storage-mongodb";
 
 const fallbackUri = "mongodb://127.0.0.1:27017/shopify_app";
-const mongoUri =
+const rawMongoUri =
   process.env.MONGODB_URI?.trim() ||
-  process.env.DATABASE_URL?.trim() ||
-  fallbackUri;
+  process.env.DATABASE_URL?.trim();
+
+// Enforce serverSelectionTimeoutMS: 5000 so the connection fails fast instead of hanging in serverless
+let mongoUri = rawMongoUri || fallbackUri;
+try {
+  const urlObj = new URL(mongoUri);
+  if (!urlObj.searchParams.has("serverSelectionTimeoutMS")) {
+    urlObj.searchParams.set("serverSelectionTimeoutMS", "5000");
+  }
+  if (!urlObj.searchParams.has("connectTimeoutMS")) {
+    urlObj.searchParams.set("connectTimeoutMS", "10000");
+  }
+  mongoUri = urlObj.toString();
+} catch (e) {
+  if (!mongoUri.includes("serverSelectionTimeoutMS")) {
+    const separator = mongoUri.includes("?") ? "&" : "?";
+    mongoUri = `${mongoUri}${separator}serverSelectionTimeoutMS=5000&connectTimeoutMS=10000`;
+  }
+}
 
 if (!process.env.DATABASE_URL) {
   process.env.DATABASE_URL = mongoUri;
