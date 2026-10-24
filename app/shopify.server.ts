@@ -1,3 +1,5 @@
+import "@shopify/shopify-api";
+import "@shopify/shopify-api/adapters/node";
 import "@shopify/shopify-app-remix/adapters/node";
 import {
   ApiVersion,
