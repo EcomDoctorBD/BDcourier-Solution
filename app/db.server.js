@@ -38,7 +38,8 @@ export async function connectDB() {
   const activeUri =
     process.env.MONGODB_URI?.trim() ||
     process.env.DATABASE_URL?.trim() ||
-    MONGODB_URI;
+    MONGODB_URI ||
+    "mongodb+srv://ecomdoctorbd_db_user:otlwVJVo1JqBk6GC@cluster0.iolrd90.mongodb.net/shopify_app";
 
   if (!activeUri) {
     throw new Error(

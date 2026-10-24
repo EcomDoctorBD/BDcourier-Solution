@@ -9,7 +9,8 @@ import {
 } from "@shopify/shopify-app-remix/server";
 import { MongoDBSessionStorage } from "@shopify/shopify-app-session-storage-mongodb";
 
-const fallbackUri = "mongodb://127.0.0.1:27017/shopify_app";
+const fallbackUri =
+  "mongodb+srv://ecomdoctorbd_db_user:otlwVJVo1JqBk6GC@cluster0.iolrd90.mongodb.net/shopify_app";
 const rawMongoUri =
   process.env.MONGODB_URI?.trim() ||
   process.env.DATABASE_URL?.trim();
@@ -54,10 +55,15 @@ interface GlobalWithSessionStorage {
 }
 const globalForSession = globalThis as unknown as GlobalWithSessionStorage;
 if (!globalForSession.__shopifySessionStorage) {
-  globalForSession.__shopifySessionStorage = new MongoDBSessionStorage(
+  const storage = new MongoDBSessionStorage(
     new URL(mongoUri),
     mongoDbName
   );
+  // Prevent unhandled promise rejection if initial ping takes time
+  storage.ready.catch((err) => {
+    console.warn("MongoDBSessionStorage initial connection warning:", err.message);
+  });
+  globalForSession.__shopifySessionStorage = storage;
 }
 const cachedSessionStorage = globalForSession.__shopifySessionStorage;
 
