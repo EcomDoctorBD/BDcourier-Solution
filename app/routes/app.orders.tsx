@@ -46,6 +46,7 @@ import CourierConfig, {
   GlobalFraudNetwork,
   ShipmentBooking,
   decryptCourierConfig,
+  AddressCache,
 } from "../db.server";
 import { cleanAndCacheAddress } from "../clean-address.server";
 import { syncOrderToGoogleSheet } from "../google-sheets.server";
@@ -257,13 +258,14 @@ interface RawShopifyOrder {
 }
 
 interface NormalizedOrder extends RawShopifyOrder {
-  fraudStats: FraudStatsProfile;
+  fraudStats: FraudStatsProfile | null;
   status: string;
   isRiskyLocked: boolean;
   isInsideDhaka: boolean;
   assignedCourier: string;
   routingReason: string;
   reconciliation: CourierReconciliationInfo;
+  isAiCleaned: boolean;
 }
 
 export interface DispatchedSlipRecord {
@@ -284,7 +286,7 @@ export interface DispatchedSlipRecord {
 }
 
 function formatBangladeshPhone(rawPhone: string): string {
-  const digitsOnly = rawPhone.replace(/\D/g, "");
+  const digitsOnly = (rawPhone || "").replace(/\D/g, "");
   if (digitsOnly.startsWith("8801") && digitsOnly.length === 13) {
     return digitsOnly.slice(2);
   }
@@ -294,7 +296,7 @@ function formatBangladeshPhone(rawPhone: string): string {
   if (digitsOnly.startsWith("01") && digitsOnly.length === 11) {
     return digitsOnly;
   }
-  return "01711223344";
+  return digitsOnly.length >= 10 ? digitsOnly : "";
 }
 
 function getSuccessRateBadgeTone(
@@ -303,40 +305,6 @@ function getSuccessRateBadgeTone(
   if (successRate < 60) return "critical";
   if (successRate <= 80) return "warning";
   return "success";
-}
-
-function getFallbackCourierMetrics(phone: string) {
-  if (phone.endsWith("3344")) {
-    return {
-      steadfastDelivered: 14,
-      steadfastReturned: 1,
-      pathaoDelivered: 7,
-      pathaoReturned: 1,
-    };
-  }
-  if (phone.endsWith("6677")) {
-    return {
-      steadfastDelivered: 4,
-      steadfastReturned: 2,
-      pathaoDelivered: 3,
-      pathaoReturned: 1,
-    };
-  }
-  if (phone.endsWith("9900")) {
-    return {
-      steadfastDelivered: 2,
-      steadfastReturned: 4,
-      pathaoDelivered: 2,
-      pathaoReturned: 2,
-    };
-  }
-  const seed = Number(phone.slice(-2)) || 42;
-  return {
-    steadfastDelivered: (seed % 12) + 3,
-    steadfastReturned: seed % 4,
-    pathaoDelivered: (seed % 8) + 2,
-    pathaoReturned: seed % 3,
-  };
 }
 
 /**
@@ -655,22 +623,14 @@ async function evaluateOrderStatusAndCashDiscrepancy(params: {
     }
   }
 
-  // Deterministic sandbox fallback so Pro/Enterprise merchants can immediately see
-  // both a Matched Delivered order (#1001) and a Cash Discrepancy Disbursed order (#1003)
   if (!liveStatus) {
-    if (order.name === "#1001") {
-      liveStatus = "delivered";
-      collectedAmount = expectedAmount;
-    } else if (order.name === "#1002") {
-      liveStatus = "delivered";
-      collectedAmount = expectedAmount; // prepaid: 0
-    } else if (order.name === "#1003") {
-      liveStatus = "disbursed";
-      collectedAmount = Math.max(0, expectedAmount - 100); // Triggers Cash Mismatch badge
-    } else {
-      liveStatus = "in_transit";
-      collectedAmount = expectedAmount;
-    }
+    return {
+      courierStatus: "unbooked",
+      courierCashCollected: "0.00",
+      hasCashDiscrepancy: false,
+      discrepancyDelta: "0.00",
+      autoSyncedPaidFulfilled: false,
+    };
   }
 
   if (Number.isNaN(collectedAmount)) {
@@ -687,7 +647,8 @@ async function evaluateOrderStatusAndCashDiscrepancy(params: {
   );
 
   // If courier status indicates 'delivered' or 'disbursed', mutate Shopify order to Paid & Fulfilled
-  if (isDeliveredOrDisbursed && !autoSyncedPaidFulfilled) {
+  // ONLY if real booking doc with tracking number exists
+  if (bookingDoc?.trackingNumber && isDeliveredOrDisbursed && !autoSyncedPaidFulfilled) {
     const courierLower = (bookingDoc?.courierKey || bookingDoc?.courierName || "").toLowerCase();
     const partnerName = courierLower.includes("pathao")
       ? "Pathao"
@@ -697,7 +658,7 @@ async function evaluateOrderStatusAndCashDiscrepancy(params: {
       ? "RedX"
       : bookingDoc?.courierName || "Courier";
 
-    const trkNumber = bookingDoc?.trackingNumber || `TRK-${order.name.replace("#", "")}`;
+    const trkNumber = bookingDoc.trackingNumber;
     const trkUrl =
       bookingDoc?.trackingUrl ||
       getCourierTrackingUrl(
@@ -736,7 +697,7 @@ async function evaluateOrderStatusAndCashDiscrepancy(params: {
   // Zero Financial Risk Discrepancy Conditional Check:
   // Does Shopify Order Total Price !== Courier Cash Collected?
   const delta = collectedAmount - expectedAmount;
-  const hasCashDiscrepancy = Math.abs(delta) > 0.01;
+  const hasCashDiscrepancy = isDeliveredOrDisbursed && Math.abs(delta) > 0.01;
 
   return {
     courierStatus: normalizedStatus,
@@ -814,10 +775,11 @@ export function evaluateWebhookOrderRouting(params: {
 
 function applyRoutingAndSafetyLogic(
   order: RawShopifyOrder,
-  fraudStats: FraudStatsProfile,
+  fraudStats: FraudStatsProfile | null,
   routingConfig: AutoRoutingConfig,
   defaultCourierFallback: string,
-  reconciliation: CourierReconciliationInfo
+  reconciliation: CourierReconciliationInfo,
+  isAiCleaned: boolean
 ): NormalizedOrder {
   const locationString =
     `${order.city} ${order.province} ${order.shippingAddress}`.toLowerCase();
@@ -831,18 +793,22 @@ function applyRoutingAndSafetyLogic(
   const fallbackCourier =
     routingConfig.defaultCourier || defaultCourierFallback || "steadfast";
 
+  const hasRealFraudHistory = Boolean(fraudStats && fraudStats.totalOrders > 0);
+  const isBelowThreshold = hasRealFraudHistory && fraudStats!.successRate < minRate;
+
   if (isEnabled) {
-    if (fraudStats.successRate < minRate) {
+    if (isBelowThreshold) {
       return {
         ...order,
-        customerPhone: fraudStats.phone,
+        customerPhone: order.customerPhone,
         fraudStats,
         reconciliation,
         status: "Risky - Locked for Manual Review",
         isRiskyLocked: true,
         isInsideDhaka,
         assignedCourier: fallbackCourier,
-        routingReason: `Blocked: Success Rate (${fraudStats.successRate}%) < ${minRate}% threshold`,
+        routingReason: `Blocked: Real Success Rate (${fraudStats!.successRate}%) < ${minRate}% threshold`,
+        isAiCleaned,
       };
     }
 
@@ -880,7 +846,7 @@ function applyRoutingAndSafetyLogic(
 
     return {
       ...order,
-      customerPhone: fraudStats.phone,
+      customerPhone: order.customerPhone,
       fraudStats,
       reconciliation,
       status: reconciliation.autoSyncedPaidFulfilled
@@ -890,14 +856,13 @@ function applyRoutingAndSafetyLogic(
       isInsideDhaka,
       assignedCourier: routedCourier,
       routingReason: matchedRuleText,
+      isAiCleaned,
     };
   }
 
-  const isBelowThreshold = fraudStats.successRate < minRate;
-
   return {
     ...order,
-    customerPhone: fraudStats.phone,
+    customerPhone: order.customerPhone,
     fraudStats,
     reconciliation,
     status: isBelowThreshold
@@ -909,8 +874,9 @@ function applyRoutingAndSafetyLogic(
     isInsideDhaka,
     assignedCourier: defaultCourierFallback,
     routingReason: isBelowThreshold
-      ? `Blocked: Success Rate (${fraudStats.successRate}%) < ${minRate}% threshold`
+      ? `Blocked: Real Success Rate (${fraudStats!.successRate}%) < ${minRate}% threshold`
       : `Manual Mode → ${defaultCourierFallback.toUpperCase()}`,
+    isAiCleaned,
   };
 }
 
@@ -918,12 +884,24 @@ async function resolveCustomerFraudProfile(
   rawPhone: string,
   storeConfig: any,
   cachedPathaoTokenRef: { token: string | null; attempted: boolean }
-): Promise<FraudStatsProfile> {
+): Promise<FraudStatsProfile | null> {
   const cleanPhone = formatBangladeshPhone(rawPhone);
+  if (!cleanPhone || cleanPhone.length < 11) {
+    return null;
+  }
   const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+
+  // Purge any previously poisoned sandbox mock records for this phone
+  try {
+    await GlobalFraudNetwork.deleteMany({
+      phone: cleanPhone,
+      dataSource: "multi_courier_sandbox_sync",
+    });
+  } catch {}
 
   const existingProfile: any = await GlobalFraudNetwork.findOne({
     phone: cleanPhone,
+    dataSource: { $ne: "multi_courier_sandbox_sync" },
   }).lean();
 
   const isCacheFresh =
@@ -1046,28 +1024,25 @@ async function resolveCustomerFraudProfile(
   const livePathao =
     pathaoOutcome.status === "fulfilled" ? pathaoOutcome.value : null;
 
-  const fallbackMetrics = getFallbackCourierMetrics(cleanPhone);
+  // Real data only: if neither courier returned real delivery history, return null
+  if (!liveSteadfast && !livePathao) {
+    return null;
+  }
 
-  const steadfastDelivered =
-    liveSteadfast !== null
-      ? liveSteadfast.delivered
-      : fallbackMetrics.steadfastDelivered;
-  const steadfastReturned =
-    liveSteadfast !== null
-      ? liveSteadfast.returned
-      : fallbackMetrics.steadfastReturned;
-  const pathaoDelivered =
-    livePathao !== null
-      ? livePathao.delivered
-      : fallbackMetrics.pathaoDelivered;
-  const pathaoReturned =
-    livePathao !== null ? livePathao.returned : fallbackMetrics.pathaoReturned;
+  const steadfastDelivered = liveSteadfast?.delivered ?? 0;
+  const steadfastReturned = liveSteadfast?.returned ?? 0;
+  const pathaoDelivered = livePathao?.delivered ?? 0;
+  const pathaoReturned = livePathao?.returned ?? 0;
 
   const totalDelivered = steadfastDelivered + pathaoDelivered;
   const totalReturned = steadfastReturned + pathaoReturned;
   const totalOrders = totalDelivered + totalReturned;
-  const successRate =
-    totalOrders > 0 ? Math.round((totalDelivered / totalOrders) * 100) : 100;
+
+  if (totalOrders === 0) {
+    return null;
+  }
+
+  const successRate = Math.round((totalDelivered / totalOrders) * 100);
 
   const savedProfile: any = await GlobalFraudNetwork.findOneAndUpdate(
     { phone: cleanPhone },
@@ -1082,10 +1057,7 @@ async function resolveCustomerFraudProfile(
         steadfastReturned,
         pathaoDelivered,
         pathaoReturned,
-        dataSource:
-          liveSteadfast || livePathao
-            ? "live_courier_api"
-            : "multi_courier_sandbox_sync",
+        dataSource: "live_courier_api",
         lastCheckedAt: new Date(),
       },
     },
@@ -1183,9 +1155,8 @@ async function dispatchSingleOrderToCourier(params: {
   const cleanPhone = formatBangladeshPhone(customerPhone);
   const cleanAddress =
     addressResolution.cleanAddress ||
-    (shippingAddress.length >= 10
-      ? shippingAddress
-      : `${shippingAddress || "House 10, Road 5"}, Dhaka, Bangladesh`);
+    shippingAddress ||
+    "";
   const amountToCollect = Math.max(0, Math.round(Number(codAmount) || 0));
 
   let courierDisplayName = "";
@@ -1658,6 +1629,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   }
 
   await connectDB();
+  try {
+    await GlobalFraudNetwork.deleteMany({ dataSource: "multi_courier_sandbox_sync" });
+  } catch {}
   let storeConfig: any = await CourierConfig.findOne({ shopDomain }).lean();
 
   if (!storeConfig) {
@@ -1892,12 +1866,6 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     }
   `;
 
-  const defaultWarehouseNotes = [
-    "⚠️ Fragile - Pack with bubble wrap",
-    "⚠️ Verify Size & Color tags before sealing polybag",
-    "⚠️ Attach waterproof COD pouch & handle with care",
-  ];
-
   try {
     const response = await admin.graphql(FULL_ORDERS_QUERY);
     const result: any = await response.json();
@@ -1929,27 +1897,23 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       }
     }
 
-    rawOrders = edges.map(({ node }: any, idx: number) => {
+    rawOrders = edges.map(({ node }: any) => {
       const addr = node.shippingAddress;
       const cust = node.customer;
       const customerName =
         addr?.name ||
         [cust?.firstName, cust?.lastName].filter(Boolean).join(" ") ||
-        "Customer";
+        "";
 
-      const fallbackPhones = ["01711223344", "01819556677", "01912889900"];
-      const customerPhone =
-        addr?.phone ||
-        cust?.phone ||
-        fallbackPhones[idx % fallbackPhones.length];
+      const customerPhone = addr?.phone || cust?.phone || "";
 
-      const city = addr?.city || (idx % 2 === 0 ? "Dhaka" : "Chattogram");
+      const city = addr?.city || "";
       const province = addr?.province || city;
       const shippingAddress = addr
         ? [addr.address1, addr.address2, addr.city, addr.province, addr.zip]
             .filter(Boolean)
             .join(", ")
-        : `House 10, Road 5, ${city}`;
+        : "";
 
       const displayFinancialStatus = String(node.displayFinancialStatus || "UNPAID");
       const totalOutstanding =
@@ -1965,31 +1929,16 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       });
 
       const itemEdges = node.lineItems?.edges || [];
-      const lineItems: OrderLineItem[] =
-        itemEdges.length > 0
-          ? itemEdges.map(({ node: item }: any, itemIdx: number) => ({
-              title: item.title || "Bangladeshi Apparel Item",
-              variantTitle:
-                item.variantTitle ||
-                (itemIdx % 2 === 0
-                  ? "Size: XL / Color: Royal Blue"
-                  : "Size: M / Color: Crimson Red"),
-              sku: item.sku || `SKU-BD-${101 + idx * 10 + itemIdx}`,
-              quantity: Number(item.quantity || 1),
-              unitPrice:
-                item.originalUnitPriceSet?.shopMoney?.amount ||
-                node.totalPriceSet?.shopMoney?.amount ||
-                "0.00",
-            }))
-          : [
-              {
-                title: "Dhakai Jamdani Premium Panjabi",
-                variantTitle: "Size: L / Color: Deep Indigo",
-                sku: `BD-PNJ-${100 + idx}`,
-                quantity: 1,
-                unitPrice: node.totalPriceSet?.shopMoney?.amount || "1450.00",
-              },
-            ];
+      const lineItems: OrderLineItem[] = itemEdges.map(({ node: item }: any) => ({
+        title: item.title || "",
+        variantTitle: item.variantTitle || "",
+        sku: item.sku || "",
+        quantity: Number(item.quantity || 1),
+        unitPrice:
+          item.originalUnitPriceSet?.shopMoney?.amount ||
+          node.totalPriceSet?.shopMoney?.amount ||
+          "0.00",
+      }));
 
       return {
         id: node.id,
@@ -2006,9 +1955,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         displayFinancialStatus,
         totalOutstanding,
         codAmount,
-        warehouseNote:
-          node.note ||
-          defaultWarehouseNotes[idx % defaultWarehouseNotes.length],
+        warehouseNote: node.note || "",
         lineItems,
       };
     });
@@ -2032,11 +1979,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         throw new Error(fallbackResult.errors[0].message);
       }
 
-      const fallbackPhones = ["01711223344", "01819556677", "01912889900"];
-      const fallbackCities = ["Dhaka", "Chattogram", "Sylhet"];
-
-      rawOrders = edges.map(({ node }: any, idx: number) => {
-        const city = fallbackCities[idx % fallbackCities.length];
+      rawOrders = edges.map(({ node }: any) => {
         const displayFinancialStatus = String(node.displayFinancialStatus || "UNPAID");
         const totalOutstanding =
           node.totalOutstandingSet?.shopMoney?.amount ||
@@ -2051,47 +1994,33 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         });
 
         const itemEdges = node.lineItems?.edges || [];
-        const lineItems: OrderLineItem[] =
-          itemEdges.length > 0
-            ? itemEdges.map(({ node: item }: any, itemIdx: number) => ({
-                title: item.title || "Merchant Product",
-                variantTitle:
-                  item.variantTitle || "Size: XL / Color: Midnight Black",
-                sku: item.sku || `SKU-BD-${201 + idx * 10 + itemIdx}`,
-                quantity: Number(item.quantity || 1),
-                unitPrice:
-                  item.originalUnitPriceSet?.shopMoney?.amount ||
-                  node.totalPriceSet?.shopMoney?.amount ||
-                  "0.00",
-              }))
-            : [
-                {
-                  title: "Handloom Cotton Three-Piece",
-                  variantTitle: "Size: M / Color: Olive Green",
-                  sku: `BD-APP-${200 + idx}`,
-                  quantity: 1,
-                  unitPrice: node.totalPriceSet?.shopMoney?.amount || "1450.00",
-                },
-              ];
+        const lineItems: OrderLineItem[] = itemEdges.map(({ node: item }: any) => ({
+          title: item.title || "",
+          variantTitle: item.variantTitle || "",
+          sku: item.sku || "",
+          quantity: Number(item.quantity || 1),
+          unitPrice:
+            item.originalUnitPriceSet?.shopMoney?.amount ||
+            node.totalPriceSet?.shopMoney?.amount ||
+            "0.00",
+        }));
 
         return {
           id: node.id,
           name: node.name,
           createdAt: node.createdAt,
-          customerName: `Customer ${idx + 1}`,
-          customerPhone: fallbackPhones[idx % fallbackPhones.length],
-          shippingAddress: `House 12, Road 5, ${city}`,
-          city,
-          province: city,
+          customerName: "",
+          customerPhone: "",
+          shippingAddress: "",
+          city: "",
+          province: "",
           totalPrice: node.totalPriceSet?.shopMoney?.amount || "0.00",
           currencyCode: node.totalPriceSet?.shopMoney?.currencyCode || "BDT",
           fulfillmentStatus: node.displayFulfillmentStatus || "UNFULFILLED",
           displayFinancialStatus,
           totalOutstanding,
           codAmount,
-          warehouseNote:
-            node.note ||
-            defaultWarehouseNotes[idx % defaultWarehouseNotes.length],
+          warehouseNote: node.note || "",
           lineItems,
         };
       });
@@ -2119,6 +2048,16 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     }
   }
 
+  const cleanedAddresses = await AddressCache.find({
+    rawInput: {
+      $in: rawOrders
+        .map((o) => (o.shippingAddress || "").trim().toLowerCase())
+        .filter(Boolean),
+    },
+    confidence: { $in: ["HIGH", "MEDIUM"] },
+  }).lean();
+  const cleanedMap = new Set(cleanedAddresses.map((a: any) => a.rawInput));
+
   const cachedPathaoTokenRef = {
     token: null as string | null,
     attempted: false,
@@ -2143,130 +2082,15 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         }),
       ]);
 
+      const isAiCleaned = cleanedMap.has((order.shippingAddress || "").trim().toLowerCase());
+
       return applyRoutingAndSafetyLogic(
         order,
         fraudStats,
         routingConfig,
         defaultCourierFallback,
-        reconciliation
-      );
-    })
-  );
-
-  const sampleRawOrders: RawShopifyOrder[] = [
-    {
-      id: "gid://shopify/Order/90001",
-      name: "#1001",
-      createdAt: new Date().toISOString(),
-      customerName: "Tanvir Ahmed",
-      customerPhone: "01711223344",
-      shippingAddress: "House 45, Road 12, Banani, Dhaka 1213",
-      city: "Dhaka",
-      province: "Dhaka",
-      totalPrice: "1450.00",
-      currencyCode: "BDT",
-      fulfillmentStatus: "UNFULFILLED",
-      displayFinancialStatus: "UNPAID",
-      totalOutstanding: "1450.00",
-      codAmount: 1450,
-      warehouseNote: "⚠️ Fragile - Pack with bubble wrap & verify XL collar tag",
-      lineItems: [
-        {
-          title: "Dhakai Jamdani Fusion Panjabi",
-          variantTitle: "Size: XL / Color: Royal Indigo",
-          sku: "BD-PNJ-XL-IND-01",
-          quantity: 1,
-          unitPrice: "1450.00",
-        },
-      ],
-    },
-    {
-      id: "gid://shopify/Order/90002",
-      name: "#1002",
-      createdAt: new Date().toISOString(),
-      customerName: "Nusrat Jahan",
-      customerPhone: "01819556677",
-      shippingAddress: "Flat 4B, Nasirabad Housing Society, Chattogram",
-      city: "Chattogram",
-      province: "Chattogram",
-      totalPrice: "2280.00",
-      currencyCode: "BDT",
-      fulfillmentStatus: "UNFULFILLED",
-      displayFinancialStatus: "PAID",
-      totalOutstanding: "0.00",
-      codAmount: 0,
-      warehouseNote:
-        "⚠️ Fragile - Pack with bubble wrap & include gift box sleeve",
-      lineItems: [
-        {
-          title: "Handcrafted Muslin Three-Piece Set",
-          variantTitle: "Size: M / Color: Emerald Green",
-          sku: "BD-MSL-M-EMR-04",
-          quantity: 1,
-          unitPrice: "1680.00",
-        },
-        {
-          title: "Nakshi Kantha Embroidered Dupatta",
-          variantTitle: "Size: Free / Color: Golden Ivory",
-          sku: "BD-NKS-FR-IVR-09",
-          quantity: 1,
-          unitPrice: "600.00",
-        },
-      ],
-    },
-    {
-      id: "gid://shopify/Order/90003",
-      name: "#1003",
-      createdAt: new Date().toISOString(),
-      customerName: "Mahmudul Hasan",
-      customerPhone: "01912889900",
-      shippingAddress: "Zindabazar Main Road, Sylhet 3100",
-      city: "Sylhet",
-      province: "Sylhet",
-      totalPrice: "890.00",
-      currencyCode: "BDT",
-      fulfillmentStatus: "UNFULFILLED",
-      displayFinancialStatus: "PARTIALLY_PAID",
-      totalOutstanding: "390.00",
-      codAmount: 390,
-      warehouseNote:
-        "⚠️ Fragile - Pack with bubble wrap & confirm COD phone call",
-      lineItems: [
-        {
-          title: "Sylheti Tea Garden Linen Kurta",
-          variantTitle: "Size: L / Color: Charcoal Grey",
-          sku: "BD-KRT-L-CHR-07",
-          quantity: 1,
-          unitPrice: "890.00",
-        },
-      ],
-    },
-  ];
-
-  const demoOrders: NormalizedOrder[] = await Promise.all(
-    sampleRawOrders.map(async (sampleOrder) => {
-      const [fraudStats, reconciliation] = await Promise.all([
-        resolveCustomerFraudProfile(
-          sampleOrder.customerPhone,
-          storeConfig,
-          cachedPathaoTokenRef
-        ),
-        evaluateOrderStatusAndCashDiscrepancy({
-          admin,
-          order: sampleOrder,
-          bookingDoc: bookingsByOrderId[sampleOrder.id],
-          storeConfig,
-          isProOrEnterprise,
-          cachedPathaoTokenRef,
-        }),
-      ]);
-
-      return applyRoutingAndSafetyLogic(
-        sampleOrder,
-        fraudStats,
-        routingConfig,
-        defaultCourierFallback,
-        reconciliation
+        reconciliation,
+        isAiCleaned
       );
     })
   );
@@ -2274,7 +2098,6 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   return {
     shopDomain,
     orders,
-    demoOrders,
     activeCouriers,
     routingConfig,
     graphqlWarning,
@@ -2296,6 +2119,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const shopDomain = session.shop;
 
   await connectDB();
+  try {
+    await GlobalFraudNetwork.deleteMany({ dataSource: "multi_courier_sandbox_sync" });
+  } catch {}
   let storeConfig: any = await CourierConfig.findOne({ shopDomain }).lean();
 
   if (!storeConfig) {
@@ -2397,9 +2223,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           isInsideDhaka: Boolean(item.isInsideDhaka),
           codAmount: String(item.codAmount || "0"),
           currencyCode: String(item.currencyCode || "BDT"),
-          warehouseNote: String(
-            item.warehouseNote || "⚠️ Fragile - Pack with bubble wrap"
-          ),
+          warehouseNote: String(item.warehouseNote || ""),
           lineItems: Array.isArray(item.lineItems) ? item.lineItems : [],
           sharedPathaoTokenRef,
           manualCityId: item.manualCityId ? Number(item.manualCityId) : null,
@@ -2475,9 +2299,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const isInsideDhaka = String(formData.get("isInsideDhaka")) === "true";
   const codAmount = String(formData.get("codAmount") || "0");
   const currencyCode = String(formData.get("currencyCode") || "BDT");
-  const warehouseNote = String(
-    formData.get("warehouseNote") || "⚠️ Fragile - Pack with bubble wrap"
-  );
+  const warehouseNote = String(formData.get("warehouseNote") || "");
   const isRiskyLocked = String(formData.get("isRiskyLocked")) === "true";
   const manualOverrideConfirmed =
     String(formData.get("manualOverrideConfirmed")) === "true";
@@ -2579,10 +2401,26 @@ function DynamicBarcodeGraphic({
   code,
   height = 46,
 }: {
-  code: string;
+  code?: string;
   height?: number;
 }) {
-  const cleanCode = code || "BD-000000";
+  const cleanCode = (code || "").trim();
+  if (!cleanCode) {
+    return (
+      <div style={{ display: "inline-block", textAlign: "center", padding: "6px" }}>
+        <div
+          style={{
+            fontFamily: "monospace",
+            fontSize: "11px",
+            fontWeight: 600,
+            color: "#6b7280",
+          }}
+        >
+          [ Consignment Pending Booking ]
+        </div>
+      </div>
+    );
+  }
   const bars: number[] = [];
   for (let i = 0; i < cleanCode.length; i++) {
     const charCode = cleanCode.charCodeAt(i);
@@ -2634,7 +2472,6 @@ export default function OrdersFulfillmentPage() {
   const {
     shopDomain,
     orders,
-    demoOrders,
     activeCouriers,
     routingConfig,
     graphqlWarning,
@@ -2644,8 +2481,6 @@ export default function OrdersFulfillmentPage() {
   const actionData = useActionData<typeof action>();
   const submit = useSubmit();
   const navigation = useNavigation();
-
-  const [useDemoOrders, setUseDemoOrders] = useState(false);
 
   const [manuallyUnlockedOrders, setManuallyUnlockedOrders] = useState<
     Record<string, boolean>
@@ -2747,11 +2582,15 @@ export default function OrdersFulfillmentPage() {
     }
   }, [actionData]);
 
-  const displayedOrders =
-    orders.length > 0 ? orders : useDemoOrders ? demoOrders : [];
+  const displayedOrders = orders;
 
   const riskyOrdersCount = displayedOrders.filter(
     (o) =>
+      Boolean(
+        o.fraudStats &&
+        o.fraudStats.totalOrders > 0 &&
+        o.fraudStats.successRate < (routingConfig.minSuccessRate || 70)
+      ) &&
       (o.isRiskyLocked || Boolean(lockedRiskOrders[o.id])) &&
       !manuallyUnlockedOrders[o.id]
   ).length;
@@ -2948,7 +2787,7 @@ export default function OrdersFulfillmentPage() {
             orderId: order.id,
             orderName: order.name,
             courierName,
-            trackingNumber: `PREVIEW-${order.name.replace(/[^a-zA-Z0-9]/g, "")}`,
+            trackingNumber: "",
             bookingDate: new Date().toLocaleDateString("en-GB"),
             customerName: order.customerName,
             customerPhone: order.customerPhone,
@@ -2984,23 +2823,14 @@ export default function OrdersFulfillmentPage() {
     !usageSummary.isUnlimitedBulk &&
     selectedResources.length > usageSummary.bulkBatchLimit;
 
-  // Dynamic Table Headings: Include Task 4 Verification Column ONLY for Pro & Enterprise
-  const tableHeadings = isProOrEnterprise
-    ? [
-        { title: "Order & Destination" },
-        { title: "Customer & Delivery History" },
-        { title: "Items & COD Amount" },
-        { title: "Payment & Delivery Status" },
-        { title: "Courier Partner" },
-        { title: "Action" },
-      ]
-    : [
-        { title: "Order & Destination" },
-        { title: "Customer & Delivery History" },
-        { title: "Items & COD Amount" },
-        { title: "Courier Partner" },
-        { title: "Action" },
-      ];
+  // Streamlined 5-Column Table Headings for zero horizontal scroll
+  const tableHeadings = [
+    { title: "Order & Destination" },
+    { title: "Customer & Delivery History" },
+    { title: "Items & COD Amount" },
+    { title: "Courier & Status" },
+    { title: "Action" },
+  ];
 
   const rowMarkup = displayedOrders.map((order, index) => {
     const selectedCourier =
@@ -3028,12 +2858,18 @@ export default function OrdersFulfillmentPage() {
         : "Courier";
     }
     const sentBadgeText = dispatchedInfo
-      ? `✅ Sent: ${partnerName} [${dispatchedInfo.trackingNumber}]`
+      ? `✅ Sent: ${partnerName}${dispatchedInfo.trackingNumber ? ` [${dispatchedInfo.trackingNumber}]` : ""}`
       : "";
 
-    const { totalDelivered, totalReturned, successRate } = order.fraudStats;
-    const rateBadgeTone = getSuccessRateBadgeTone(successRate);
+    const rateBadgeTone = order.fraudStats
+      ? getSuccessRateBadgeTone(order.fraudStats.successRate)
+      : "success";
     const isLockedBySafetyNet =
+      Boolean(
+        order.fraudStats &&
+        order.fraudStats.totalOrders > 0 &&
+        order.fraudStats.successRate < (routingConfig.minSuccessRate || 70)
+      ) &&
       (order.isRiskyLocked || Boolean(lockedRiskOrders[order.id])) &&
       !manuallyUnlockedOrders[order.id];
     const currentNote = warehouseNotesByOrder[order.id] ?? order.warehouseNote;
@@ -3085,9 +2921,11 @@ export default function OrdersFulfillmentPage() {
                       {sentBadgeText}
                     </Badge>
                   )}
-                  <Badge tone="success" progress="complete">
-                    ✅ AI Cleaned
-                  </Badge>
+                  {order.isAiCleaned && (
+                    <Badge tone="success" progress="complete">
+                      ✅ AI Cleaned
+                    </Badge>
+                  )}
                 </InlineStack>
               ) : isLockedBySafetyNet ? (
                 <Badge tone="warning" progress="partiallyComplete">
@@ -3098,9 +2936,11 @@ export default function OrdersFulfillmentPage() {
                   <Badge tone={routingConfig.autoRoutingEnabled ? "info" : undefined}>
                     {order.status}
                   </Badge>
-                  <Badge tone="success" progress="complete">
-                    ✅ AI Cleaned
-                  </Badge>
+                  {order.isAiCleaned && (
+                    <Badge tone="success" progress="complete">
+                      ✅ AI Cleaned
+                    </Badge>
+                  )}
                 </InlineStack>
               )}
 
@@ -3111,127 +2951,101 @@ export default function OrdersFulfillmentPage() {
           </div>
         </IndexTable.Cell>
 
-        {/* Column 2: Customer + Fraud Stats + Safety Net Badge + Warehouse Note */}
+        {/* Column 2: Customer + Real Fraud Stats + Warehouse Note */}
         <IndexTable.Cell>
           <Box
             background={isLockedBySafetyNet ? "bg-surface-warning-subdued" : undefined}
             padding={isLockedBySafetyNet ? "200" : "0"}
             borderRadius={isLockedBySafetyNet ? "200" : undefined}
+            maxWidth="280px"
           >
             <BlockStack gap="150">
               <InlineStack gap="200" blockAlign="center" wrap>
                 <Text variant="bodyMd" fontWeight="semibold" as="span">
-                  {order.customerName}
+                  {order.customerName || "Customer"}
                 </Text>
-                {isLockedBySafetyNet ? (
+                {isLockedBySafetyNet && (
                   <Badge tone="warning" progress="partiallyComplete">
-                    ⚠️ Risky Order (Manual Review Required)
-                  </Badge>
-                ) : (
-                  <Badge tone="success" progress="complete">
-                    ✅ AI Cleaned
+                    ⚠️ Risky Order
                   </Badge>
                 )}
               </InlineStack>
 
-            <Text variant="bodySm" tone="subdued" as="span">
-              {order.customerPhone} • {order.shippingAddress}
-            </Text>
+              <div style={{ whiteSpace: "normal", wordBreak: "break-word" }}>
+                <Text variant="bodySm" tone="subdued" as="span">
+                  {[order.customerPhone, order.shippingAddress].filter(Boolean).join(" • ") || "No address/phone provided"}
+                </Text>
+              </div>
 
-            <InlineStack gap="150" blockAlign="center" wrap>
-              <Badge tone="success">{`Delivered: ${totalDelivered}`}</Badge>
-              <Badge tone="critical">{`Returned: ${totalReturned}`}</Badge>
-              <Badge tone={rateBadgeTone}>{`Success Rate: ${successRate}%`}</Badge>
-            </InlineStack>
+              {order.fraudStats && order.fraudStats.totalOrders > 0 && (
+                <InlineStack gap="150" blockAlign="center" wrap>
+                  <Badge tone="success">{`Delivered: ${order.fraudStats.totalDelivered}`}</Badge>
+                  <Badge tone="critical">{`Returned: ${order.fraudStats.totalReturned}`}</Badge>
+                  <Badge tone={rateBadgeTone}>{`Success Rate: ${order.fraudStats.successRate}%`}</Badge>
+                </InlineStack>
+              )}
 
-            <div onClick={(e) => e.stopPropagation()}>
-              <TextField
-                label="Warehouse Packaging Note"
-                labelHidden
-                value={currentNote}
-                disabled={isRowProcessing || Boolean(dispatchedInfo)}
-                onChange={(val) =>
-                  setWarehouseNotesByOrder((prev) => ({
-                    ...prev,
-                    [order.id]: val,
-                  }))
-                }
-                placeholder="Warehouse note (e.g., Fragile - Pack with bubble wrap)"
-                autoComplete="off"
-              />
-            </div>
-          </BlockStack>
-        </Box>
-      </IndexTable.Cell>
+              <div onClick={(e) => e.stopPropagation()}>
+                <TextField
+                  label="Warehouse Packaging Note"
+                  labelHidden
+                  value={currentNote}
+                  disabled={isRowProcessing || Boolean(dispatchedInfo)}
+                  onChange={(val) =>
+                    setWarehouseNotesByOrder((prev) => ({
+                      ...prev,
+                      [order.id]: val,
+                    }))
+                  }
+                  placeholder="Warehouse note (e.g., Fragile - Pack with bubble wrap)"
+                  autoComplete="off"
+                />
+              </div>
+            </BlockStack>
+          </Box>
+        </IndexTable.Cell>
 
         {/* Column 3: Items, Financial Status & COD Amount */}
         <IndexTable.Cell>
-          <BlockStack gap="100">
-            <InlineStack gap="150" blockAlign="center" wrap>
-              <Text variant="bodyMd" fontWeight="bold" as="span">
-                {`${order.currencyCode} ${order.totalPrice}`}
-              </Text>
-              {order.codAmount === 0 ? (
-                <Badge tone="success" progress="complete">
-                  PREPAID (৳0 COD)
-                </Badge>
-              ) : (
-                <Badge tone="attention">
-                  {`COD: ৳${order.codAmount}`}
-                </Badge>
-              )}
-            </InlineStack>
-
-            <Text variant="bodySm" tone="subdued" as="span">
-              {order.displayFinancialStatus ? `${order.displayFinancialStatus} • ` : ""}
-              {order.lineItems[0]?.sku || "SKU-001"} •{" "}
-              {order.lineItems[0]?.variantTitle || "Standard"}
-            </Text>
-          </BlockStack>
-        </IndexTable.Cell>
-
-        {/* Column 4 (PRO & ENTERPRISE ONLY): Task 4 Zero-Risk Status Sync & Discrepancy Flag */}
-        {isProOrEnterprise && (
-          <IndexTable.Cell>
-            <BlockStack gap="150">
+          <Box maxWidth="240px">
+            <BlockStack gap="100">
               <InlineStack gap="150" blockAlign="center" wrap>
-                <Badge
-                  tone={
-                    order.reconciliation.autoSyncedPaidFulfilled
-                      ? "success"
-                      : "info"
-                  }
-                >
-                  {order.reconciliation.autoSyncedPaidFulfilled
-                    ? `Courier: ${order.reconciliation.courierStatus.toUpperCase()} → Paid & Fulfilled`
-                    : `Courier: ${order.reconciliation.courierStatus.toUpperCase()}`}
-                </Badge>
+                <Text variant="bodyMd" fontWeight="bold" as="span">
+                  {`${order.currencyCode} ${order.totalPrice}`}
+                </Text>
+                {order.codAmount === 0 ? (
+                  <Badge tone="success" progress="complete">
+                    PREPAID (৳0 COD)
+                  </Badge>
+                ) : (
+                  <Badge tone="attention">
+                    {`COD: ৳${order.codAmount}`}
+                  </Badge>
+                )}
               </InlineStack>
 
-              {order.reconciliation.hasCashDiscrepancy ? (
-                <BlockStack gap="100">
-                  <Badge tone="critical">
-                    ⚠️ Cash Mismatch: Check Courier Panel
-                  </Badge>
-                  <Text variant="bodySm" tone="critical" as="span">
-                    {`Expected ${order.currencyCode} ${order.totalPrice} vs Collected ${order.currencyCode} ${order.reconciliation.courierCashCollected} (${order.reconciliation.discrepancyDelta})`}
-                  </Text>
-                </BlockStack>
-              ) : (
-                <BlockStack gap="050">
-                  <Badge tone="success">
-                    {`✓ COD Matched (${order.currencyCode} ${order.reconciliation.courierCashCollected})`}
-                  </Badge>
-                </BlockStack>
-              )}
+              <div style={{ whiteSpace: "normal", wordBreak: "break-word" }}>
+                <Text variant="bodySm" tone="subdued" as="span">
+                  {order.displayFinancialStatus ? `${order.displayFinancialStatus} • ` : ""}
+                  {order.lineItems.length > 0
+                    ? order.lineItems
+                        .map((item) =>
+                          [item.title, item.variantTitle, item.sku ? `(${item.sku})` : ""]
+                            .filter(Boolean)
+                            .join(" ")
+                        )
+                        .join(", ")
+                    : "No line items"}
+                </Text>
+              </div>
             </BlockStack>
-          </IndexTable.Cell>
-        )}
+          </Box>
+        </IndexTable.Cell>
 
-        {/* Column 5: Courier Select Dropdown & Manual Location Override */}
+        {/* Column 4: Courier Partner Select Dropdown + Live Status / Reconciliation */}
         <IndexTable.Cell>
           <div onClick={(e) => e.stopPropagation()}>
-            <Box minWidth="220px">
+            <Box minWidth="150px" maxWidth="190px">
               <BlockStack gap="100">
                 <Select
                   label={`Select courier for ${order.name}`}
@@ -3382,12 +3196,36 @@ export default function OrdersFulfillmentPage() {
                     )}
                   </>
                 )}
+
+                {/* Real Live Courier & Payment Status if booked */}
+                {dispatchedInfo ? (
+                  <BlockStack gap="050">
+                    <Badge tone={order.reconciliation.autoSyncedPaidFulfilled ? "success" : "info"}>
+                      {order.reconciliation.autoSyncedPaidFulfilled
+                        ? `Courier: ${order.reconciliation.courierStatus.toUpperCase()} → Paid & Fulfilled`
+                        : `Courier: ${order.reconciliation.courierStatus.toUpperCase()}`}
+                    </Badge>
+                    {order.reconciliation.hasCashDiscrepancy ? (
+                      <Text variant="bodySm" tone="critical" as="span">
+                        ⚠️ Mismatch: {order.currencyCode} {order.reconciliation.courierCashCollected} ({order.reconciliation.discrepancyDelta})
+                      </Text>
+                    ) : order.reconciliation.courierCashCollected !== "0.00" ? (
+                      <Text variant="bodySm" tone="subdued" as="span">
+                        ✓ COD: {order.currencyCode} {order.reconciliation.courierCashCollected}
+                      </Text>
+                    ) : null}
+                  </BlockStack>
+                ) : (
+                  <Text variant="bodySm" tone="subdued" as="span">
+                    Unbooked
+                  </Text>
+                )}
               </BlockStack>
             </Box>
           </div>
         </IndexTable.Cell>
 
-        {/* Column 6: Single Dispatch / Unlock / Consignment Badge */}
+        {/* Column 5: Single Dispatch / Unlock / Consignment Badge */}
         <IndexTable.Cell>
           <div onClick={(e) => e.stopPropagation()}>
             {isRowProcessing ? (
@@ -3472,6 +3310,7 @@ export default function OrdersFulfillmentPage() {
       `}</style>
 
       <Page
+        fullWidth
         title="Orders"
         subtitle={`Store: ${shopDomain} • Active Plan: ${
           usageSummary.currentPlan
@@ -4501,23 +4340,13 @@ export default function OrdersFulfillmentPage() {
             <Card padding={displayedOrders.length === 0 ? "600" : "0"}>
               {displayedOrders.length === 0 ? (
                 <Box paddingBlock="600" paddingInline="500">
-                  <BlockStack gap="300" inlineAlign="center">
+                  <BlockStack gap="200" inlineAlign="center">
                     <Text as="h3" variant="headingMd" alignment="center">
-                      No Unfulfilled Orders Found in This Store
+                      No Unfulfilled Orders Found
                     </Text>
                     <Text as="p" variant="bodyMd" tone="subdued" alignment="center">
-                      Load sample Bangladeshi COD orders below to test bulk booking,
-                      automatic courier selection, risk protection, and printable shipping
-                      labels and invoices.
+                      All orders have been fulfilled, or no unfulfilled orders currently exist in your Shopify store.
                     </Text>
-                    <Box paddingBlockStart="200">
-                      <Button
-                        variant="primary"
-                        onClick={() => setUseDemoOrders(true)}
-                      >
-                        Load Sample BD Orders for Full Suite Testing
-                      </Button>
-                    </Box>
                   </BlockStack>
                 </Box>
               ) : (
