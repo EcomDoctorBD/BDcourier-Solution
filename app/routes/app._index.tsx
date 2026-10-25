@@ -34,7 +34,6 @@ import {
   Box,
   Banner,
   ProgressBar,
-  Modal,
   Select,
 } from "@shopify/polaris";
 
@@ -106,7 +105,12 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   const currentPlan = String(storeConfig?.currentPlan || "Free");
   const monthlyOrderCount = Number(storeConfig?.monthlyOrderCount ?? 0);
-  const billingStatus = String(storeConfig?.billingStatus || "ACTIVE");
+  const rawBillingStatus = String(storeConfig?.billingStatus || "ACTIVE");
+  const billingStatus =
+    currentPlan.toLowerCase() === "free" &&
+    (!rawBillingStatus || rawBillingStatus === "UNINSTALLED")
+      ? "ACTIVE"
+      : rawBillingStatus;
 
   const tier = getPricingTier(currentPlan);
   const orderLimit = tier.orderLimit;
@@ -435,9 +439,6 @@ export default function CourierDashboard() {
   // Search string to preserve shop and host across in-app links
   const searchStr = searchParams.toString() ? `?${searchParams.toString()}` : "";
 
-  // Modal State for Subscription Plans
-  const [isPlanModalOpen, setIsPlanModalOpen] = useState(false);
-
   // Courier Forms Visibility States
   const [showPathaoForm, setShowPathaoForm] = useState(false);
   const [showSteadfastForm, setShowSteadfastForm] = useState(false);
@@ -533,9 +534,7 @@ export default function CourierDashboard() {
         if (actionData.actionType === "savePathao") setShowPathaoForm(false);
         if (actionData.actionType === "saveSteadfast") setShowSteadfastForm(false);
         if (actionData.actionType === "saveRedX") setShowRedxForm(false);
-        if (actionData.actionType === "switchPlan") setIsPlanModalOpen(false);
       } else if ((actionData as any)?.redirectToBilling) {
-        setIsPlanModalOpen(false);
         navigate(`/app/pricing${searchStr}`);
       }
     }
@@ -625,18 +624,6 @@ export default function CourierDashboard() {
     submit(formData, { method: "post" });
   };
 
-  const handleSwitchPlan = (tierId: string, price = 0) => {
-    if (price > 0) {
-      setIsPlanModalOpen(false);
-      navigate(`/app/pricing${searchStr}`);
-      return;
-    }
-    const formData = new FormData();
-    formData.append("actionType", "switchPlan");
-    formData.append("targetPlan", tierId);
-    submit(formData, { method: "post" });
-  };
-
   return (
     <Page
       title="Dashboard"
@@ -667,7 +654,11 @@ export default function CourierDashboard() {
                         ACTIVE SUBSCRIPTION
                       </Text>
                       <Badge tone="success">
-                        {subscription.billingStatus || "ACTIVE"}
+                        {subscription.currentPlan?.toLowerCase() === "free" &&
+                        (!subscription.billingStatus ||
+                          subscription.billingStatus === "UNINSTALLED")
+                          ? "ACTIVE"
+                          : subscription.billingStatus || "ACTIVE"}
                       </Badge>
                       {subscription.badgeLabel && (
                         <Badge tone="info">{subscription.badgeLabel}</Badge>
@@ -682,7 +673,7 @@ export default function CourierDashboard() {
                   <Button
                     variant="primary"
                     size="large"
-                    onClick={() => setIsPlanModalOpen(true)}
+                    url={`/app/pricing${searchStr}`}
                   >
                     View Subscription Plans
                   </Button>
@@ -1387,142 +1378,6 @@ export default function CourierDashboard() {
           </Layout.Section>
         </Layout>
       </BlockStack>
-
-      {/* ==================== 4. SUBSCRIPTION PLANS MODAL ==================== */}
-      <Modal
-        open={isPlanModalOpen}
-        onClose={() => setIsPlanModalOpen(false)}
-        title="Subscription & Pricing Plans"
-        size="large"
-      >
-        <Modal.Section>
-          <BlockStack gap="400">
-            <InlineStack align="space-between" blockAlign="center" wrap>
-              <Text as="p" variant="bodyMd" tone="subdued">
-                Select the ideal plan for your monthly shipping volume. All plans include automated dispatch to Pathao, Steadfast, and RedX.
-              </Text>
-              <Link to={`/app/pricing${searchStr}`}>
-                <Button variant="plain">View Detailed Billing Page →</Button>
-              </Link>
-            </InlineStack>
-
-            <Grid>
-              {allPlans.map((tier: PricingTierConfig) => {
-                const isCurrent =
-                  tier.id.toLowerCase() ===
-                  subscription.currentPlan.toLowerCase();
-
-                return (
-                  <Grid.Cell
-                    key={tier.id}
-                    columnSpan={{ xs: 6, sm: 6, md: 4, lg: 4, xl: 4 }}
-                  >
-                    <Card
-                      background={
-                        isCurrent
-                          ? "bg-surface-secondary"
-                          : tier.isMostPopular
-                          ? "bg-surface-active"
-                          : undefined
-                      }
-                      padding="400"
-                    >
-                      <BlockStack gap="300">
-                        {/* Header */}
-                        <InlineStack align="space-between" blockAlign="center">
-                          <Text as="h3" variant="headingMd" fontWeight="bold">
-                            {tier.name}
-                          </Text>
-                          {isCurrent ? (
-                            <Badge tone="success">Active</Badge>
-                          ) : tier.isMostPopular ? (
-                            <Badge tone="attention">Popular</Badge>
-                          ) : null}
-                        </InlineStack>
-
-                        {/* Price & Quota */}
-                        <BlockStack gap="050">
-                          <Text as="p" variant="headingLg" fontWeight="bold">
-                            {tier.priceDisplay}
-                            <Text as="span" variant="bodySm" tone="subdued">
-                              /month
-                            </Text>
-                          </Text>
-                          <Badge tone="info">{tier.orderLimitDisplay}</Badge>
-                        </BlockStack>
-
-                        <Divider />
-
-                        {/* Key Features */}
-                        <BlockStack gap="150">
-                          <InlineStack gap="150" blockAlign="center">
-                            <Box tone="subdued">
-                              <CheckFeatureIcon />
-                            </Box>
-                            <Text as="span" variant="bodySm">
-                              {tier.orderLimitDisplay}
-                            </Text>
-                          </InlineStack>
-
-                          <InlineStack gap="150" blockAlign="center">
-                            <Box tone="subdued">
-                              <CheckFeatureIcon />
-                            </Box>
-                            <Text as="span" variant="bodySm">
-                              {tier.coreRouting}
-                            </Text>
-                          </InlineStack>
-
-                          <InlineStack gap="150" blockAlign="center">
-                            <Box tone="subdued">
-                              <CheckFeatureIcon />
-                            </Box>
-                            <Text as="span" variant="bodySm">
-                              {tier.bulkLimit}
-                            </Text>
-                          </InlineStack>
-
-                          <InlineStack gap="150" blockAlign="center">
-                            <Box tone="subdued">
-                              <CheckFeatureIcon />
-                            </Box>
-                            <Text as="span" variant="bodySm">
-                              {tier.fraudProtection}
-                            </Text>
-                          </InlineStack>
-                        </BlockStack>
-
-                        <Divider />
-
-                        {/* Action Button */}
-                        {isCurrent ? (
-                          <Button disabled fullWidth>
-                            Current Active Plan
-                          </Button>
-                        ) : (
-                          <Button
-                            variant={tier.isMostPopular ? "primary" : "secondary"}
-                            fullWidth
-                            loading={
-                              isSwitchingPlan &&
-                              pendingTargetPlan === tier.id
-                            }
-                            onClick={() => handleSwitchPlan(tier.id, tier.price)}
-                          >
-                            {tier.price > 0
-                              ? `Upgrade to ${tier.name} →`
-                              : `Switch to ${tier.name}`}
-                          </Button>
-                        )}
-                      </BlockStack>
-                    </Card>
-                  </Grid.Cell>
-                );
-              })}
-            </Grid>
-          </BlockStack>
-        </Modal.Section>
-      </Modal>
     </Page>
   );
 }

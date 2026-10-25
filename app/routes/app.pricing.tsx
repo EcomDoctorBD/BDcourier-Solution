@@ -724,30 +724,64 @@ export default function PricingAndBillingPage() {
                   const isSubmittingThisTier =
                     navigation.state === "submitting" &&
                     submittingPlanId === tier.id;
+                  const isGrowthOrPopular =
+                    tier.id.toLowerCase() === "growth" || Boolean(tier.isMostPopular);
 
                   return (
                     <Grid.Cell
                       key={tier.id}
                       columnSpan={{ xs: 6, sm: 6, md: 3, lg: 4, xl: 4 }}
                     >
-                      <Card>
+                      <Card
+                        background={
+                          isCurrentPlan
+                            ? "bg-surface-secondary"
+                            : isGrowthOrPopular
+                            ? "bg-surface-active"
+                            : undefined
+                        }
+                      >
                         <BlockStack gap="400">
-                          {/* Tier Header & Most Popular / Active Badges */}
-                          <BlockStack gap="150">
+                          {/* Tier Header & Clean Badges */}
+                          <BlockStack gap="200">
                             <InlineStack
                               align="space-between"
                               blockAlign="center"
                               wrap
                             >
-                              <Text as="h3" variant="headingMd">
+                              <Text as="h3" variant="headingMd" fontWeight="bold">
                                 {tier.name}
                               </Text>
                               {isCurrentPlan ? (
-                                <Badge tone="success">Your Active Plan</Badge>
-                              ) : tier.isMostPopular ? (
-                                <Badge tone="magic">Most Popular</Badge>
-                              ) : tier.badgeLabel ? (
-                                <Badge tone="info">{tier.badgeLabel}</Badge>
+                                <span
+                                  style={{
+                                    backgroundColor: "#BDF5D6",
+                                    color: "#065F46",
+                                    fontSize: "12px",
+                                    fontWeight: 600,
+                                    padding: "3px 10px",
+                                    borderRadius: "12px",
+                                    lineHeight: "1.2",
+                                    display: "inline-block",
+                                  }}
+                                >
+                                  Active
+                                </span>
+                              ) : isGrowthOrPopular ? (
+                                <span
+                                  style={{
+                                    backgroundColor: "#FEF08A",
+                                    color: "#713F12",
+                                    fontSize: "12px",
+                                    fontWeight: 600,
+                                    padding: "3px 10px",
+                                    borderRadius: "12px",
+                                    lineHeight: "1.2",
+                                    display: "inline-block",
+                                  }}
+                                >
+                                  Popular
+                                </span>
                               ) : null}
                             </InlineStack>
 
@@ -760,28 +794,41 @@ export default function PricingAndBillingPage() {
                                 {tier.priceDisplay}
                               </Text>
                               <Text as="span" variant="bodySm" tone="subdued">
-                                / mo
+                                /month
                               </Text>
                             </InlineStack>
 
-                            <Box>
-                              <Badge
-                                tone={
-                                  isCurrentPlan
-                                    ? "success"
-                                    : tier.isMostPopular
-                                    ? "warning"
-                                    : "attention"
-                                }
+                            {/* Uniform Sky-Blue Order Limit Bar */}
+                            <div
+                              style={{
+                                width: "100%",
+                                backgroundColor: "#E0F2FE",
+                                borderRadius: "6px",
+                                padding: "6px 12px",
+                                boxSizing: "border-box",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                              }}
+                            >
+                              <span
+                                style={{
+                                  color: "#0369A1",
+                                  fontWeight: 700,
+                                  fontSize: "13px",
+                                  lineHeight: "1.2",
+                                }}
                               >
-                                {`Order Limit: ${tier.orderLimitDisplay}`}
-                              </Badge>
-                            </Box>
+                                {tier.orderLimit
+                                  ? `${tier.orderLimit.toLocaleString()} orders/month`
+                                  : tier.orderLimitDisplay}
+                              </span>
+                            </div>
                           </BlockStack>
 
                           <Divider />
 
-                          {/* Structured Tier Features List */}
+                          {/* Structured Tier Features List with Dark Charcoal Circular Checkmarks */}
                           <BlockStack gap="200">
                             {tier.features.map((featureText) => (
                               <InlineStack
@@ -790,12 +837,32 @@ export default function PricingAndBillingPage() {
                                 blockAlign="start"
                                 wrap={false}
                               >
-                                <Box>
-                                  <Icon
-                                    source={CheckFeatureIcon}
-                                    tone="success"
-                                  />
-                                </Box>
+                                <div
+                                  style={{
+                                    width: "18px",
+                                    height: "18px",
+                                    minWidth: "18px",
+                                    display: "flex",
+                                    alignItems: "center",
+                                    justifyContent: "center",
+                                    marginTop: "2px",
+                                    flexShrink: 0,
+                                  }}
+                                >
+                                  <svg
+                                    viewBox="0 0 20 20"
+                                    fill="#202223"
+                                    width="18"
+                                    height="18"
+                                    aria-hidden="true"
+                                  >
+                                    <path
+                                      fillRule="evenodd"
+                                      d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm3.857-9.809a.75.75 0 0 0-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 1 0-1.06 1.061l2.5 2.5a.75.75 0 0 0 1.137-.089l4-5.5Z"
+                                      clipRule="evenodd"
+                                    />
+                                  </svg>
+                                </div>
                                 <Text as="span" variant="bodySm">
                                   {featureText}
                                 </Text>
@@ -805,31 +872,68 @@ export default function PricingAndBillingPage() {
 
                           <Divider />
 
-                          {/* Upgrade / Subscribe / Active Action Button */}
+                          {/* Upgrade / Subscribe / Active Action Button (Matching Popup Styling) */}
                           <Box>
-                            {isCurrentPlan ||
-                            (tier.id === "Free" &&
-                              subscription.currentPlan === "Free") ? (
-                              <Button fullWidth disabled>
-                                Your Active Plan
-                              </Button>
-                            ) : (
-                              <Button
-                                fullWidth
-                                variant={
-                                  tier.isMostPopular ||
-                                  tier.id === "Pro" ||
-                                  tier.id === "Advanced"
-                                    ? "primary"
-                                    : "secondary"
-                                }
-                                loading={isSubmittingThisTier}
-                                onClick={() => handleSelectPlan(tier.id)}
+                            {isCurrentPlan ? (
+                              <button
+                                type="button"
+                                disabled
+                                style={{
+                                  width: "100%",
+                                  padding: "10px 16px",
+                                  borderRadius: "8px",
+                                  fontSize: "14px",
+                                  fontWeight: 600,
+                                  border: "none",
+                                  backgroundColor: "#E5E7EB",
+                                  color: "#9CA3AF",
+                                  cursor: "default",
+                                  display: "flex",
+                                  alignItems: "center",
+                                  justifyContent: "center",
+                                }}
                               >
-                                {tier.price === 0
-                                  ? "Downgrade to Free"
-                                  : `Upgrade to ${tier.name}`}
-                              </Button>
+                                Current Active Plan
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                disabled={isSubmittingThisTier}
+                                onClick={() => handleSelectPlan(tier.id)}
+                                style={{
+                                  width: "100%",
+                                  padding: "10px 16px",
+                                  borderRadius: "8px",
+                                  fontSize: "14px",
+                                  fontWeight: 600,
+                                  cursor: isSubmittingThisTier ? "wait" : "pointer",
+                                  transition: "all 0.15s ease-in-out",
+                                  display: "flex",
+                                  alignItems: "center",
+                                  justifyContent: "center",
+                                  gap: "8px",
+                                  border: isGrowthOrPopular
+                                    ? "none"
+                                    : "1px solid #D1D5DB",
+                                  backgroundColor: isGrowthOrPopular
+                                    ? "#202223"
+                                    : "#FFFFFF",
+                                  color: isGrowthOrPopular
+                                    ? "#FFFFFF"
+                                    : "#1F2937",
+                                  boxShadow: isGrowthOrPopular
+                                    ? "0 1px 3px rgba(0,0,0,0.12)"
+                                    : "0 1px 2px rgba(0,0,0,0.05)",
+                                }}
+                              >
+                                {isSubmittingThisTier ? (
+                                  <span>Processing...</span>
+                                ) : tier.price === 0 ? (
+                                  "Downgrade to Free"
+                                ) : (
+                                  `Upgrade to ${tier.name} →`
+                                )}
+                              </button>
                             )}
                           </Box>
                         </BlockStack>
