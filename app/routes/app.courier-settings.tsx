@@ -35,6 +35,7 @@ import {
 } from "@shopify/polaris";
 
 import { authenticate } from "../shopify.server";
+import { CourierLogo } from "../components/CourierLogo";
 import CourierConfig, {
   connectDB,
   AddressCache,
@@ -1040,13 +1041,8 @@ export default function CourierSettingsPage() {
               <Card padding="500">
                 <BlockStack gap="400">
                   <InlineStack align="space-between" blockAlign="center">
-                    <InlineStack gap="200" blockAlign="center">
-                      <Box>
-                        <Icon
-                          source={CourierTruckIcon}
-                          tone={isPathaoConnected ? "success" : "subdued"}
-                        />
-                      </Box>
+                    <InlineStack gap="300" blockAlign="center">
+                      <CourierLogo courier="pathao" size={44} />
                       <Text as="h3" variant="headingMd">
                         Pathao Courier
                       </Text>
@@ -1265,13 +1261,8 @@ export default function CourierSettingsPage() {
               <Card padding="500">
                 <BlockStack gap="400">
                   <InlineStack align="space-between" blockAlign="center">
-                    <InlineStack gap="200" blockAlign="center">
-                      <Box>
-                        <Icon
-                          source={CourierTruckIcon}
-                          tone={isSteadfastConnected ? "success" : "subdued"}
-                        />
-                      </Box>
+                    <InlineStack gap="300" blockAlign="center">
+                      <CourierLogo courier="steadfast" size={44} />
                       <Text as="h3" variant="headingMd">
                         Steadfast Courier
                       </Text>
@@ -1405,13 +1396,8 @@ export default function CourierSettingsPage() {
               <Card padding="500">
                 <BlockStack gap="400">
                   <InlineStack align="space-between" blockAlign="center">
-                    <InlineStack gap="200" blockAlign="center">
-                      <Box>
-                        <Icon
-                          source={CourierTruckIcon}
-                          tone={isRedxConnected ? "success" : "subdued"}
-                        />
-                      </Box>
+                    <InlineStack gap="300" blockAlign="center">
+                      <CourierLogo courier="redx" size={44} />
                       <Text as="h3" variant="headingMd">
                         REDX Delivery
                       </Text>

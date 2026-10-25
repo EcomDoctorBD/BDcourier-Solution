@@ -21,7 +21,6 @@ import {
   Button,
   Divider,
   Box,
-  Grid,
   Banner,
 } from "@shopify/polaris";
 
@@ -363,80 +362,6 @@ export default function HelpAndSupportRoute() {
                 </BlockStack>
               </Card>
             )}
-          </Layout.Section>
-
-          {/* Quick FAQ and Guides */}
-          <Layout.Section>
-            <Grid>
-              <Grid.Cell columnSpan={{ xs: 6, sm: 6, md: 2, lg: 3, xl: 3 }}>
-                <Card>
-                  <BlockStack gap="200">
-                    <Text as="h3" variant="headingSm">
-                      📦 Orders & Booking
-                    </Text>
-                    <Text as="p" variant="bodySm" tone="subdued">
-                      Learn how AI address cleaning corrects Bangladeshi
-                      districts and thanas on click before dispatching.
-                    </Text>
-                    <Link to={`/app/orders${searchStr}`}>
-                      <Button variant="plain">Go to Orders →</Button>
-                    </Link>
-                  </BlockStack>
-                </Card>
-              </Grid.Cell>
-
-              <Grid.Cell columnSpan={{ xs: 6, sm: 6, md: 2, lg: 3, xl: 3 }}>
-                <Card>
-                  <BlockStack gap="200">
-                    <Text as="h3" variant="headingSm">
-                      🚚 Shipping Rates
-                    </Text>
-                    <Text as="p" variant="bodySm" tone="subdued">
-                      Configure custom base rates, dynamic weight tiers, and
-                      cash-on-delivery handling fees for all 64 districts.
-                    </Text>
-                    <Link to={`/app/shipping-rates${searchStr}`}>
-                      <Button variant="plain">Configure Rates →</Button>
-                    </Link>
-                  </BlockStack>
-                </Card>
-              </Grid.Cell>
-
-              <Grid.Cell columnSpan={{ xs: 6, sm: 6, md: 2, lg: 3, xl: 3 }}>
-                <Card>
-                  <BlockStack gap="200">
-                    <Text as="h3" variant="headingSm">
-                      🔌 Google Sheets
-                    </Text>
-                    <Text as="p" variant="bodySm" tone="subdued">
-                      Stream every booked parcel, tracking number, and customer
-                      phone number automatically to your spreadsheets in
-                      real-time.
-                    </Text>
-                    <Link to={`/app/integrations${searchStr}`}>
-                      <Button variant="plain">Open Integrations →</Button>
-                    </Link>
-                  </BlockStack>
-                </Card>
-              </Grid.Cell>
-
-              <Grid.Cell columnSpan={{ xs: 6, sm: 6, md: 2, lg: 3, xl: 3 }}>
-                <Card>
-                  <BlockStack gap="200">
-                    <Text as="h3" variant="headingSm">
-                      ⚙️ Courier Gateways
-                    </Text>
-                    <Text as="p" variant="bodySm" tone="subdued">
-                      Manage merchant API credentials for Pathao, Steadfast, and
-                      REDX delivery services.
-                    </Text>
-                    <Link to={`/app/courier-settings${searchStr}`}>
-                      <Button variant="plain">Courier Settings →</Button>
-                    </Link>
-                  </BlockStack>
-                </Card>
-              </Grid.Cell>
-            </Grid>
           </Layout.Section>
         </Layout>
       </BlockStack>
