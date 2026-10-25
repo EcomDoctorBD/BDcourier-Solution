@@ -1,4 +1,3 @@
-import { useState } from "react";
 import {
   json,
   type HeadersFunction,
@@ -6,7 +5,6 @@ import {
 } from "@remix-run/node";
 import {
   useLoaderData,
-  useNavigate,
   useSearchParams,
   Link,
 } from "@remix-run/react";
@@ -23,7 +21,6 @@ import {
   Button,
   Divider,
   Box,
-  Modal,
   Grid,
   Banner,
 } from "@shopify/polaris";
@@ -96,9 +93,7 @@ export default function HelpAndSupportRoute() {
     whatsappNumber,
     tutorialLink,
   } = useLoaderData<typeof loader>();
-  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const [isModalOpen, setIsModalOpen] = useState(true);
 
   const searchStr = searchParams.toString() ? `?${searchParams.toString()}` : "";
 
@@ -127,11 +122,6 @@ export default function HelpAndSupportRoute() {
   );
   const whatsappUrl = `https://api.whatsapp.com/send?phone=${normalizedWhatsAppDigits}&text=${whatsappMessage}`;
 
-  const handleClose = () => {
-    setIsModalOpen(false);
-    navigate(-1);
-  };
-
   return (
     <Page
       title="Help & Support"
@@ -140,9 +130,9 @@ export default function HelpAndSupportRoute() {
     >
       <TitleBar title="Help & Support" />
 
-      {/* ==================== BACKGROUND HELP CENTER ==================== */}
       <BlockStack gap="500">
         <Layout>
+          {/* Support Tier Overview */}
           <Layout.Section>
             <Card padding="500">
               <BlockStack gap="400">
@@ -166,9 +156,13 @@ export default function HelpAndSupportRoute() {
                     </Text>
                   </BlockStack>
 
-                  <Button variant="primary" onClick={() => setIsModalOpen(true)}>
-                    Open Support Modal
-                  </Button>
+                  <InlineStack gap="200">
+                    <Badge tone={isUnlimitedTier ? "success" : "info"}>
+                      {isUnlimitedTier
+                        ? `${currentPlan} (Unlimited Tier)`
+                        : `${currentPlan} Tier`}
+                    </Badge>
+                  </InlineStack>
                 </InlineStack>
 
                 <Divider />
@@ -182,108 +176,9 @@ export default function HelpAndSupportRoute() {
             </Card>
           </Layout.Section>
 
-          {/* Quick FAQ and Guides */}
-          <Layout.Section>
-            <Grid>
-              <Grid.Cell columnSpan={{ xs: 6, sm: 6, md: 4, lg: 4, xl: 4 }}>
-                <Card>
-                  <BlockStack gap="200">
-                    <Text as="h3" variant="headingSm">
-                      📦 Orders & Courier Booking
-                    </Text>
-                    <Text as="p" variant="bodySm" tone="subdued">
-                      Learn how AI address cleaning corrects Bangladeshi
-                      districts and thanas on click before dispatching to Pathao
-                      or Steadfast.
-                    </Text>
-                    <Link to={`/app/orders${searchStr}`}>
-                      <Button variant="plain">Go to Orders →</Button>
-                    </Link>
-                  </BlockStack>
-                </Card>
-              </Grid.Cell>
-
-              <Grid.Cell columnSpan={{ xs: 6, sm: 6, md: 4, lg: 4, xl: 4 }}>
-                <Card>
-                  <BlockStack gap="200">
-                    <Text as="h3" variant="headingSm">
-                      🚚 Shipping Rates & Zones
-                    </Text>
-                    <Text as="p" variant="bodySm" tone="subdued">
-                      Configure custom base rates, dynamic weight tiers, and
-                      cash-on-delivery handling fees for all 64 districts.
-                    </Text>
-                    <Link to={`/app/shipping-rates${searchStr}`}>
-                      <Button variant="plain">Configure Rates →</Button>
-                    </Link>
-                  </BlockStack>
-                </Card>
-              </Grid.Cell>
-
-              <Grid.Cell columnSpan={{ xs: 6, sm: 6, md: 4, lg: 4, xl: 4 }}>
-                <Card>
-                  <BlockStack gap="200">
-                    <Text as="h3" variant="headingSm">
-                      🔌 Google Sheets Auto-Sync
-                    </Text>
-                    <Text as="p" variant="bodySm" tone="subdued">
-                      Stream every booked parcel, tracking number, and customer
-                      phone number automatically to your spreadsheets in
-                      real-time.
-                    </Text>
-                    <Link to={`/app/integrations${searchStr}`}>
-                      <Button variant="plain">Open Integrations →</Button>
-                    </Link>
-                  </BlockStack>
-                </Card>
-              </Grid.Cell>
-            </Grid>
-          </Layout.Section>
-        </Layout>
-      </BlockStack>
-
-      {/* ==================== DYNAMIC OVERLAY MODAL ==================== */}
-      <Modal
-        open={isModalOpen}
-        onClose={handleClose}
-        title="💬 Help & Support"
-        size="large"
-        secondaryActions={[
-          {
-            content: "Close",
-            onAction: handleClose,
-          },
-        ]}
-      >
-        <Modal.Section>
-          <BlockStack gap="500">
-            {/* Active Tier Status Overview */}
-            <Card background="bg-surface-secondary" padding="400">
-              <InlineStack align="space-between" blockAlign="center" wrap>
-                <BlockStack gap="050">
-                  <Text as="span" variant="bodySm" tone="subdued">
-                    Store Domain
-                  </Text>
-                  <Text as="span" variant="bodyMd" fontWeight="semibold">
-                    {shopDomain}
-                  </Text>
-                </BlockStack>
-
-                <InlineStack gap="200" blockAlign="center">
-                  <Text as="span" variant="bodySm" tone="subdued">
-                    Active Subscription Tier:
-                  </Text>
-                  <Badge tone={isUnlimitedTier ? "success" : "info"}>
-                    {isUnlimitedTier
-                      ? `${currentPlan} (Unlimited Tier)`
-                      : `${currentPlan} Tier`}
-                  </Badge>
-                </InlineStack>
-              </InlineStack>
-            </Card>
-
-            {/* Dynamic Setup Tutorial Video Card */}
-            {tutorialLink ? (
+          {/* Dynamic Setup Tutorial Video Card */}
+          {tutorialLink ? (
+            <Layout.Section>
               <Card background="bg-surface-secondary" padding="400">
                 <InlineStack align="space-between" blockAlign="center" wrap>
                   <BlockStack gap="050">
@@ -307,9 +202,11 @@ export default function HelpAndSupportRoute() {
                   </Button>
                 </InlineStack>
               </Card>
-            ) : null}
+            </Layout.Section>
+          ) : null}
 
-            {/* Conditional Communication Channel based on Tier */}
+          {/* Contact Channel Section */}
+          <Layout.Section>
             {isUnlimitedTier ? (
               /* ==================== ACTIVE UNLIMITED / PRIORITY TIER ==================== */
               <Card padding="500">
@@ -466,9 +363,83 @@ export default function HelpAndSupportRoute() {
                 </BlockStack>
               </Card>
             )}
-          </BlockStack>
-        </Modal.Section>
-      </Modal>
+          </Layout.Section>
+
+          {/* Quick FAQ and Guides */}
+          <Layout.Section>
+            <Grid>
+              <Grid.Cell columnSpan={{ xs: 6, sm: 6, md: 2, lg: 3, xl: 3 }}>
+                <Card>
+                  <BlockStack gap="200">
+                    <Text as="h3" variant="headingSm">
+                      📦 Orders & Booking
+                    </Text>
+                    <Text as="p" variant="bodySm" tone="subdued">
+                      Learn how AI address cleaning corrects Bangladeshi
+                      districts and thanas on click before dispatching.
+                    </Text>
+                    <Link to={`/app/orders${searchStr}`}>
+                      <Button variant="plain">Go to Orders →</Button>
+                    </Link>
+                  </BlockStack>
+                </Card>
+              </Grid.Cell>
+
+              <Grid.Cell columnSpan={{ xs: 6, sm: 6, md: 2, lg: 3, xl: 3 }}>
+                <Card>
+                  <BlockStack gap="200">
+                    <Text as="h3" variant="headingSm">
+                      🚚 Shipping Rates
+                    </Text>
+                    <Text as="p" variant="bodySm" tone="subdued">
+                      Configure custom base rates, dynamic weight tiers, and
+                      cash-on-delivery handling fees for all 64 districts.
+                    </Text>
+                    <Link to={`/app/shipping-rates${searchStr}`}>
+                      <Button variant="plain">Configure Rates →</Button>
+                    </Link>
+                  </BlockStack>
+                </Card>
+              </Grid.Cell>
+
+              <Grid.Cell columnSpan={{ xs: 6, sm: 6, md: 2, lg: 3, xl: 3 }}>
+                <Card>
+                  <BlockStack gap="200">
+                    <Text as="h3" variant="headingSm">
+                      🔌 Google Sheets
+                    </Text>
+                    <Text as="p" variant="bodySm" tone="subdued">
+                      Stream every booked parcel, tracking number, and customer
+                      phone number automatically to your spreadsheets in
+                      real-time.
+                    </Text>
+                    <Link to={`/app/integrations${searchStr}`}>
+                      <Button variant="plain">Open Integrations →</Button>
+                    </Link>
+                  </BlockStack>
+                </Card>
+              </Grid.Cell>
+
+              <Grid.Cell columnSpan={{ xs: 6, sm: 6, md: 2, lg: 3, xl: 3 }}>
+                <Card>
+                  <BlockStack gap="200">
+                    <Text as="h3" variant="headingSm">
+                      ⚙️ Courier Gateways
+                    </Text>
+                    <Text as="p" variant="bodySm" tone="subdued">
+                      Manage merchant API credentials for Pathao, Steadfast, and
+                      REDX delivery services.
+                    </Text>
+                    <Link to={`/app/courier-settings${searchStr}`}>
+                      <Button variant="plain">Courier Settings →</Button>
+                    </Link>
+                  </BlockStack>
+                </Card>
+              </Grid.Cell>
+            </Grid>
+          </Layout.Section>
+        </Layout>
+      </BlockStack>
     </Page>
   );
 }

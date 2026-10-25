@@ -523,9 +523,6 @@ export default function IntegrationsPage() {
                   <Text variant="headingSm" as="h4">
                     Need Custom Spreadsheet or API Assistance?
                   </Text>
-                  <Text variant="bodySm" tone="subdued">
-                    Contact our engineering support team directly at {supportEmail} or via WhatsApp Helpline ({whatsappHelpline}).
-                  </Text>
                 </BlockStack>
                 <InlineStack gap="200" blockAlign="center">
                   <Button

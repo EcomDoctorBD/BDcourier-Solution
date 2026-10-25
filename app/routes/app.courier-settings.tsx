@@ -660,7 +660,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       success: true,
       actionType: "saveAiSettings",
       message: aiAddressCleaningEnabled
-        ? "Gemini AI Address Normalizer is active. Cleaned addresses will be cached in MongoDB upon courier dispatch."
+        ? "Gemini AI Address Normalizer is active. Cleaned addresses will be automatically saved upon courier dispatch."
         : "Gemini AI Address Normalizer disabled. Raw Shopify customer addresses will be forwarded directly.",
     });
   }
@@ -703,6 +703,11 @@ export default function CourierSettingsPage() {
   const steadfastWebhookUrl = `${appUrl}/api/webhooks/steadfast?shop=${encodeURIComponent(shopDomain)}`;
   const redxWebhookUrl = `${appUrl}/api/webhooks/redx?shop=${encodeURIComponent(shopDomain)}`;
   const webhookSecret = courierConfig.webhookSecret || "";
+
+  // Collapsible gateway form states (compact summary by default)
+  const [showPathaoForm, setShowPathaoForm] = useState(false);
+  const [showSteadfastForm, setShowSteadfastForm] = useState(false);
+  const [showRedxForm, setShowRedxForm] = useState(false);
 
   // ==================== 1. PATHAO GATEWAY STATE ====================
   const [pathaoEnvironment, setPathaoEnvironment] = useState(
@@ -829,6 +834,15 @@ export default function CourierSettingsPage() {
   useEffect(() => {
     if (actionData) {
       setShowBanner(true);
+      if (actionData.actionType === "fetchPathaoStores" || actionData.actionType === "savePathao") {
+        setShowPathaoForm(true);
+      }
+      if (actionData.actionType === "saveSteadfast") {
+        setShowSteadfastForm(true);
+      }
+      if (actionData.actionType === "fetchRedxStores" || actionData.actionType === "saveRedX") {
+        setShowRedxForm(true);
+      }
       if (actionData.actionType === "fetchPathaoStores" && (actionData as any).stores) {
         const fetched = (actionData as any).stores as PathaoStore[];
         setPathaoStores(fetched);
@@ -1050,175 +1064,198 @@ export default function CourierSettingsPage() {
                     Express parcel delivery and real-time consignment tracking via Pathao Merchant API.
                   </Text>
 
-                  <Divider />
+                  <Text as="p" variant="bodyXs" tone="subdued">
+                    Required: Client ID, Client Secret, Username, Password, Store ID
+                  </Text>
 
-                  <BlockStack gap="300">
-                    <Select
-                      label="API Environment"
-                      options={[
-                        { label: "Production (Hermes Live)", value: "production" },
-                        { label: "Sandbox / Test API", value: "sandbox" },
-                      ]}
-                      value={pathaoEnvironment}
-                      onChange={(val) => setPathaoEnvironment(val)}
-                    />
-
-                    <TextField
-                      label="Client ID"
-                      value={pathaoClientId}
-                      onChange={(val) => setPathaoClientId(val)}
-                      placeholder="e.g. pt_client_live_..."
-                      autoComplete="off"
-                    />
-
-                    <TextField
-                      label="Client Secret"
-                      type={showPathaoSecret ? "text" : "password"}
-                      value={pathaoSecret}
-                      onChange={(val) => setPathaoSecret(val)}
-                      placeholder="••••••••••••••••"
-                      autoComplete="off"
-                      connectedRight={
-                        <Button
-                          variant="plain"
-                          onClick={() => setShowPathaoSecret((prev) => !prev)}
-                        >
-                          {showPathaoSecret ? "Hide" : "Show"}
-                        </Button>
-                      }
-                      helpText="Stored encrypted with AES-256-GCM."
-                    />
-
-                    <TextField
-                      label="Merchant Username (Email)"
-                      value={pathaoUsername}
-                      onChange={(val) => setPathaoUsername(val)}
-                      placeholder="merchant@example.com"
-                      autoComplete="off"
-                      helpText="Merchant Portal login email (used for OAuth token authorization)."
-                    />
-
-                    <TextField
-                      label="Merchant Password"
-                      type={showPathaoPassword ? "text" : "password"}
-                      value={pathaoPassword}
-                      onChange={(val) => setPathaoPassword(val)}
-                      placeholder="••••••••••••••••"
-                      autoComplete="off"
-                      connectedRight={
-                        <Button
-                          variant="plain"
-                          onClick={() => setShowPathaoPassword((prev) => !prev)}
-                        >
-                          {showPathaoPassword ? "Hide" : "Show"}
-                        </Button>
-                      }
-                      helpText="Stored encrypted with AES-256-GCM. Used to renew OAuth tokens."
-                    />
-
-                    <InlineStack align="start">
-                      <Button
-                        size="medium"
-                        loading={isFetchingPathaoStores}
-                        onClick={handleFetchPathaoStores}
-                        disabled={!pathaoClientId || !pathaoSecret || !pathaoUsername || !pathaoPassword}
-                      >
-                        Verify &amp; Fetch Stores
-                      </Button>
-                    </InlineStack>
-
-                    {pathaoStores.length > 0 && (
-                      <Select
-                        label="Pickup Store"
-                        options={[
-                          { label: "-- Select a Pickup Store --", value: "" },
-                          ...pathaoStores.map((s) => ({
-                            label: `${s.store_name} (${s.store_address || "ID: " + s.store_id})`,
-                            value: s.store_id,
-                          })),
-                        ]}
-                        value={pathaoStoreId}
-                        onChange={(val) => {
-                          setPathaoStoreId(val);
-                          const matched = pathaoStores.find((s) => s.store_id === val);
-                          if (matched) setPathaoStoreName(matched.store_name);
-                        }}
-                        helpText={
-                          pathaoStoreName
-                            ? `Selected: ${pathaoStoreName} (ID: ${pathaoStoreId})`
-                            : "Choose from verified stores"
-                        }
-                      />
-                    )}
-
-                    <TextField
-                      label="Store ID"
-                      value={pathaoStoreId}
-                      onChange={(val) => setPathaoStoreId(val)}
-                      placeholder="e.g. 10248"
-                      autoComplete="off"
-                      helpText={
-                        pathaoStoreName
-                          ? `Connected store: ${pathaoStoreName}`
-                          : "Manual fallback or click 'Verify & Fetch Stores' above."
-                      }
-                    />
-
-                    <Divider />
-
-                    <BlockStack gap="200">
-                      <InlineStack align="space-between" blockAlign="center">
-                        <Text as="h4" variant="headingSm">
-                          Real-Time Webhook (Two-Way Status Sync)
-                        </Text>
-                        <Badge tone="info">Live Webhook</Badge>
-                      </InlineStack>
-                      <Text as="p" variant="bodyXs" tone="subdued">
-                        Paste in Pathao Developer API &rarr; Webhook Integration:
-                      </Text>
-                      <TextField
-                        label="Callback URL"
-                        value={pathaoWebhookUrl}
-                        readOnly
-                        autoComplete="off"
-                        connectedRight={
-                          <Button
-                            onClick={() =>
-                              copyToClipboard(pathaoWebhookUrl, "pathao_url")
-                            }
-                          >
-                            {copiedKey === "pathao_url" ? "Copied!" : "Copy URL"}
-                          </Button>
-                        }
-                      />
-                      <TextField
-                        label="Webhook Secret"
-                        value={webhookSecret}
-                        readOnly
-                        autoComplete="off"
-                        connectedRight={
-                          <Button
-                            onClick={() =>
-                              copyToClipboard(webhookSecret, "pathao_secret")
-                            }
-                          >
-                            {copiedKey === "pathao_secret" ? "Copied!" : "Copy Secret"}
-                          </Button>
-                        }
-                        helpText="Required for automated verification handshake in Pathao developer portal."
-                      />
-                    </BlockStack>
-                  </BlockStack>
-
-                  <InlineStack align="end">
+                  <InlineStack align="start">
                     <Button
-                      variant="primary"
-                      loading={isSubmittingPathao}
-                      onClick={handleSavePathao}
+                      onClick={() => setShowPathaoForm((prev) => !prev)}
                     >
-                      Save Pathao Settings
+                      {showPathaoForm
+                        ? "Hide Configuration"
+                        : isPathaoConnected
+                        ? "Update Pathao"
+                        : "Configure Pathao"}
                     </Button>
                   </InlineStack>
+
+                  {showPathaoForm && (
+                    <BlockStack gap="400">
+                      <Divider />
+
+                      <BlockStack gap="300">
+                        <Select
+                          label="API Environment"
+                          options={[
+                            { label: "Production (Hermes Live)", value: "production" },
+                            { label: "Sandbox / Test API", value: "sandbox" },
+                          ]}
+                          value={pathaoEnvironment}
+                          onChange={(val) => setPathaoEnvironment(val)}
+                        />
+
+                        <TextField
+                          label="Client ID"
+                          value={pathaoClientId}
+                          onChange={(val) => setPathaoClientId(val)}
+                          placeholder="e.g. pt_client_live_..."
+                          autoComplete="off"
+                        />
+
+                        <TextField
+                          label="Client Secret"
+                          type={showPathaoSecret ? "text" : "password"}
+                          value={pathaoSecret}
+                          onChange={(val) => setPathaoSecret(val)}
+                          placeholder="••••••••••••••••"
+                          autoComplete="off"
+                          connectedRight={
+                            <Button
+                              variant="plain"
+                              onClick={() => setShowPathaoSecret((prev) => !prev)}
+                            >
+                              {showPathaoSecret ? "Hide" : "Show"}
+                            </Button>
+                          }
+                          helpText="Stored encrypted with AES-256-GCM."
+                        />
+
+                        <TextField
+                          label="Merchant Username (Email)"
+                          value={pathaoUsername}
+                          onChange={(val) => setPathaoUsername(val)}
+                          placeholder="merchant@example.com"
+                          autoComplete="off"
+                          helpText="Merchant Portal login email (used for OAuth token authorization)."
+                        />
+
+                        <TextField
+                          label="Merchant Password"
+                          type={showPathaoPassword ? "text" : "password"}
+                          value={pathaoPassword}
+                          onChange={(val) => setPathaoPassword(val)}
+                          placeholder="••••••••••••••••"
+                          autoComplete="off"
+                          connectedRight={
+                            <Button
+                              variant="plain"
+                              onClick={() => setShowPathaoPassword((prev) => !prev)}
+                            >
+                              {showPathaoPassword ? "Hide" : "Show"}
+                            </Button>
+                          }
+                          helpText="Stored encrypted with AES-256-GCM. Used to renew OAuth tokens."
+                        />
+
+                        <InlineStack align="start">
+                          <Button
+                            size="medium"
+                            loading={isFetchingPathaoStores}
+                            onClick={handleFetchPathaoStores}
+                            disabled={!pathaoClientId || !pathaoSecret || !pathaoUsername || !pathaoPassword}
+                          >
+                            Verify &amp; Fetch Stores
+                          </Button>
+                        </InlineStack>
+
+                        {pathaoStores.length > 0 && (
+                          <Select
+                            label="Pickup Store"
+                            options={[
+                              { label: "-- Select a Pickup Store --", value: "" },
+                              ...pathaoStores.map((s) => ({
+                                label: `${s.store_name} (${s.store_address || "ID: " + s.store_id})`,
+                                value: s.store_id,
+                              })),
+                            ]}
+                            value={pathaoStoreId}
+                            onChange={(val) => {
+                              setPathaoStoreId(val);
+                              const matched = pathaoStores.find((s) => s.store_id === val);
+                              if (matched) setPathaoStoreName(matched.store_name);
+                            }}
+                            helpText={
+                              pathaoStoreName
+                                ? `Selected: ${pathaoStoreName} (ID: ${pathaoStoreId})`
+                                : "Choose from verified stores"
+                            }
+                          />
+                        )}
+
+                        <TextField
+                          label="Store ID"
+                          value={pathaoStoreId}
+                          onChange={(val) => setPathaoStoreId(val)}
+                          placeholder="e.g. 10248"
+                          autoComplete="off"
+                          helpText={
+                            pathaoStoreName
+                              ? `Connected store: ${pathaoStoreName}`
+                              : "Manual fallback or click 'Verify & Fetch Stores' above."
+                          }
+                        />
+
+                        <Divider />
+
+                        <BlockStack gap="200">
+                          <InlineStack align="space-between" blockAlign="center">
+                            <Text as="h4" variant="headingSm">
+                              Real-Time Webhook (Two-Way Status Sync)
+                            </Text>
+                            <Badge tone="info">Live Webhook</Badge>
+                          </InlineStack>
+                          <Text as="p" variant="bodyXs" tone="subdued">
+                            Paste in Pathao Developer API &rarr; Webhook Integration:
+                          </Text>
+                          <TextField
+                            label="Callback URL"
+                            value={pathaoWebhookUrl}
+                            readOnly
+                            autoComplete="off"
+                            connectedRight={
+                              <Button
+                                onClick={() =>
+                                  copyToClipboard(pathaoWebhookUrl, "pathao_url")
+                                }
+                              >
+                                {copiedKey === "pathao_url" ? "Copied!" : "Copy URL"}
+                              </Button>
+                            }
+                          />
+                          <TextField
+                            label="Webhook Secret"
+                            value={webhookSecret}
+                            readOnly
+                            autoComplete="off"
+                            connectedRight={
+                              <Button
+                                onClick={() =>
+                                  copyToClipboard(webhookSecret, "pathao_secret")
+                                }
+                              >
+                                {copiedKey === "pathao_secret" ? "Copied!" : "Copy Secret"}
+                              </Button>
+                            }
+                            helpText="Required for automated verification handshake in Pathao developer portal."
+                          />
+                        </BlockStack>
+                      </BlockStack>
+
+                      <InlineStack align="space-between" blockAlign="center">
+                        <Button onClick={() => setShowPathaoForm(false)}>
+                          Collapse
+                        </Button>
+                        <Button
+                          variant="primary"
+                          loading={isSubmittingPathao}
+                          onClick={handleSavePathao}
+                        >
+                          Save Pathao Settings
+                        </Button>
+                      </InlineStack>
+                    </BlockStack>
+                  )}
                 </BlockStack>
               </Card>
             </Grid.Cell>
@@ -1252,90 +1289,113 @@ export default function CourierSettingsPage() {
                     Fast Cash-on-Delivery (COD) fulfillment across all 64 Bangladeshi districts.
                   </Text>
 
-                  <Divider />
+                  <Text as="p" variant="bodyXs" tone="subdued">
+                    Required: API Key, Secret Key
+                  </Text>
 
-                  <BlockStack gap="300">
-                    <TextField
-                      label="API Key"
-                      value={steadfastApiKey}
-                      onChange={(val) => setSteadfastApiKey(val)}
-                      placeholder="e.g. stf_live_api_key_..."
-                      autoComplete="off"
-                    />
-
-                    <TextField
-                      label="Secret Key"
-                      type={showSteadfastSecret ? "text" : "password"}
-                      value={steadfastSecretKey}
-                      onChange={(val) => setSteadfastSecretKey(val)}
-                      placeholder="••••••••••••••••"
-                      autoComplete="off"
-                      connectedRight={
-                        <Button
-                          variant="plain"
-                          onClick={() => setShowSteadfastSecret((prev) => !prev)}
-                        >
-                          {showSteadfastSecret ? "Hide" : "Show"}
-                        </Button>
-                      }
-                      helpText="Found under Steadfast Merchant Dashboard -> API Integration. Stored encrypted."
-                    />
-                  </BlockStack>
-
-                  <Divider />
-
-                  <BlockStack gap="200">
-                    <InlineStack align="space-between" blockAlign="center">
-                      <Text as="h4" variant="headingSm">
-                        Real-Time Webhook (Two-Way Status Sync)
-                      </Text>
-                      <Badge tone="info">Live Webhook</Badge>
-                    </InlineStack>
-                    <Text as="p" variant="bodyXs" tone="subdued">
-                      Paste in Steadfast Merchant Portal &rarr; API &rarr; Webhook:
-                    </Text>
-                    <TextField
-                      label="Callback URL"
-                      value={steadfastWebhookUrl}
-                      readOnly
-                      autoComplete="off"
-                      connectedRight={
-                        <Button
-                          onClick={() =>
-                            copyToClipboard(steadfastWebhookUrl, "steadfast_url")
-                          }
-                        >
-                          {copiedKey === "steadfast_url" ? "Copied!" : "Copy URL"}
-                        </Button>
-                      }
-                    />
-                    <TextField
-                      label="Bearer Token / Secret"
-                      value={webhookSecret}
-                      readOnly
-                      autoComplete="off"
-                      connectedRight={
-                        <Button
-                          onClick={() =>
-                            copyToClipboard(webhookSecret, "steadfast_secret")
-                          }
-                        >
-                          {copiedKey === "steadfast_secret" ? "Copied!" : "Copy Token"}
-                        </Button>
-                      }
-                      helpText="Paste in Steadfast Webhook Bearer Token / Secret field."
-                    />
-                  </BlockStack>
-
-                  <InlineStack align="end">
+                  <InlineStack align="start">
                     <Button
-                      variant="primary"
-                      loading={isSubmittingSteadfast}
-                      onClick={handleSaveSteadfast}
+                      onClick={() => setShowSteadfastForm((prev) => !prev)}
                     >
-                      Save Steadfast Settings
+                      {showSteadfastForm
+                        ? "Hide Configuration"
+                        : isSteadfastConnected
+                        ? "Update Steadfast"
+                        : "Configure Steadfast"}
                     </Button>
                   </InlineStack>
+
+                  {showSteadfastForm && (
+                    <BlockStack gap="400">
+                      <Divider />
+
+                      <BlockStack gap="300">
+                        <TextField
+                          label="API Key"
+                          value={steadfastApiKey}
+                          onChange={(val) => setSteadfastApiKey(val)}
+                          placeholder="e.g. stf_live_api_key_..."
+                          autoComplete="off"
+                        />
+
+                        <TextField
+                          label="Secret Key"
+                          type={showSteadfastSecret ? "text" : "password"}
+                          value={steadfastSecretKey}
+                          onChange={(val) => setSteadfastSecretKey(val)}
+                          placeholder="••••••••••••••••"
+                          autoComplete="off"
+                          connectedRight={
+                            <Button
+                              variant="plain"
+                              onClick={() => setShowSteadfastSecret((prev) => !prev)}
+                            >
+                              {showSteadfastSecret ? "Hide" : "Show"}
+                            </Button>
+                          }
+                          helpText="Found under Steadfast Merchant Dashboard -> API Integration. Stored encrypted."
+                        />
+                      </BlockStack>
+
+                      <Divider />
+
+                      <BlockStack gap="200">
+                        <InlineStack align="space-between" blockAlign="center">
+                          <Text as="h4" variant="headingSm">
+                            Real-Time Webhook (Two-Way Status Sync)
+                          </Text>
+                          <Badge tone="info">Live Webhook</Badge>
+                        </InlineStack>
+                        <Text as="p" variant="bodyXs" tone="subdued">
+                          Paste in Steadfast Merchant Portal &rarr; API &rarr; Webhook:
+                        </Text>
+                        <TextField
+                          label="Callback URL"
+                          value={steadfastWebhookUrl}
+                          readOnly
+                          autoComplete="off"
+                          connectedRight={
+                            <Button
+                              onClick={() =>
+                                copyToClipboard(steadfastWebhookUrl, "steadfast_url")
+                              }
+                            >
+                              {copiedKey === "steadfast_url" ? "Copied!" : "Copy URL"}
+                            </Button>
+                          }
+                        />
+                        <TextField
+                          label="Bearer Token / Secret"
+                          value={webhookSecret}
+                          readOnly
+                          autoComplete="off"
+                          connectedRight={
+                            <Button
+                              onClick={() =>
+                                copyToClipboard(webhookSecret, "steadfast_secret")
+                              }
+                            >
+                              {copiedKey === "steadfast_secret" ? "Copied!" : "Copy Token"}
+                            </Button>
+                          }
+                          helpText="Paste in Steadfast Webhook Bearer Token / Secret field."
+                        />
+                      </BlockStack>
+
+                      <InlineStack align="space-between" blockAlign="center">
+                        <Button onClick={() => setShowSteadfastForm(false)}>
+                          Collapse
+                        </Button>
+                        <Button
+                          variant="primary"
+                          loading={isSubmittingSteadfast}
+                          onClick={handleSaveSteadfast}
+                        >
+                          Save Steadfast Settings
+                        </Button>
+                      </InlineStack>
+                    </BlockStack>
+                  )}
                 </BlockStack>
               </Card>
             </Grid.Cell>
@@ -1369,147 +1429,170 @@ export default function CourierSettingsPage() {
                     64-district doorstep delivery network with automated pickup scheduling.
                   </Text>
 
-                  <Divider />
+                  <Text as="p" variant="bodyXs" tone="subdued">
+                    Required: API Access Token, Pickup Store ID
+                  </Text>
 
-                  <BlockStack gap="300">
-                    <Select
-                      label="API Environment"
-                      options={[
-                        { label: "Production (OpenAPI Live)", value: "production" },
-                        { label: "Sandbox / Test API", value: "sandbox" },
-                      ]}
-                      value={redxEnvironment}
-                      onChange={(val) => setRedxEnvironment(val)}
-                    />
-
-                    <TextField
-                      label="API Access Token (JWT)"
-                      type={showRedxToken ? "text" : "password"}
-                      value={redxAccessToken}
-                      onChange={(val) => setRedxAccessToken(val)}
-                      placeholder="••••••••••••••••"
-                      autoComplete="off"
-                      connectedRight={
-                        <Button
-                          variant="plain"
-                          onClick={() => setShowRedxToken((prev) => !prev)}
-                        >
-                          {showRedxToken ? "Hide" : "Show"}
-                        </Button>
-                      }
-                      helpText="Your REDX Open API token (stored encrypted with AES-256-GCM)."
-                    />
-
-                    <InlineStack align="start">
-                      <Button
-                        size="medium"
-                        loading={isFetchingRedxStores}
-                        onClick={handleFetchRedxStores}
-                        disabled={!redxAccessToken}
-                      >
-                        Verify &amp; Fetch Stores
-                      </Button>
-                    </InlineStack>
-
-                    {redxStores.length > 0 && (
-                      <Select
-                        label="Pickup Store"
-                        options={[
-                          { label: "-- Select a Pickup Store --", value: "" },
-                          ...redxStores.map((s) => ({
-                            label: `${s.name} (${s.address || "ID: " + s.id})`,
-                            value: s.id,
-                          })),
-                        ]}
-                        value={redxPickupStoreId}
-                        onChange={(val) => {
-                          setRedxPickupStoreId(val);
-                          setRedxLocationId(val);
-                          const matched = redxStores.find((s) => s.id === val);
-                          if (matched) {
-                            setRedxPickupStoreName(matched.name);
-                            setRedxProfileId(matched.name);
-                          }
-                        }}
-                        helpText={
-                          redxPickupStoreName
-                            ? `Selected: ${redxPickupStoreName} (ID: ${redxPickupStoreId})`
-                            : "Choose from registered RedX stores"
-                        }
-                      />
-                    )}
-
-                    <TextField
-                      label="Pickup Store ID"
-                      value={redxPickupStoreId}
-                      onChange={(val) => {
-                        setRedxPickupStoreId(val);
-                        setRedxLocationId(val);
-                      }}
-                      placeholder="e.g. 12948"
-                      autoComplete="off"
-                      helpText={
-                        redxPickupStoreName
-                          ? `Connected store: ${redxPickupStoreName}`
-                          : "Manual ID fallback or click 'Verify & Fetch Stores' above."
-                      }
-                    />
-
-                    <Divider />
-
-                    <BlockStack gap="200">
-                      <InlineStack align="space-between" blockAlign="center">
-                        <Text as="h4" variant="headingSm">
-                          Real-Time Webhook (Two-Way Status Sync)
-                        </Text>
-                        <Badge tone="info">Live Webhook</Badge>
-                      </InlineStack>
-                      <Text as="p" variant="bodyXs" tone="subdued">
-                        Paste in RedX Partner Portal &rarr; Settings &rarr; Webhook:
-                      </Text>
-                      <TextField
-                        label="Callback URL"
-                        value={redxWebhookUrl}
-                        readOnly
-                        autoComplete="off"
-                        connectedRight={
-                          <Button
-                            onClick={() =>
-                              copyToClipboard(redxWebhookUrl, "redx_url")
-                            }
-                          >
-                            {copiedKey === "redx_url" ? "Copied!" : "Copy URL"}
-                          </Button>
-                        }
-                      />
-                      <TextField
-                        label="Webhook Secret"
-                        value={webhookSecret}
-                        readOnly
-                        autoComplete="off"
-                        connectedRight={
-                          <Button
-                            onClick={() =>
-                              copyToClipboard(webhookSecret, "redx_secret")
-                            }
-                          >
-                            {copiedKey === "redx_secret" ? "Copied!" : "Copy Secret"}
-                          </Button>
-                        }
-                        helpText="Paste in RedX Webhook Secret field."
-                      />
-                    </BlockStack>
-                  </BlockStack>
-
-                  <InlineStack align="end">
+                  <InlineStack align="start">
                     <Button
-                      variant="primary"
-                      loading={isSubmittingRedx}
-                      onClick={handleSaveRedX}
+                      onClick={() => setShowRedxForm((prev) => !prev)}
                     >
-                      Save REDX Settings
+                      {showRedxForm
+                        ? "Hide Configuration"
+                        : isRedxConnected
+                        ? "Update REDX"
+                        : "Configure REDX"}
                     </Button>
                   </InlineStack>
+
+                  {showRedxForm && (
+                    <BlockStack gap="400">
+                      <Divider />
+
+                      <BlockStack gap="300">
+                        <Select
+                          label="API Environment"
+                          options={[
+                            { label: "Production (OpenAPI Live)", value: "production" },
+                            { label: "Sandbox / Test API", value: "sandbox" },
+                          ]}
+                          value={redxEnvironment}
+                          onChange={(val) => setRedxEnvironment(val)}
+                        />
+
+                        <TextField
+                          label="API Access Token (JWT)"
+                          type={showRedxToken ? "text" : "password"}
+                          value={redxAccessToken}
+                          onChange={(val) => setRedxAccessToken(val)}
+                          placeholder="••••••••••••••••"
+                          autoComplete="off"
+                          connectedRight={
+                            <Button
+                              variant="plain"
+                              onClick={() => setShowRedxToken((prev) => !prev)}
+                            >
+                              {showRedxToken ? "Hide" : "Show"}
+                            </Button>
+                          }
+                          helpText="Your REDX Open API token (stored encrypted with AES-256-GCM)."
+                        />
+
+                        <InlineStack align="start">
+                          <Button
+                            size="medium"
+                            loading={isFetchingRedxStores}
+                            onClick={handleFetchRedxStores}
+                            disabled={!redxAccessToken}
+                          >
+                            Verify &amp; Fetch Stores
+                          </Button>
+                        </InlineStack>
+
+                        {redxStores.length > 0 && (
+                          <Select
+                            label="Pickup Store"
+                            options={[
+                              { label: "-- Select a Pickup Store --", value: "" },
+                              ...redxStores.map((s) => ({
+                                label: `${s.name} (${s.address || "ID: " + s.id})`,
+                                value: s.id,
+                              })),
+                            ]}
+                            value={redxPickupStoreId}
+                            onChange={(val) => {
+                              setRedxPickupStoreId(val);
+                              setRedxLocationId(val);
+                              const matched = redxStores.find((s) => s.id === val);
+                              if (matched) {
+                                setRedxPickupStoreName(matched.name);
+                                setRedxProfileId(matched.name);
+                              }
+                            }}
+                            helpText={
+                              redxPickupStoreName
+                                ? `Selected: ${redxPickupStoreName} (ID: ${redxPickupStoreId})`
+                                : "Choose from registered RedX stores"
+                            }
+                          />
+                        )}
+
+                        <TextField
+                          label="Pickup Store ID"
+                          value={redxPickupStoreId}
+                          onChange={(val) => {
+                            setRedxPickupStoreId(val);
+                            setRedxLocationId(val);
+                          }}
+                          placeholder="e.g. 12948"
+                          autoComplete="off"
+                          helpText={
+                            redxPickupStoreName
+                              ? `Connected store: ${redxPickupStoreName}`
+                              : "Manual ID fallback or click 'Verify & Fetch Stores' above."
+                          }
+                        />
+
+                        <Divider />
+
+                        <BlockStack gap="200">
+                          <InlineStack align="space-between" blockAlign="center">
+                            <Text as="h4" variant="headingSm">
+                              Real-Time Webhook (Two-Way Status Sync)
+                            </Text>
+                            <Badge tone="info">Live Webhook</Badge>
+                          </InlineStack>
+                          <Text as="p" variant="bodyXs" tone="subdued">
+                            Paste in RedX Partner Portal &rarr; Settings &rarr; Webhook:
+                          </Text>
+                          <TextField
+                            label="Callback URL"
+                            value={redxWebhookUrl}
+                            readOnly
+                            autoComplete="off"
+                            connectedRight={
+                              <Button
+                                onClick={() =>
+                                  copyToClipboard(redxWebhookUrl, "redx_url")
+                                }
+                              >
+                                {copiedKey === "redx_url" ? "Copied!" : "Copy URL"}
+                              </Button>
+                            }
+                          />
+                          <TextField
+                            label="Webhook Secret"
+                            value={webhookSecret}
+                            readOnly
+                            autoComplete="off"
+                            connectedRight={
+                              <Button
+                                onClick={() =>
+                                  copyToClipboard(webhookSecret, "redx_secret")
+                                }
+                              >
+                                {copiedKey === "redx_secret" ? "Copied!" : "Copy Secret"}
+                              </Button>
+                            }
+                            helpText="Paste in RedX Webhook Secret field."
+                          />
+                        </BlockStack>
+                      </BlockStack>
+
+                      <InlineStack align="space-between" blockAlign="center">
+                        <Button onClick={() => setShowRedxForm(false)}>
+                          Collapse
+                        </Button>
+                        <Button
+                          variant="primary"
+                          loading={isSubmittingRedx}
+                          onClick={handleSaveRedX}
+                        >
+                          Save REDX Settings
+                        </Button>
+                      </InlineStack>
+                    </BlockStack>
+                  )}
                 </BlockStack>
               </Card>
             </Grid.Cell>
@@ -1553,7 +1636,7 @@ export default function CourierSettingsPage() {
                     <InlineStack gap="200" blockAlign="center">
                       <Badge tone={aiConfig.isGeminiConfigured ? "success" : "attention"}>
                         {aiConfig.isGeminiConfigured
-                          ? `${aiConfig.geminiModel} Active`
+                          ? "AI Normalizer Active"
                           : "Local Keyword Mode"}
                       </Badge>
                       <Badge tone="info">
@@ -1574,48 +1657,11 @@ export default function CourierSettingsPage() {
                     <BlockStack gap="300">
                       <Checkbox
                         label="Enable Gemini AI Address Normalization on Courier Dispatch"
-                        helpText="Executes strictly when 'Send to Courier' is clicked. Results are cached in MongoDB AddressCache for sub-5ms recurring lookups."
+                        helpText="Executes strictly when 'Send to Courier' is clicked. Normalized addresses are automatically saved for instant recurring lookups."
                         checked={aiAddressCleaningEnabled}
                         onChange={handleToggleAiCleaning}
                         disabled={isSubmittingAi}
                       />
-
-                      <Divider />
-
-                      <Grid>
-                        <Grid.Cell columnSpan={{ xs: 6, sm: 6, md: 2, lg: 4, xl: 4 }}>
-                          <BlockStack gap="050">
-                            <Text as="span" variant="bodySm" fontWeight="semibold">
-                              AI Intelligence Model
-                            </Text>
-                            <Text as="span" variant="bodySm" tone="subdued">
-                              Google AI Studio {aiConfig.geminiModel}
-                            </Text>
-                          </BlockStack>
-                        </Grid.Cell>
-
-                        <Grid.Cell columnSpan={{ xs: 6, sm: 6, md: 2, lg: 4, xl: 4 }}>
-                          <BlockStack gap="050">
-                            <Text as="span" variant="bodySm" fontWeight="semibold">
-                              Fast Address Cache
-                            </Text>
-                            <Text as="span" variant="bodySm" tone="subdued">
-                              MongoDB AddressCache (Sub-5ms hits)
-                            </Text>
-                          </BlockStack>
-                        </Grid.Cell>
-
-                        <Grid.Cell columnSpan={{ xs: 6, sm: 6, md: 2, lg: 4, xl: 4 }}>
-                          <BlockStack gap="050">
-                            <Text as="span" variant="bodySm" fontWeight="semibold">
-                              Safety Protocol
-                            </Text>
-                            <Text as="span" variant="bodySm" tone="subdued">
-                              Low-confidence addresses lock for merchant review
-                            </Text>
-                          </BlockStack>
-                        </Grid.Cell>
-                      </Grid>
                     </BlockStack>
                   </Box>
                 </BlockStack>
