@@ -38,6 +38,7 @@ import {
   updateSpreadsheetSettings,
   disconnectGoogleAccount,
   syncOrderToGoogleSheet,
+  getGoogleAuthUrl,
 } from "../google-sheets.server";
 
 export const GOOGLE_SHEETS_COLUMNS = [
@@ -58,14 +59,36 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   await connectDB();
 
-  const [googleIntegration, systemConfig]: any[] = await Promise.all([
+  const [rawGoogleIntegration, systemConfig]: any[] = await Promise.all([
     getMerchantIntegration(shopDomain),
     getSystemConfig(),
   ]);
 
+  // Strip raw access/refresh tokens to prevent sensitive credential exposure in HTML/client-state
+  const googleIntegration = rawGoogleIntegration
+    ? {
+        merchantId: rawGoogleIntegration.merchantId,
+        isConnected: Boolean(rawGoogleIntegration.googleRefreshToken),
+        googleUserEmail: rawGoogleIntegration.googleUserEmail || "",
+        googleUserName: rawGoogleIntegration.googleUserName || "",
+        spreadsheetId: rawGoogleIntegration.spreadsheetId || "",
+        spreadsheetName: rawGoogleIntegration.spreadsheetName || "Delivery1 Orders",
+        sheetName: rawGoogleIntegration.sheetName || "Orders",
+        spreadsheetUrl: rawGoogleIntegration.spreadsheetUrl || "",
+        autoSyncEnabled: rawGoogleIntegration.autoSyncEnabled ?? true,
+        lastSyncAt: rawGoogleIntegration.lastSyncAt || null,
+        lastSyncStatus: rawGoogleIntegration.lastSyncStatus || "IDLE",
+        lastSyncError: rawGoogleIntegration.lastSyncError || "",
+        totalOrdersSynced: rawGoogleIntegration.totalOrdersSynced || 0,
+      }
+    : null;
+
+  const googleAuthUrl = getGoogleAuthUrl(shopDomain);
+
   return json({
     shopDomain,
     googleIntegration,
+    googleAuthUrl,
     supportEmail: String(systemConfig?.supportEmail || "ecomdoctorbd@gmail.com"),
     whatsappHelpline: String(systemConfig?.whatsappHelpline || "01346851322"),
     whatsappNumber: String(systemConfig?.whatsappNumber || "+8801346851322"),
@@ -148,6 +171,7 @@ export default function IntegrationsPage() {
   const {
     shopDomain,
     googleIntegration,
+    googleAuthUrl,
     supportEmail,
     whatsappHelpline,
     whatsappNumber,
@@ -175,7 +199,7 @@ export default function IntegrationsPage() {
   const [oauthBanner, setOauthBanner] = useState<string | null>(null);
   const [isWizardOpen, setIsWizardOpen] = useState(false);
 
-  const isGoogleConnected = Boolean(googleIntegration?.googleRefreshToken);
+  const isGoogleConnected = Boolean(googleIntegration?.isConnected);
   const googleSpreadsheetUrl =
     googleIntegration?.spreadsheetUrl ||
     (googleSpreadsheetId
@@ -223,7 +247,7 @@ export default function IntegrationsPage() {
 
   const handleLaunchOAuthPopup = () => {
     if (typeof window !== "undefined") {
-      const authUrl = `/api/google/auth?shop=${encodeURIComponent(shopDomain)}`;
+      const authUrl = googleAuthUrl || `/api/google/auth?shop=${encodeURIComponent(shopDomain)}`;
       const width = 600;
       const height = 700;
       const left = window.screen.width / 2 - width / 2;

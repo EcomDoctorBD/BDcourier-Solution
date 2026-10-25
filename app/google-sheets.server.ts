@@ -1,5 +1,7 @@
+import crypto from "crypto";
 import { google } from "googleapis";
 import { connectDB, MerchantIntegrations } from "./db.server";
+import { encryptSecret, decryptSecret } from "./utils/crypto.server";
 
 // Standard Google Sheets Columns strictly defined for Bangladeshi Courier Hub
 export const GOOGLE_SHEETS_COLUMNS = [
@@ -62,7 +64,95 @@ export function getOAuth2Client(redirectUri?: string) {
 }
 
 /**
- * Generates OAuth authorization consent URL with offline access
+ * Generates an HMAC-SHA256 cryptographically signed OAuth state
+ * Format: <base64url(shopDomain|timestamp|nonce)>.<base64url(hmac)>
+ */
+export function createSignedGoogleOAuthState(shopDomain: string): string {
+  const normalizedShop = String(shopDomain || "").trim().toLowerCase();
+  if (!normalizedShop) {
+    throw new Error("Cannot create Google OAuth state: Missing shopDomain.");
+  }
+  const secret =
+    process.env.ENCRYPTION_KEY?.trim() ||
+    process.env.SHOPIFY_API_SECRET?.trim() ||
+    "";
+  if (!secret) {
+    throw new Error("Missing ENCRYPTION_KEY or SHOPIFY_API_SECRET for OAuth state signing.");
+  }
+
+  const nonce = crypto.randomBytes(12).toString("hex");
+  const payload = `${normalizedShop}|${Date.now()}|${nonce}`;
+  const encodedPayload = Buffer.from(payload, "utf8").toString("base64url");
+  const signature = crypto
+    .createHmac("sha256", secret)
+    .update(encodedPayload)
+    .digest("base64url");
+
+  return `${encodedPayload}.${signature}`;
+}
+
+/**
+ * Validates HMAC-SHA256 signed OAuth state and enforces a 15-minute expiration window.
+ * Returns the verified shopDomain if valid, or null if forged/expired/invalid.
+ */
+export function verifySignedGoogleOAuthState(stateParam: string): string | null {
+  if (!stateParam || typeof stateParam !== "string") return null;
+
+  const parts = stateParam.trim().split(".");
+  if (parts.length !== 2) return null;
+
+  const [encodedPayload, providedSig] = parts;
+  if (!encodedPayload || !providedSig) return null;
+
+  const secret =
+    process.env.ENCRYPTION_KEY?.trim() ||
+    process.env.SHOPIFY_API_SECRET?.trim() ||
+    "";
+  if (!secret) {
+    console.error("Missing ENCRYPTION_KEY or SHOPIFY_API_SECRET for OAuth state verification.");
+    return null;
+  }
+
+  const expectedSig = crypto
+    .createHmac("sha256", secret)
+    .update(encodedPayload)
+    .digest("base64url");
+
+  const providedBuf = Buffer.from(providedSig, "utf8");
+  const expectedBuf = Buffer.from(expectedSig, "utf8");
+
+  if (providedBuf.length !== expectedBuf.length) return null;
+  if (!crypto.timingSafeEqual(providedBuf, expectedBuf)) return null;
+
+  try {
+    const decoded = Buffer.from(encodedPayload, "base64url").toString("utf8");
+    const [shopDomain, timestampStr] = decoded.split("|");
+    if (!shopDomain) return null;
+
+    const timestamp = Number(timestampStr);
+    if (!timestamp || isNaN(timestamp)) return null;
+
+    const ageMs = Date.now() - timestamp;
+    // 15-minute expiration window (reject timestamps older than 15 mins or future-dated by > 60s)
+    if (ageMs < -60000 || ageMs > 15 * 60 * 1000) {
+      console.warn(`Google OAuth state expired or future-dated for ${shopDomain} (age: ${ageMs}ms)`);
+      return null;
+    }
+
+    const normalizedShop = shopDomain.trim().toLowerCase();
+    if (!normalizedShop.endsWith(".myshopify.com") && !normalizedShop.includes(".")) {
+      return null;
+    }
+
+    return normalizedShop;
+  } catch (err) {
+    console.warn("Failed to parse Google OAuth state payload:", err);
+    return null;
+  }
+}
+
+/**
+ * Generates OAuth authorization consent URL with offline access and signed state
  */
 export function getGoogleAuthUrl(shopDomain: string, redirectUri?: string): string {
   const oauth2Client = getOAuth2Client(redirectUri);
@@ -74,16 +164,19 @@ export function getGoogleAuthUrl(shopDomain: string, redirectUri?: string): stri
     "https://www.googleapis.com/auth/userinfo.profile",
   ];
 
+  const state = createSignedGoogleOAuthState(shopDomain);
+
   return oauth2Client.generateAuthUrl({
     access_type: "offline",
     prompt: "consent",
     scope: scopes,
-    state: shopDomain, // passes shop domain securely across the OAuth redirect loop
+    state,
   });
 }
 
 /**
  * Exchanges authorization code for tokens and saves them in MerchantIntegrations
+ * Tokens are encrypted at rest using AES-256-GCM.
  */
 export async function exchangeCodeForTokens(
   code: string,
@@ -137,12 +230,12 @@ export async function exchangeCodeForTokens(
     spreadsheetName = createRes.data.properties?.title || "Delivery1 Orders";
     spreadsheetUrl = createRes.data.spreadsheetUrl || `https://docs.google.com/spreadsheets/d/${spreadsheetId}`;
 
-    // Write header row to the newly created sheet
+    // Write header row to the newly created sheet with RAW valueInputOption
     if (spreadsheetId) {
       await sheets.spreadsheets.values.update({
         spreadsheetId,
         range: "Orders!A1:I1",
-        valueInputOption: "USER_ENTERED",
+        valueInputOption: "RAW",
         requestBody: {
           values: [Array.from(GOOGLE_SHEETS_COLUMNS)],
         },
@@ -152,10 +245,10 @@ export async function exchangeCodeForTokens(
     console.warn("Could not auto-create Google Sheet during OAuth setup:", createErr);
   }
 
-  // Save into MongoDB MerchantIntegrations collection
+  // Save encrypted credentials into MongoDB MerchantIntegrations collection
   const updateData: any = {
     merchantId: shopDomain,
-    googleAccessToken: tokens.access_token || "",
+    googleAccessToken: tokens.access_token ? encryptSecret(tokens.access_token) : "",
     googleTokenExpiry: tokens.expiry_date ? new Date(tokens.expiry_date) : undefined,
     googleUserEmail: email,
     googleUserName: name,
@@ -165,7 +258,7 @@ export async function exchangeCodeForTokens(
   };
 
   if (tokens.refresh_token) {
-    updateData.googleRefreshToken = tokens.refresh_token;
+    updateData.googleRefreshToken = encryptSecret(tokens.refresh_token);
   }
   if (spreadsheetId) {
     updateData.spreadsheetId = spreadsheetId;
@@ -246,6 +339,7 @@ export async function getMerchantIntegration(shopDomain: string) {
 
 /**
  * Ensures valid authenticated Google Sheets client with automatic token refreshing
+ * Decrypts encrypted credentials and re-encrypts refreshed access tokens.
  */
 async function getAuthenticatedSheetsClient(shopDomain: string) {
   await connectDB();
@@ -255,16 +349,23 @@ async function getAuthenticatedSheetsClient(shopDomain: string) {
     return null;
   }
 
+  const decryptedRefreshToken = decryptSecret(integration.googleRefreshToken);
+  const decryptedAccessToken = decryptSecret(integration.googleAccessToken);
+
+  if (!decryptedRefreshToken) {
+    return null;
+  }
+
   const oauth2Client = getOAuth2Client();
   oauth2Client.setCredentials({
-    refresh_token: integration.googleRefreshToken,
-    access_token: integration.googleAccessToken,
+    refresh_token: decryptedRefreshToken,
+    access_token: decryptedAccessToken,
   });
 
   // Check if access token is missing or expired within the next 2 minutes
   const now = Date.now();
   const isExpired =
-    !integration.googleAccessToken ||
+    !decryptedAccessToken ||
     !integration.googleTokenExpiry ||
     new Date(integration.googleTokenExpiry).getTime() <= now + 120000;
 
@@ -273,7 +374,12 @@ async function getAuthenticatedSheetsClient(shopDomain: string) {
       const { credentials } = await oauth2Client.refreshAccessToken();
       oauth2Client.setCredentials(credentials);
 
-      integration.googleAccessToken = credentials.access_token || "";
+      integration.googleAccessToken = credentials.access_token
+        ? encryptSecret(credentials.access_token)
+        : "";
+      if (credentials.refresh_token) {
+        integration.googleRefreshToken = encryptSecret(credentials.refresh_token);
+      }
       if (credentials.expiry_date) {
         integration.googleTokenExpiry = new Date(credentials.expiry_date);
       }
@@ -291,6 +397,21 @@ async function getAuthenticatedSheetsClient(shopDomain: string) {
     sheets: google.sheets({ version: "v4", auth: oauth2Client }),
     integration,
   };
+}
+
+/**
+ * Sanitizes cell values to prevent CSV / Spreadsheet formula injection attacks (CWE-1236).
+ * Any cell starting with =, +, -, @, \t, \r, or | is prepended with a single quote (')
+ * to force spreadsheet software to treat the value strictly as literal plain text.
+ */
+export function sanitizeSpreadsheetCell(value: unknown): string {
+  if (value === null || value === undefined) return "";
+  const str = String(value).trim();
+  if (!str) return "";
+  if (/^[=+\-@|\t\r]/.test(str)) {
+    return `'${str}`;
+  }
+  return str;
 }
 
 /**
@@ -340,7 +461,7 @@ export async function syncOrderToGoogleSheet(
         await sheets.spreadsheets.values.update({
           spreadsheetId,
           range: `${targetSheet}!A1:I1`,
-          valueInputOption: "USER_ENTERED",
+          valueInputOption: "RAW",
           requestBody: {
             values: [Array.from(GOOGLE_SHEETS_COLUMNS)],
           },
@@ -367,7 +488,7 @@ export async function syncOrderToGoogleSheet(
         await sheets.spreadsheets.values.update({
           spreadsheetId,
           range: `${targetSheet}!A1:I1`,
-          valueInputOption: "USER_ENTERED",
+          valueInputOption: "RAW",
           requestBody: {
             values: [Array.from(GOOGLE_SHEETS_COLUMNS)],
           },
@@ -377,29 +498,31 @@ export async function syncOrderToGoogleSheet(
       }
     }
 
-    // 2. Format the Row values strictly matching the required columns
-    const orderIdStr = String(payload.orderId || "").trim();
-    const formattedTimestamp = payload.timestamp
-      ? new Date(payload.timestamp).toLocaleString("en-GB", { timeZone: "Asia/Dhaka" })
-      : new Date().toLocaleString("en-GB", { timeZone: "Asia/Dhaka" });
+    // 2. Format the Row values strictly matching the required columns and sanitize against formula injection
+    const orderIdStr = sanitizeSpreadsheetCell(payload.orderId);
+    const formattedTimestamp = sanitizeSpreadsheetCell(
+      payload.timestamp
+        ? new Date(payload.timestamp).toLocaleString("en-GB", { timeZone: "Asia/Dhaka" })
+        : new Date().toLocaleString("en-GB", { timeZone: "Asia/Dhaka" })
+    );
 
     const rowData = [
       orderIdStr,
       formattedTimestamp,
-      String(payload.customerName || "").trim(),
-      String(payload.phoneNumber || "").trim(),
-      String(payload.rawAddress || "").trim(),
-      String(payload.cleanedDistrict || "").trim(),
-      String(payload.cleanedThana || "").trim(),
-      String(payload.courierPartner || "Unassigned").trim(),
-      String(payload.courierTrackingId || "Pending").trim(),
+      sanitizeSpreadsheetCell(payload.customerName),
+      sanitizeSpreadsheetCell(payload.phoneNumber),
+      sanitizeSpreadsheetCell(payload.rawAddress),
+      sanitizeSpreadsheetCell(payload.cleanedDistrict),
+      sanitizeSpreadsheetCell(payload.cleanedThana),
+      sanitizeSpreadsheetCell(payload.courierPartner || "Unassigned"),
+      sanitizeSpreadsheetCell(payload.courierTrackingId || "Pending"),
     ];
 
-    // 3. Append Row securely
+    // 3. Append Row securely with RAW valueInputOption to prevent formula execution
     const appendRes = await sheets.spreadsheets.values.append({
       spreadsheetId,
       range: `${targetSheet}!A:I`,
-      valueInputOption: "USER_ENTERED",
+      valueInputOption: "RAW",
       insertDataOption: "INSERT_ROWS",
       requestBody: {
         values: [rowData],
