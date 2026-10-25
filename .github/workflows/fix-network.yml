@@ -77,7 +77,7 @@ jobs:
           fi
 
           echo "=== [4.1] Checking ALB DNS & Security Groups ==="
-          ALB_ARN="arn:aws:elasticloadbalancing:ap-southeast-2:496663582013:loadbalancer/app/delivery1-alb/d4f7f14e6f1d08d9"
+          ALB_ARN="${AWS_ALB_ARN:-}"
           aws elbv2 describe-load-balancers --load-balancer-arns "$ALB_ARN"
           ALB_SG=$(aws elbv2 describe-load-balancers --load-balancer-arns "$ALB_ARN" --query "LoadBalancers[0].SecurityGroups[]" --output text)
           echo "ALB Security Groups: $ALB_SG"

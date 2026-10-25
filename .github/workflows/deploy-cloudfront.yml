@@ -23,7 +23,7 @@ jobs:
       - name: Create or Locate CloudFront Distribution
         id: cf
         run: |
-          ALB_HOST="delivery1-alb-1581793960.ap-southeast-2.elb.amazonaws.com"
+          ALB_HOST="${AWS_ALB_HOST:-}"
           echo "Checking existing CloudFront distributions for origin: $ALB_HOST..."
           
           EXISTING_CF=$(aws cloudfront list-distributions --query "DistributionList.Items[?Origins.Items[?DomainName=='$ALB_HOST']].[Id,DomainName,Status]" --output text 2>/dev/null || true)

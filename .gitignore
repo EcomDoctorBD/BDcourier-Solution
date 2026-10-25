@@ -27,3 +27,10 @@ pnpm-lock.yaml
 # Vercel
 .vercel
 
+
+# Security & Hygiene
+*.bak
+*.tmp
+test.png
+push-ecr.ps1
+.env*

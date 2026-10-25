@@ -1,6 +1,7 @@
 import { useState, type SVGProps } from "react";
 import {
   json,
+  redirect,
   type HeadersFunction,
   type LoaderFunctionArgs,
   type ActionFunctionArgs,
@@ -124,6 +125,17 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
   const shopDomain = session.shop;
 
+  // Security Gate: Restrict developer route in production (Issue 12.2)
+  const adminDevShop = process.env.ADMIN_DEV_SHOP?.trim() || "";
+  const isDevMode = process.env.NODE_ENV !== "production";
+  const isAuthorized = Boolean(
+    isDevMode || (adminDevShop && shopDomain.toLowerCase() === adminDevShop.toLowerCase())
+  );
+
+  if (!isAuthorized) {
+    return redirect("/app");
+  }
+
   const preflightStart = Date.now();
 
   // 1. MONGODB DIAGNOSTICS
@@ -143,7 +155,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     mongoConnected = mongoReadyState === 1;
 
     if (conn?.connection) {
-      mongoHost = conn.connection.host || "mongodb-cluster";
+      mongoHost = "mongodb-atlas-cluster";
       mongoDbName = conn.connection.name || "delivery1";
     }
 
@@ -249,13 +261,11 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   // 5. RUNTIME & SYSTEM TELEMETRY
   const memUsage = process.memoryUsage();
   const systemTelemetry = {
-    nodeVersion: process.version,
-    platform: `${process.platform} (${process.arch})`,
+    nodeVersion: "Node.js v20+ LTS",
+    platform: "Serverless (Cloud)",
     environment: process.env.NODE_ENV || "production",
     uptimeSeconds: Math.round(process.uptime()),
     heapUsedMb: Math.round(memUsage.heapUsed / 1024 / 1024),
-    heapTotalMb: Math.round(memUsage.heapTotal / 1024 / 1024),
-    rssMb: Math.round(memUsage.rss / 1024 / 1024),
     diagnosticDurationMs: Date.now() - preflightStart,
     appUrl: process.env.SHOPIFY_APP_URL || "Auto-detected (Request Origin)",
   };
@@ -298,6 +308,17 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
 export const action = async ({ request }: ActionFunctionArgs) => {
   const { session } = await authenticate.admin(request);
+  const shopDomain = session.shop;
+
+  const adminDevShop = process.env.ADMIN_DEV_SHOP?.trim() || "";
+  const isDevMode = process.env.NODE_ENV !== "production";
+  const isAuthorized = Boolean(
+    isDevMode || (adminDevShop && shopDomain.toLowerCase() === adminDevShop.toLowerCase())
+  );
+
+  if (!isAuthorized) {
+    return redirect("/app");
+  }
   await connectDB();
 
   const pingStart = Date.now();

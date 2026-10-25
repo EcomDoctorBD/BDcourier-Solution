@@ -7,7 +7,7 @@
     "Items": [
       {
         "Id": "ALB-Delivery1",
-        "DomainName": "delivery1-alb-1581793960.ap-southeast-2.elb.amazonaws.com",
+        "DomainName": "app.delivery1.com.bd",
         "CustomOriginConfig": {
           "HTTPPort": 80,
           "HTTPSPort": 443,
