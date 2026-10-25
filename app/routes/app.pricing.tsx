@@ -26,7 +26,6 @@ import {
   Divider,
   Box,
   Banner,
-  DataTable,
   Icon,
 } from "@shopify/polaris";
 import "@shopify/polaris/build/esm/styles.css";
@@ -495,6 +494,16 @@ export default function PricingAndBillingPage() {
     submit(formData, { method: "post" });
   };
 
+  const comparisonHeadings = [
+    "Feature / Capability",
+    "Free ($0.00/mo)",
+    "Starter ($1.99/mo)",
+    "Growth ($3.49/mo)",
+    "Pro ($5.99/mo)",
+    "Advanced ($11.99/mo)",
+    "Enterprise ($24.99/mo)",
+  ];
+
   const comparisonMatrixRows = [
     [
       "Monthly Price",
@@ -948,43 +957,132 @@ export default function PricingAndBillingPage() {
           {/* SECTION 2: DETAILED 6-TIER PLAN COMPARISON MATRIX */}
           <Layout.Section>
             <Card padding="0">
-              <Box padding="400">
-                <BlockStack gap="100">
+              <Box padding="500">
+                <BlockStack gap="150">
                   <Text as="h2" variant="headingMd">
                     Detailed Plan Comparison
                   </Text>
                   <Text as="p" variant="bodySm" tone="subdued">
-                    Side-by-side comparison of order capacity, automatic courier selection,
-                    bulk processing limits, fraud protection, packing slips,
-                    and financial sync across all 6 plans.
+                    আমাদের ৬টি প্ল্যানের অর্ডার লিমিট, অটোমেটিক কুরিয়ার সিলেকশন, বাল্ক প্রসেসিং লিমিট, ফ্রড প্রটেকশন, প্যাকিং স্লিপ এবং ফিনান্সিয়াল সিঙ্ক-এর একটি তুলনামূলক বিবরণ।
                   </Text>
                 </BlockStack>
               </Box>
 
               <Divider />
 
-              <DataTable
-                columnContentTypes={[
-                  "text",
-                  "text",
-                  "text",
-                  "text",
-                  "text",
-                  "text",
-                  "text",
-                ]}
-                headings={[
-                  "Feature / Capability",
-                  "Free ($0.00/mo)",
-                  "Starter ($1.99/mo)",
-                  "Growth ($3.49/mo) ★",
-                  "Pro ($5.99/mo)",
-                  "Advanced ($11.99/mo)",
-                  "Enterprise ($24.99/mo)",
-                ]}
-                rows={comparisonMatrixRows}
-                hoverable
-              />
+              <div
+                style={{
+                  overflowX: "auto",
+                  width: "100%",
+                  WebkitOverflowScrolling: "touch",
+                }}
+              >
+                <table
+                  style={{
+                    width: "100%",
+                    borderCollapse: "collapse",
+                    textAlign: "left",
+                    fontSize: "13px",
+                    lineHeight: "1.5",
+                    minWidth: "920px",
+                  }}
+                >
+                  <thead>
+                    <tr
+                      style={{
+                        backgroundColor: "#1F2937",
+                        color: "#FFFFFF",
+                      }}
+                    >
+                      {comparisonHeadings.map((heading, colIdx) => (
+                        <th
+                          key={heading}
+                          style={{
+                            padding: "14px 16px",
+                            fontWeight: 700,
+                            fontSize: "13px",
+                            letterSpacing: "0.01em",
+                            color: colIdx === 3 ? "#FDE047" : "#FFFFFF",
+                            backgroundColor: colIdx === 3 ? "#111827" : "#1F2937",
+                            borderBottom: "2px solid #374151",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          <span
+                            style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: "6px",
+                            }}
+                          >
+                            {heading}
+                            {colIdx === 3 && (
+                              <span
+                                style={{
+                                  backgroundColor: "#FEF08A",
+                                  color: "#854D0E",
+                                  fontSize: "10px",
+                                  fontWeight: 800,
+                                  padding: "2px 6px",
+                                  borderRadius: "4px",
+                                  textTransform: "uppercase",
+                                  letterSpacing: "0.05em",
+                                }}
+                              >
+                                Popular
+                              </span>
+                            )}
+                          </span>
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {comparisonMatrixRows.map((row, rowIdx) => {
+                      const isEven = rowIdx % 2 === 0;
+                      const rowBg = isEven ? "#FFFFFF" : "#F8FAFC";
+                      return (
+                        <tr
+                          key={row[0]}
+                          style={{
+                            backgroundColor: rowBg,
+                            borderBottom: "1px solid #E2E8F0",
+                            transition: "background-color 0.15s ease",
+                          }}
+                        >
+                          {row.map((cellText, colIdx) => {
+                            const isFirstCol = colIdx === 0;
+                            const isGrowthCol = colIdx === 3;
+                            return (
+                              <td
+                                key={`${row[0]}-${colIdx}`}
+                                style={{
+                                  padding: "12px 16px",
+                                  fontWeight: isFirstCol ? 600 : isGrowthCol ? 600 : 400,
+                                  color: isFirstCol
+                                    ? "#0F172A"
+                                    : isGrowthCol
+                                    ? "#1E293B"
+                                    : "#334155",
+                                  backgroundColor: isGrowthCol
+                                    ? isEven
+                                      ? "#FEFCE8"
+                                      : "#FEF9C3"
+                                    : undefined,
+                                  whiteSpace: isFirstCol ? "nowrap" : "normal",
+                                  verticalAlign: "middle",
+                                }}
+                              >
+                                {cellText}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
             </Card>
           </Layout.Section>
         </Layout>
