@@ -115,13 +115,25 @@ function detectBangladeshDistrictId(destination: any): string {
 function verifyShopifyHmac(rawBody: string, hmacHeader: string | null): boolean {
   const secret = process.env.SHOPIFY_API_SECRET;
   if (!secret || !hmacHeader) {
-    return true;
+    return false;
   }
-  const digest = crypto
-    .createHmac("sha256", secret)
-    .update(rawBody, "utf8")
-    .digest("base64");
-  return digest === hmacHeader;
+  try {
+    const digest = crypto
+      .createHmac("sha256", secret)
+      .update(rawBody, "utf8")
+      .digest("base64");
+
+    const digestBuffer = Buffer.from(digest, "utf8");
+    const headerBuffer = Buffer.from(hmacHeader, "utf8");
+
+    if (digestBuffer.length !== headerBuffer.length) {
+      return false;
+    }
+
+    return crypto.timingSafeEqual(digestBuffer, headerBuffer);
+  } catch {
+    return false;
+  }
 }
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
@@ -149,10 +161,17 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const items = Array.isArray(rateRequest?.items) ? rateRequest.items : [];
     const currency = rateRequest?.currency || "BDT";
 
+    const url = new URL(request.url);
     const shopDomain =
       request.headers.get("X-Shopify-Shop-Domain") ||
+      url.searchParams.get("shop") ||
       payload?.shop_domain ||
       "";
+
+    // Strict multi-tenant isolation: if no shopDomain is identified, abort immediately
+    if (!shopDomain) {
+      return json({ rates: [] });
+    }
 
     // 1. Identify Customer's Bangladeshi District
     const matchedDistrictId = detectBangladeshDistrictId(destination);
@@ -172,14 +191,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
     await connectDB();
 
-    // 3. Query ZoneDistricts & ShippingZone in parallel with a 350ms safety budget
-    const zoneMatchQuery = shopDomain
-      ? { merchantId: shopDomain, districtIds: matchedDistrictId }
-      : { districtIds: matchedDistrictId };
-
-    const matchedZoneDistrictDocs: any[] = await ZoneDistricts.find(
-      zoneMatchQuery
-    )
+    // 3. Query ZoneDistricts & ShippingZone strictly scoped to this merchant
+    const matchedZoneDistrictDocs: any[] = await ZoneDistricts.find({
+      merchantId: shopDomain,
+      districtIds: matchedDistrictId,
+    })
       .limit(5)
       .lean();
 
@@ -208,6 +224,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const zoneIds = matchedZoneDistrictDocs.map((zd) => zd.zoneId);
     const shippingZones: any[] = await ShippingZone.find({
       _id: { $in: zoneIds },
+      merchantId: shopDomain,
     }).lean();
 
     const rates = shippingZones.map((zone) => {

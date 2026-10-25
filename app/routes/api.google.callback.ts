@@ -9,20 +9,20 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   if (error) {
     console.error("Google OAuth error callback:", error);
-    return redirect(`/app/settings?google=error&reason=${encodeURIComponent(error)}`);
+    return redirect(`/app/integrations?google=error&reason=${encodeURIComponent(error)}`);
   }
 
   if (!code || !shopDomain) {
-    return redirect("/app/settings?google=missing_parameters");
+    return redirect("/app/integrations?google=missing_parameters");
   }
 
   try {
     await exchangeCodeForTokens(code, shopDomain);
-    return redirect(`/app/settings?google=connected&shop=${encodeURIComponent(shopDomain)}`);
+    return redirect(`/app/integrations?google=connected&shop=${encodeURIComponent(shopDomain)}`);
   } catch (err: any) {
     console.error("Failed to complete Google OAuth exchange:", err);
     return redirect(
-      `/app/settings?google=failed&error=${encodeURIComponent(err.message || "OAuth exchange failed")}`
+      `/app/integrations?google=failed&error=${encodeURIComponent(err.message || "OAuth exchange failed")}`
     );
   }
 };

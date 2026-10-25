@@ -273,7 +273,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   if (actionType === "registerCarrierService") {
     const appBaseUrl =
       process.env.SHOPIFY_APP_URL || new URL(request.url).origin;
-    const callbackUrl = `${appBaseUrl.replace(/\/$/, "")}/api/shipping-rates`;
+    const callbackUrl = `${appBaseUrl.replace(/\/$/, "")}/api/shipping-rates?shop=${encodeURIComponent(shopDomain)}`;
 
     const CREATE_CARRIER_MUTATION = `#graphql
       mutation RegisterBDCarrierService($input: DeliveryCarrierServiceCreateInput!) {
@@ -329,11 +329,39 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         const found = edges.find(
           ({ node }: any) =>
             node.name === "BD Dynamic Courier Shipping Rates" ||
-            node.callbackUrl === callbackUrl
+            node.callbackUrl === callbackUrl ||
+            (node.callbackUrl && node.callbackUrl.includes("/api/shipping-rates"))
         );
 
         if (found?.node?.id) {
           carrierServiceId = found.node.id;
+
+          // If the registered carrier service has an outdated callbackUrl, sync it now
+          if (found.node.callbackUrl !== callbackUrl) {
+            const UPDATE_CARRIER_MUTATION = `#graphql
+              mutation UpdateBDCarrierService($id: ID!, $input: DeliveryCarrierServiceUpdateInput!) {
+                carrierServiceUpdate(id: $id, input: $input) {
+                  carrierService {
+                    id
+                    callbackUrl
+                  }
+                  userErrors {
+                    field
+                    message
+                  }
+                }
+              }
+            `;
+            await admin.graphql(UPDATE_CARRIER_MUTATION, {
+              variables: {
+                id: carrierServiceId,
+                input: {
+                  callbackUrl,
+                  active: true,
+                },
+              },
+            });
+          }
         } else if (userErrors.length > 0) {
           return json({
             success: false,
