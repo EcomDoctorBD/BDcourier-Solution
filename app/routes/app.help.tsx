@@ -122,11 +122,7 @@ export default function HelpAndSupportRoute() {
   const whatsappUrl = `https://api.whatsapp.com/send?phone=${normalizedWhatsAppDigits}&text=${whatsappMessage}`;
 
   return (
-    <Page
-      title="Help & Support"
-      subtitle={`Store: ${shopDomain} • Active Plan: ${currentPlan}`}
-      backAction={{ content: "Dashboard", url: `/app${searchStr}` }}
-    >
+    <Page>
       <TitleBar title="Help & Support" />
 
       <BlockStack gap="500">
