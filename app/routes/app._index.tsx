@@ -797,238 +797,362 @@ export default function CourierDashboard() {
 
           {/* 3-Column Courier Integration Cards */}
           <Layout.Section>
-            <Grid>
-              {/* 1. Pathao Courier Card */}
-              <Grid.Cell columnSpan={{ xs: 6, sm: 6, md: 2, lg: 4, xl: 4 }}>
-                <Card padding="500">
-                  <BlockStack gap="400">
-                    <InlineStack align="space-between" blockAlign="center">
-                      <InlineStack gap="300" blockAlign="center">
-                        <CourierLogo courier="pathao" size={44} />
-                        <Text as="h3" variant="headingMd">
-                          Pathao Courier
-                        </Text>
-                      </InlineStack>
+            <div
+              className="courier-grid-container"
+              style={{
+                alignItems: "stretch",
+              }}
+            >
+              <style>{`
+                .courier-grid-container .Polaris-Grid {
+                  align-items: stretch;
+                }
+                .courier-grid-container .Polaris-Grid-Cell {
+                  display: flex;
+                  flex-direction: column;
+                }
+                .courier-grid-container .Polaris-ShadowBevel {
+                  height: 100%;
+                  display: flex;
+                  flex-direction: column;
+                  flex: 1;
+                }
+                .courier-grid-container .Polaris-Box {
+                  height: 100%;
+                  display: flex;
+                  flex-direction: column;
+                  flex: 1;
+                }
+                .courier-grid-container .Polaris-BlockStack {
+                  height: 100%;
+                  display: flex;
+                  flex-direction: column;
+                  flex: 1;
+                }
+              `}</style>
+              <Grid>
+                {/* 1. Pathao Courier Card */}
+                <Grid.Cell columnSpan={{ xs: 6, sm: 6, md: 2, lg: 4, xl: 4 }}>
+                  <div
+                    style={{
+                      height: "100%",
+                      display: "flex",
+                      flexDirection: "column",
+                    }}
+                  >
+                    <Card padding="500">
+                      <BlockStack gap="400">
+                        <InlineStack align="space-between" blockAlign="center">
+                          <InlineStack gap="300" blockAlign="center">
+                            <CourierLogo courier="pathao" size={44} />
+                            <Text as="h3" variant="headingMd">
+                              Pathao Courier
+                            </Text>
+                          </InlineStack>
 
-                      <Badge
-                        tone={isPathaoConnected ? "success" : undefined}
-                        progress={
-                          isPathaoConnected ? "complete" : "incomplete"
-                        }
-                      >
-                        {isPathaoConnected ? "Connected" : "Not Configured"}
-                      </Badge>
-                    </InlineStack>
+                          <Badge
+                            tone={isPathaoConnected ? "success" : undefined}
+                            progress={
+                              isPathaoConnected ? "complete" : "incomplete"
+                            }
+                          >
+                            {isPathaoConnected ? "Connected" : "Not Configured"}
+                          </Badge>
+                        </InlineStack>
 
-                    <Divider />
+                        <Divider />
 
-                    <BlockStack gap="200">
-                      <Text as="p" variant="bodyMd" tone="subdued">
-                        Automated parcel booking, express delivery, and live
-                        consignment tracking with Pathao Merchant API.
-                      </Text>
+                        <div
+                          style={{
+                            flexGrow: 1,
+                            display: "flex",
+                            flexDirection: "column",
+                          }}
+                        >
+                          <BlockStack gap="200">
+                            <Text as="p" variant="bodyMd" tone="subdued">
+                              Automated parcel booking, express delivery, and live
+                              consignment tracking with Pathao Merchant API.
+                            </Text>
 
-                      <Text as="p" variant="bodySm" tone="subdued">
-                        Required: <strong>Client ID, Client Secret, Username, Password, Store ID</strong>
-                      </Text>
-                    </BlockStack>
+                            <Text as="p" variant="bodySm" tone="subdued">
+                              Required: <strong>Client ID, Client Secret, Username, Password, Store ID</strong>
+                            </Text>
+                          </BlockStack>
+                        </div>
 
-                    <InlineStack align="end">
-                      <Button
-                        url={`/app/courier-settings${searchStr}`}
-                        variant={isPathaoConnected ? "secondary" : "primary"}
-                      >
-                        {isPathaoConnected ? "Update Pathao" : "Configure Pathao"}
-                      </Button>
-                    </InlineStack>
-                  </BlockStack>
-                </Card>
-              </Grid.Cell>
+                        <div style={{ marginTop: "auto" }}>
+                          <InlineStack align="end">
+                            <Button
+                              url={`/app/courier-settings${searchStr}`}
+                              variant={isPathaoConnected ? "secondary" : "primary"}
+                            >
+                              {isPathaoConnected ? "Update Pathao" : "Configure Pathao"}
+                            </Button>
+                          </InlineStack>
+                        </div>
+                      </BlockStack>
+                    </Card>
+                  </div>
+                </Grid.Cell>
 
-              {/* 2. Steadfast Courier Card */}
-              <Grid.Cell columnSpan={{ xs: 6, sm: 6, md: 2, lg: 4, xl: 4 }}>
-                <Card padding="500">
-                  <BlockStack gap="400">
-                    <InlineStack align="space-between" blockAlign="center">
-                      <InlineStack gap="300" blockAlign="center">
-                        <CourierLogo courier="steadfast" size={44} />
-                        <Text as="h3" variant="headingMd">
-                          Steadfast Courier
-                        </Text>
-                      </InlineStack>
+                {/* 2. Steadfast Courier Card */}
+                <Grid.Cell columnSpan={{ xs: 6, sm: 6, md: 2, lg: 4, xl: 4 }}>
+                  <div
+                    style={{
+                      height: "100%",
+                      display: "flex",
+                      flexDirection: "column",
+                    }}
+                  >
+                    <Card padding="500">
+                      <BlockStack gap="400">
+                        <InlineStack align="space-between" blockAlign="center">
+                          <InlineStack gap="300" blockAlign="center">
+                            <CourierLogo courier="steadfast" size={44} />
+                            <Text as="h3" variant="headingMd">
+                              Steadfast Courier
+                            </Text>
+                          </InlineStack>
 
-                      <Badge
-                        tone={isSteadfastConnected ? "success" : undefined}
-                        progress={
-                          isSteadfastConnected ? "complete" : "incomplete"
-                        }
-                      >
-                        {isSteadfastConnected ? "Connected" : "Not Configured"}
-                      </Badge>
-                    </InlineStack>
+                          <Badge
+                            tone={isSteadfastConnected ? "success" : undefined}
+                            progress={
+                              isSteadfastConnected ? "complete" : "incomplete"
+                            }
+                          >
+                            {isSteadfastConnected ? "Connected" : "Not Configured"}
+                          </Badge>
+                        </InlineStack>
 
-                    <Divider />
+                        <Divider />
 
-                    <BlockStack gap="200">
-                      <Text as="p" variant="bodyMd" tone="subdued">
-                        Fast Cash-on-Delivery (COD) fulfillment and nationwide
-                        parcel booking across Bangladesh.
-                      </Text>
+                        <div
+                          style={{
+                            flexGrow: 1,
+                            display: "flex",
+                            flexDirection: "column",
+                          }}
+                        >
+                          <BlockStack gap="200">
+                            <Text as="p" variant="bodyMd" tone="subdued">
+                              Fast Cash-on-Delivery (COD) fulfillment and nationwide
+                              parcel booking across Bangladesh.
+                            </Text>
 
-                      <Text as="p" variant="bodySm" tone="subdued">
-                        Required: <strong>API Key, Secret Key</strong>
-                      </Text>
-                    </BlockStack>
+                            <Text as="p" variant="bodySm" tone="subdued">
+                              Required: <strong>API Key, Secret Key</strong>
+                            </Text>
+                          </BlockStack>
+                        </div>
 
-                    <InlineStack align="end">
-                      <Button
-                        url={`/app/courier-settings${searchStr}`}
-                        variant={isSteadfastConnected ? "secondary" : "primary"}
-                      >
-                        {isSteadfastConnected ? "Update Steadfast" : "Configure Steadfast"}
-                      </Button>
-                    </InlineStack>
-                  </BlockStack>
-                </Card>
-              </Grid.Cell>
+                        <div style={{ marginTop: "auto" }}>
+                          <InlineStack align="end">
+                            <Button
+                              url={`/app/courier-settings${searchStr}`}
+                              variant={isSteadfastConnected ? "secondary" : "primary"}
+                            >
+                              {isSteadfastConnected ? "Update Steadfast" : "Configure Steadfast"}
+                            </Button>
+                          </InlineStack>
+                        </div>
+                      </BlockStack>
+                    </Card>
+                  </div>
+                </Grid.Cell>
 
-              {/* 3. RedX Delivery Card */}
-              <Grid.Cell columnSpan={{ xs: 6, sm: 6, md: 2, lg: 4, xl: 4 }}>
-                <Card padding="500">
-                  <BlockStack gap="400">
-                    <InlineStack align="space-between" blockAlign="center">
-                      <InlineStack gap="300" blockAlign="center">
-                        <CourierLogo courier="redx" size={44} />
-                        <Text as="h3" variant="headingMd">
-                          RedX Delivery
-                        </Text>
-                      </InlineStack>
+                {/* 3. RedX Delivery Card */}
+                <Grid.Cell columnSpan={{ xs: 6, sm: 6, md: 2, lg: 4, xl: 4 }}>
+                  <div
+                    style={{
+                      height: "100%",
+                      display: "flex",
+                      flexDirection: "column",
+                    }}
+                  >
+                    <Card padding="500">
+                      <BlockStack gap="400">
+                        <InlineStack align="space-between" blockAlign="center">
+                          <InlineStack gap="300" blockAlign="center">
+                            <CourierLogo courier="redx" size={44} />
+                            <Text as="h3" variant="headingMd">
+                              RedX Delivery
+                            </Text>
+                          </InlineStack>
 
-                      <Badge
-                        tone={isRedxConnected ? "success" : undefined}
-                        progress={isRedxConnected ? "complete" : "incomplete"}
-                      >
-                        {isRedxConnected ? "Connected" : "Not Configured"}
-                      </Badge>
-                    </InlineStack>
+                          <Badge
+                            tone={isRedxConnected ? "success" : undefined}
+                            progress={isRedxConnected ? "complete" : "incomplete"}
+                          >
+                            {isRedxConnected ? "Connected" : "Not Configured"}
+                          </Badge>
+                        </InlineStack>
 
-                    <Divider />
+                        <Divider />
 
-                    <BlockStack gap="200">
-                      <Text as="p" variant="bodyMd" tone="subdued">
-                        64-district doorstep delivery network with automated
-                        pickup scheduling and label generation.
-                      </Text>
+                        <div
+                          style={{
+                            flexGrow: 1,
+                            display: "flex",
+                            flexDirection: "column",
+                          }}
+                        >
+                          <BlockStack gap="200">
+                            <Text as="p" variant="bodyMd" tone="subdued">
+                              64-district doorstep delivery network with automated
+                              pickup scheduling and label generation.
+                            </Text>
 
-                      <Text as="p" variant="bodySm" tone="subdued">
-                        Required: <strong>API Access Token, Pickup Store ID</strong>
-                      </Text>
-                    </BlockStack>
+                            <Text as="p" variant="bodySm" tone="subdued">
+                              Required: <strong>API Access Token, Pickup Store ID</strong>
+                            </Text>
+                          </BlockStack>
+                        </div>
 
-                    <InlineStack align="end">
-                      <Button
-                        url={`/app/courier-settings${searchStr}`}
-                        variant={isRedxConnected ? "secondary" : "primary"}
-                      >
-                        {isRedxConnected ? "Update RedX" : "Configure RedX"}
-                      </Button>
-                    </InlineStack>
-                  </BlockStack>
-                </Card>
-              </Grid.Cell>
+                        <div style={{ marginTop: "auto" }}>
+                          <InlineStack align="end">
+                            <Button
+                              url={`/app/courier-settings${searchStr}`}
+                              variant={isRedxConnected ? "secondary" : "primary"}
+                            >
+                              {isRedxConnected ? "Update RedX" : "Configure RedX"}
+                            </Button>
+                          </InlineStack>
+                        </div>
+                      </BlockStack>
+                    </Card>
+                  </div>
+                </Grid.Cell>
 
-              {/* 4. CarryBee Card */}
-              <Grid.Cell columnSpan={{ xs: 6, sm: 6, md: 2, lg: 4, xl: 4 }}>
-                <Card padding="500">
-                  <BlockStack gap="400">
-                    <InlineStack align="space-between" blockAlign="center">
-                      <InlineStack gap="300" blockAlign="center">
-                        <CourierLogo courier="carrybee" size={44} />
-                        <Text as="h3" variant="headingMd">
-                          CarryBee
-                        </Text>
-                      </InlineStack>
+                {/* 4. CarryBee Card */}
+                <Grid.Cell columnSpan={{ xs: 6, sm: 6, md: 2, lg: 4, xl: 4 }}>
+                  <div
+                    style={{
+                      height: "100%",
+                      display: "flex",
+                      flexDirection: "column",
+                    }}
+                  >
+                    <Card padding="500">
+                      <BlockStack gap="400">
+                        <InlineStack align="space-between" blockAlign="center">
+                          <InlineStack gap="300" blockAlign="center">
+                            <CourierLogo courier="carrybee" size={44} />
+                            <Text as="h3" variant="headingMd">
+                              CarryBee
+                            </Text>
+                          </InlineStack>
 
-                      <Badge
-                        tone={isCarrybeeConnected ? "success" : undefined}
-                        progress={
-                          isCarrybeeConnected ? "complete" : "incomplete"
-                        }
-                      >
-                        {isCarrybeeConnected ? "Connected" : "Not Configured"}
-                      </Badge>
-                    </InlineStack>
+                          <Badge
+                            tone={isCarrybeeConnected ? "success" : undefined}
+                            progress={
+                              isCarrybeeConnected ? "complete" : "incomplete"
+                            }
+                          >
+                            {isCarrybeeConnected ? "Connected" : "Not Configured"}
+                          </Badge>
+                        </InlineStack>
 
-                    <Divider />
+                        <Divider />
 
-                    <BlockStack gap="200">
-                      <Text as="p" variant="bodyMd" tone="subdued">
-                        Tech-first automated logistics network with rapid parcel dispatch and API status sync.
-                      </Text>
+                        <div
+                          style={{
+                            flexGrow: 1,
+                            display: "flex",
+                            flexDirection: "column",
+                          }}
+                        >
+                          <BlockStack gap="200">
+                            <Text as="p" variant="bodyMd" tone="subdued">
+                              Tech-first automated logistics network with rapid parcel dispatch and API status sync.
+                            </Text>
 
-                      <Text as="p" variant="bodySm" tone="subdued">
-                        Required: <strong>Client ID, Client Secret, Client Context</strong>
-                      </Text>
-                    </BlockStack>
+                            <Text as="p" variant="bodySm" tone="subdued">
+                              Required: <strong>Client ID, Client Secret, Client Context</strong>
+                            </Text>
+                          </BlockStack>
+                        </div>
 
-                    <InlineStack align="end">
-                      <Button
-                        url={`/app/courier-settings${searchStr}`}
-                        variant={isCarrybeeConnected ? "secondary" : "primary"}
-                      >
-                        {isCarrybeeConnected ? "Update CarryBee" : "Configure CarryBee"}
-                      </Button>
-                    </InlineStack>
-                  </BlockStack>
-                </Card>
-              </Grid.Cell>
+                        <div style={{ marginTop: "auto" }}>
+                          <InlineStack align="end">
+                            <Button
+                              url={`/app/courier-settings${searchStr}`}
+                              variant={isCarrybeeConnected ? "secondary" : "primary"}
+                            >
+                              {isCarrybeeConnected ? "Update CarryBee" : "Configure CarryBee"}
+                            </Button>
+                          </InlineStack>
+                        </div>
+                      </BlockStack>
+                    </Card>
+                  </div>
+                </Grid.Cell>
 
-              {/* 5. Bahok Courier Card */}
-              <Grid.Cell columnSpan={{ xs: 6, sm: 6, md: 2, lg: 4, xl: 4 }}>
-                <Card padding="500">
-                  <BlockStack gap="400">
-                    <InlineStack align="space-between" blockAlign="center">
-                      <InlineStack gap="300" blockAlign="center">
-                        <CourierLogo courier="bahok" size={44} />
-                        <Text as="h3" variant="headingMd">
-                          Bahok Courier
-                        </Text>
-                      </InlineStack>
+                {/* 5. Bahok Courier Card */}
+                <Grid.Cell columnSpan={{ xs: 6, sm: 6, md: 2, lg: 4, xl: 4 }}>
+                  <div
+                    style={{
+                      height: "100%",
+                      display: "flex",
+                      flexDirection: "column",
+                    }}
+                  >
+                    <Card padding="500">
+                      <BlockStack gap="400">
+                        <InlineStack align="space-between" blockAlign="center">
+                          <InlineStack gap="300" blockAlign="center">
+                            <CourierLogo courier="bahok" size={44} />
+                            <Text as="h3" variant="headingMd">
+                              Bahok Courier
+                            </Text>
+                          </InlineStack>
 
-                      <Badge
-                        tone={isBahokConnected ? "success" : undefined}
-                        progress={
-                          isBahokConnected ? "complete" : "incomplete"
-                        }
-                      >
-                        {isBahokConnected ? "Connected" : "Not Configured"}
-                      </Badge>
-                    </InlineStack>
+                          <Badge
+                            tone={isBahokConnected ? "success" : undefined}
+                            progress={
+                              isBahokConnected ? "complete" : "incomplete"
+                            }
+                          >
+                            {isBahokConnected ? "Connected" : "Not Configured"}
+                          </Badge>
+                        </InlineStack>
 
-                    <Divider />
+                        <Divider />
 
-                    <BlockStack gap="200">
-                      <Text as="p" variant="bodyMd" tone="subdued">
-                        Reliable nationwide e-commerce courier service with doorstep delivery across Bangladesh.
-                      </Text>
+                        <div
+                          style={{
+                            flexGrow: 1,
+                            display: "flex",
+                            flexDirection: "column",
+                          }}
+                        >
+                          <BlockStack gap="200">
+                            <Text as="p" variant="bodyMd" tone="subdued">
+                              Reliable nationwide e-commerce courier service with doorstep delivery across Bangladesh.
+                            </Text>
 
-                      <Text as="p" variant="bodySm" tone="subdued">
-                        Required: <strong>Merchant ID, API Key, API Secret / Token</strong>
-                      </Text>
-                    </BlockStack>
+                            <Text as="p" variant="bodySm" tone="subdued">
+                              Required: <strong>Merchant ID, API Key, API Secret / Token</strong>
+                            </Text>
+                          </BlockStack>
+                        </div>
 
-                    <InlineStack align="end">
-                      <Button
-                        url={`/app/courier-settings${searchStr}`}
-                        variant={isBahokConnected ? "secondary" : "primary"}
-                      >
-                        {isBahokConnected ? "Update Bahok" : "Configure Bahok"}
-                      </Button>
-                    </InlineStack>
-                  </BlockStack>
-                </Card>
-              </Grid.Cell>
-            </Grid>
+                        <div style={{ marginTop: "auto" }}>
+                          <InlineStack align="end">
+                            <Button
+                              url={`/app/courier-settings${searchStr}`}
+                              variant={isBahokConnected ? "secondary" : "primary"}
+                            >
+                              {isBahokConnected ? "Update Bahok" : "Configure Bahok"}
+                            </Button>
+                          </InlineStack>
+                        </div>
+                      </BlockStack>
+                    </Card>
+                  </div>
+                </Grid.Cell>
+              </Grid>
+            </div>
           </Layout.Section>
         </Layout>
       </BlockStack>
