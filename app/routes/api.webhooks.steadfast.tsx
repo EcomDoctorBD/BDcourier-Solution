@@ -1,12 +1,33 @@
+import crypto from "crypto";
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
-import { connectDB, ShipmentBooking, CourierConfig } from "../db.server";
+import {
+  connectDB,
+  ShipmentBooking,
+  CourierConfig,
+  decryptCourierConfig,
+} from "../db.server";
 import { syncDeliveredBookingToShopify } from "../services/shopify-sync.server";
 
 /**
- * STEADFAST COURIER WEBHOOK RECEIVER
- * Receives real-time parcel consignment status and COD updates from Steadfast
+ * Constant-time safe string comparison to prevent timing attacks
  */
+function safeCompare(provided: string, expected: string): boolean {
+  if (!provided || !expected) return false;
+  try {
+    const bufA = Buffer.from(provided.trim(), "utf8");
+    const bufB = Buffer.from(expected.trim(), "utf8");
+    if (bufA.length !== bufB.length) return false;
+    return crypto.timingSafeEqual(bufA, bufB);
+  } catch {
+    return false;
+  }
+}
 
+/**
+ * STEADFAST COURIER WEBHOOK RECEIVER
+ * Receives real-time parcel consignment status and COD updates from Steadfast.
+ * Strictly scoped per { shopDomain } and verified with timing-safe secrets.
+ */
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   return new Response(
     JSON.stringify({
@@ -32,12 +53,63 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   await connectDB();
 
   const url = new URL(request.url);
-  const shopQuery = url.searchParams.get("shop")?.trim() || "";
+  const shopDomain = url.searchParams.get("shop")?.trim() || "";
 
-  // Verify Bearer token if provided in Authorization header
+  // 1. Enforce strict shopDomain requirement
+  if (!shopDomain) {
+    return new Response(
+      JSON.stringify({ error: "Missing required shop parameter" }),
+      {
+        status: 400,
+        headers: { "Content-Type": "application/json" },
+      }
+    );
+  }
+
+  // 2. Fetch and decrypt store courier config
+  const rawConfig: any = await CourierConfig.findOne({ shopDomain }).lean();
+  if (!rawConfig) {
+    return new Response(
+      JSON.stringify({ error: "Store courier configuration not found" }),
+      {
+        status: 401,
+        headers: { "Content-Type": "application/json" },
+      }
+    );
+  }
+
+  const config = decryptCourierConfig(rawConfig);
+  const webhookSecret = String(config?.webhookSecret || "").trim();
+  const steadfastApiKey = String(config?.steadfastApiKey || "").trim();
+  const steadfastSecretKey = String(config?.steadfastSecretKey || "").trim();
+
+  // 3. Extract provided token from Authorization header or URL token parameter
   const authHeader = request.headers.get("Authorization") || "";
   const tokenMatch = authHeader.match(/Bearer\s+(.+)/i);
-  const providedToken = tokenMatch ? tokenMatch[1].trim() : "";
+  const bearerToken = tokenMatch ? tokenMatch[1].trim() : authHeader.trim();
+  const queryToken = url.searchParams.get("token")?.trim() || "";
+  const headerToken =
+    request.headers.get("X-Steadfast-Token") ||
+    request.headers.get("x-steadfast-token") ||
+    request.headers.get("x-webhook-secret") ||
+    "";
+
+  const providedTokens = [queryToken, bearerToken, headerToken].filter(Boolean);
+  const allowedSecrets = [webhookSecret, steadfastApiKey, steadfastSecretKey].filter(Boolean);
+
+  const isAuthenticated = providedTokens.some((provided) =>
+    allowedSecrets.some((secret) => safeCompare(provided, secret))
+  );
+
+  if (!isAuthenticated) {
+    return new Response(
+      JSON.stringify({ error: "Unauthorized: Invalid or missing webhook token" }),
+      {
+        status: 401,
+        headers: { "Content-Type": "application/json" },
+      }
+    );
+  }
 
   let body: any = {};
   try {
@@ -45,7 +117,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     if (rawText) {
       body = JSON.parse(rawText);
     }
-  } catch (parseErr) {
+  } catch {
     return new Response(JSON.stringify({ error: "Invalid JSON payload" }), {
       status: 400,
       headers: { "Content-Type": "application/json" },
@@ -56,6 +128,16 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const invoice = String(body?.invoice || "").trim();
   const rawStatus = String(body?.status || "").toLowerCase().trim();
   const codAmount = body?.cod_amount;
+
+  if (!consignmentId && !invoice) {
+    return new Response(
+      JSON.stringify({ error: "Missing consignment_id or invoice" }),
+      {
+        status: 400,
+        headers: { "Content-Type": "application/json" },
+      }
+    );
+  }
 
   // Normalize Steadfast Delivery Status
   let normalizedStatus = "in_transit";
@@ -71,42 +153,40 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     normalizedStatus = rawStatus.replace(/[^a-z0-9_]/g, "_");
   }
 
-  // Locate matching ShipmentBooking in MongoDB
+  // Locate matching ShipmentBooking strictly scoped to shopDomain
   const queryConditions: any[] = [];
   if (consignmentId) {
     queryConditions.push({ trackingNumber: consignmentId });
   }
   if (invoice) {
     const cleanInvoice = invoice.replace(/[^a-zA-Z0-9_-]/g, "");
-    queryConditions.push({ orderName: { $regex: new RegExp(cleanInvoice, "i") } });
+    queryConditions.push({ orderName: { $regex: new RegExp(`^#?${cleanInvoice}$`, "i") } });
   }
 
-  if (queryConditions.length > 0) {
-    const query = shopQuery
-      ? { shopDomain: shopQuery, $or: queryConditions }
-      : { $or: queryConditions };
+  const query = { shopDomain, $or: queryConditions };
 
-    const updateDoc: any = {
-      courierStatus: normalizedStatus,
-      updatedAt: new Date(),
-    };
+  const updateDoc: any = {
+    courierStatus: normalizedStatus,
+    updatedAt: new Date(),
+  };
 
-    if (codAmount !== undefined && codAmount !== null && !Number.isNaN(Number(codAmount))) {
-      updateDoc.courierCashCollected = Number(codAmount).toFixed(2);
-    }
+  if (codAmount !== undefined && codAmount !== null && !Number.isNaN(Number(codAmount))) {
+    updateDoc.courierCashCollected = Number(codAmount).toFixed(2);
+  }
 
-    if (normalizedStatus === "delivered") {
-      updateDoc.shopifySyncedPaidFulfilled = true;
-    }
+  if (normalizedStatus === "delivered") {
+    updateDoc.shopifySyncedPaidFulfilled = true;
+  }
 
-    await ShipmentBooking.updateMany(query, { $set: updateDoc });
+  const updateResult = await ShipmentBooking.updateMany(query, { $set: updateDoc });
 
-    // Non-blocking Shopify Paid & Fulfilled + Tagging sync when delivered or disbursed
-    if (normalizedStatus === "delivered" || normalizedStatus === "disbursed") {
-      ShipmentBooking.find(query)
-        .lean()
-        .then((matchingBookings) => {
-          for (const booking of matchingBookings) {
+  // Non-blocking Shopify Paid & Fulfilled + Tagging sync when verified delivered or disbursed
+  if (normalizedStatus === "delivered" || normalizedStatus === "disbursed") {
+    ShipmentBooking.find(query)
+      .lean()
+      .then((matchingBookings) => {
+        for (const booking of matchingBookings) {
+          if (booking.shopDomain === shopDomain && booking.trackingNumber) {
             syncDeliveredBookingToShopify(booking).catch((err) =>
               console.warn(
                 `[Steadfast Webhook] Delivery sync error for ${booking.orderId}:`,
@@ -114,20 +194,20 @@ export const action = async ({ request }: ActionFunctionArgs) => {
               )
             );
           }
-        })
-        .catch((err) =>
-          console.warn(
-            "[Steadfast Webhook] Error querying matching bookings for sync:",
-            err?.message
-          )
-        );
-    }
+        }
+      })
+      .catch((err) =>
+        console.warn(
+          "[Steadfast Webhook] Error querying matching bookings for sync:",
+          err?.message
+        )
+      );
   }
 
   return new Response(
     JSON.stringify({
       status: "success",
-      message: "Webhook received",
+      matched_count: updateResult.matchedCount ?? updateResult.n ?? 0,
       consignment_id: consignmentId,
       courier_status: normalizedStatus,
     }),

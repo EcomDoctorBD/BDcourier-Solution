@@ -1,13 +1,33 @@
+import crypto from "crypto";
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
-import { connectDB, ShipmentBooking, CourierConfig } from "../db.server";
+import {
+  connectDB,
+  ShipmentBooking,
+  CourierConfig,
+  decryptCourierConfig,
+} from "../db.server";
 import { syncDeliveredBookingToShopify } from "../services/shopify-sync.server";
 
 /**
- * PATHAO COURIER WEBHOOK RECEIVER
- * Receives real-time parcel consignment status updates from Pathao
- * Supports Pathao's automated webhook URL handshake & integration secret verification
+ * Constant-time safe string comparison to prevent timing attacks
  */
+function safeCompare(provided: string, expected: string): boolean {
+  if (!provided || !expected) return false;
+  try {
+    const bufA = Buffer.from(provided.trim(), "utf8");
+    const bufB = Buffer.from(expected.trim(), "utf8");
+    if (bufA.length !== bufB.length) return false;
+    return crypto.timingSafeEqual(bufA, bufB);
+  } catch {
+    return false;
+  }
+}
 
+/**
+ * PATHAO COURIER WEBHOOK RECEIVER
+ * Receives real-time parcel consignment status updates from Pathao.
+ * Strictly scoped per { shopDomain } and verified with timing-safe secrets.
+ */
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   return new Response(
     JSON.stringify({
@@ -33,31 +53,72 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   await connectDB();
 
   const url = new URL(request.url);
-  const shopQuery = url.searchParams.get("shop")?.trim() || "";
+  const shopDomain = url.searchParams.get("shop")?.trim() || "";
 
-  // Check headers for Pathao Integration Secret handshake
-  const integrationSecretHeader =
-    request.headers.get("X-Pathao-Merchant-Webhook-Integration-Secret") ||
-    request.headers.get("x-pathao-merchant-webhook-integration-secret") ||
-    "";
+  // 1. Enforce strict shopDomain requirement
+  if (!shopDomain) {
+    return new Response(
+      JSON.stringify({ error: "Missing required shop parameter" }),
+      {
+        status: 400,
+        headers: { "Content-Type": "application/json" },
+      }
+    );
+  }
 
+  // 2. Fetch and decrypt store courier config
+  const rawConfig: any = await CourierConfig.findOne({ shopDomain }).lean();
+  if (!rawConfig) {
+    return new Response(
+      JSON.stringify({ error: "Store courier configuration not found" }),
+      {
+        status: 401,
+        headers: { "Content-Type": "application/json" },
+      }
+    );
+  }
+
+  const config = decryptCourierConfig(rawConfig);
+  const expectedSecret = String(config?.webhookSecret || "").trim();
+  const pathaoSecret = String(config?.pathaoSecret || "").trim();
+
+  // Parse payload safely
   let body: any = {};
   try {
     const rawText = await request.text();
     if (rawText) {
       body = JSON.parse(rawText);
     }
-  } catch (parseErr) {
+  } catch {
     return new Response(JSON.stringify({ error: "Invalid JSON payload" }), {
       status: 400,
       headers: { "Content-Type": "application/json" },
     });
   }
 
-  // --------------------------------------------------------------------------
-  // PATHAO HANDSHAKE: Pathao Verification Verification Ping (event: webhook_integration)
-  // Requires HTTP 202 Accepted and X-Pathao-Merchant-Webhook-Integration-Secret header
-  // --------------------------------------------------------------------------
+  // Extract provided tokens / secrets from headers, query params, or payload
+  const authHeader = request.headers.get("Authorization") || "";
+  const bearerToken = authHeader.replace(/^Bearer\s+/i, "").trim();
+  const integrationSecretHeader =
+    request.headers.get("X-Pathao-Merchant-Webhook-Integration-Secret") ||
+    request.headers.get("x-pathao-merchant-webhook-integration-secret") ||
+    "";
+  const signatureHeader =
+    request.headers.get("X-Pathao-Signature") ||
+    request.headers.get("x-pathao-signature") ||
+    "";
+  const queryToken = url.searchParams.get("token")?.trim() || "";
+  const bodySecret = String(body?.webhook_integration_secret || "").trim();
+
+  const providedSecrets = [
+    integrationSecretHeader,
+    queryToken,
+    bearerToken,
+    signatureHeader,
+    bodySecret,
+  ].filter(Boolean);
+
+  // 3. Handle Pathao Handshake Ping (event: webhook_integration or webhook_test)
   const event = String(body?.event || "").toLowerCase().trim();
   const isHandshake =
     event === "webhook_integration" ||
@@ -66,11 +127,17 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     Boolean(integrationSecretHeader);
 
   if (isHandshake) {
-    const secretEcho =
-      integrationSecretHeader ||
-      body?.webhook_integration_secret ||
-      "f3992ecc-59da-4cbe-a049-a13da2018d51";
+    if (!expectedSecret) {
+      return new Response(
+        JSON.stringify({ error: "No webhook secret configured for store" }),
+        {
+          status: 401,
+          headers: { "Content-Type": "application/json" },
+        }
+      );
+    }
 
+    // Pathao expects HTTP 202 and the merchant's secret echoed in X-Pathao-Merchant-Webhook-Integration-Secret
     return new Response(
       JSON.stringify({
         status: "success",
@@ -80,15 +147,30 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         status: 202,
         headers: {
           "Content-Type": "application/json",
-          "X-Pathao-Merchant-Webhook-Integration-Secret": secretEcho,
+          "X-Pathao-Merchant-Webhook-Integration-Secret": expectedSecret,
         },
       }
     );
   }
 
-  // --------------------------------------------------------------------------
-  // PATHAO LIVE STATUS EVENT PROCESSING
-  // --------------------------------------------------------------------------
+  // 4. Enforce strict authentication for live status events
+  const isSecretValid = providedSecrets.some(
+    (provided) =>
+      safeCompare(provided, expectedSecret) ||
+      (pathaoSecret && safeCompare(provided, pathaoSecret))
+  );
+
+  if (!isSecretValid) {
+    return new Response(
+      JSON.stringify({ error: "Unauthorized: Invalid or missing webhook secret" }),
+      {
+        status: 401,
+        headers: { "Content-Type": "application/json" },
+      }
+    );
+  }
+
+  // 5. Process Live Status Event with Strict Multi-Tenant Scoping
   const consignmentId = String(
     body?.consignment_id || body?.data?.consignment_id || ""
   ).trim();
@@ -98,6 +180,16 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const rawStatus = String(
     body?.order_status || body?.event || body?.data?.order_status || ""
   ).toLowerCase().trim();
+
+  if (!consignmentId && !merchantOrderId) {
+    return new Response(
+      JSON.stringify({ error: "Missing consignment_id or merchant_order_id" }),
+      {
+        status: 400,
+        headers: { "Content-Type": "application/json" },
+      }
+    );
+  }
 
   const collectedAmountRaw =
     body?.collected_amount ??
@@ -129,46 +221,44 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     normalizedStatus = rawStatus.replace(/[^a-z0-9_]/g, "_");
   }
 
-  // Locate matching ShipmentBooking in MongoDB
+  // Locate matching ShipmentBooking strictly scoped to shopDomain
   const queryConditions: any[] = [];
   if (consignmentId) {
     queryConditions.push({ trackingNumber: consignmentId });
   }
   if (merchantOrderId) {
     const cleanId = merchantOrderId.replace(/[^a-zA-Z0-9_-]/g, "");
-    queryConditions.push({ orderName: { $regex: new RegExp(cleanId, "i") } });
+    queryConditions.push({ orderName: { $regex: new RegExp(`^#?${cleanId}$`, "i") } });
   }
 
-  if (queryConditions.length > 0) {
-    const query = shopQuery
-      ? { shopDomain: shopQuery, $or: queryConditions }
-      : { $or: queryConditions };
+  const query = { shopDomain, $or: queryConditions };
 
-    const updateDoc: any = {
-      courierStatus: normalizedStatus,
-      updatedAt: new Date(),
-    };
+  const updateDoc: any = {
+    courierStatus: normalizedStatus,
+    updatedAt: new Date(),
+  };
 
-    if (
-      collectedAmountRaw !== undefined &&
-      collectedAmountRaw !== null &&
-      !Number.isNaN(Number(collectedAmountRaw))
-    ) {
-      updateDoc.courierCashCollected = Number(collectedAmountRaw).toFixed(2);
-    }
+  if (
+    collectedAmountRaw !== undefined &&
+    collectedAmountRaw !== null &&
+    !Number.isNaN(Number(collectedAmountRaw))
+  ) {
+    updateDoc.courierCashCollected = Number(collectedAmountRaw).toFixed(2);
+  }
 
-    if (normalizedStatus === "delivered") {
-      updateDoc.shopifySyncedPaidFulfilled = true;
-    }
+  if (normalizedStatus === "delivered") {
+    updateDoc.shopifySyncedPaidFulfilled = true;
+  }
 
-    await ShipmentBooking.updateMany(query, { $set: updateDoc });
+  const updateResult = await ShipmentBooking.updateMany(query, { $set: updateDoc });
 
-    // Non-blocking Shopify Paid & Fulfilled + Tagging sync when delivered or disbursed
-    if (normalizedStatus === "delivered" || normalizedStatus === "disbursed") {
-      ShipmentBooking.find(query)
-        .lean()
-        .then((matchingBookings) => {
-          for (const booking of matchingBookings) {
+  // Non-blocking Shopify Paid & Fulfilled + Tagging sync ONLY when verified delivered/disbursed
+  if (normalizedStatus === "delivered" || normalizedStatus === "disbursed") {
+    ShipmentBooking.find(query)
+      .lean()
+      .then((matchingBookings) => {
+        for (const booking of matchingBookings) {
+          if (booking.shopDomain === shopDomain && booking.trackingNumber) {
             syncDeliveredBookingToShopify(booking).catch((err) =>
               console.warn(
                 `[Pathao Webhook] Delivery sync error for ${booking.orderId}:`,
@@ -176,19 +266,20 @@ export const action = async ({ request }: ActionFunctionArgs) => {
               )
             );
           }
-        })
-        .catch((err) =>
-          console.warn(
-            "[Pathao Webhook] Error querying matching bookings for sync:",
-            err?.message
-          )
-        );
-    }
+        }
+      })
+      .catch((err) =>
+        console.warn(
+          "[Pathao Webhook] Error querying matching bookings for sync:",
+          err?.message
+        )
+      );
   }
 
   return new Response(
     JSON.stringify({
       status: "success",
+      matched_count: updateResult.matchedCount ?? updateResult.n ?? 0,
       consignment_id: consignmentId,
       courier_status: normalizedStatus,
     }),

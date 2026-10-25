@@ -700,10 +700,11 @@ export default function CourierSettingsPage() {
     }
   };
 
-  const pathaoWebhookUrl = `${appUrl}/api/webhooks/pathao?shop=${encodeURIComponent(shopDomain)}`;
-  const steadfastWebhookUrl = `${appUrl}/api/webhooks/steadfast?shop=${encodeURIComponent(shopDomain)}`;
-  const redxWebhookUrl = `${appUrl}/api/webhooks/redx?shop=${encodeURIComponent(shopDomain)}`;
   const webhookSecret = courierConfig.webhookSecret || "";
+  const tokenParam = webhookSecret ? `&token=${encodeURIComponent(webhookSecret)}` : "";
+  const pathaoWebhookUrl = `${appUrl}/api/webhooks/pathao?shop=${encodeURIComponent(shopDomain)}${tokenParam}`;
+  const steadfastWebhookUrl = `${appUrl}/api/webhooks/steadfast?shop=${encodeURIComponent(shopDomain)}${tokenParam}`;
+  const redxWebhookUrl = `${appUrl}/api/webhooks/redx?shop=${encodeURIComponent(shopDomain)}${tokenParam}`;
 
   // Collapsible gateway form states (compact summary by default)
   const [showPathaoForm, setShowPathaoForm] = useState(false);

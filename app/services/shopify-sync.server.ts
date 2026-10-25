@@ -209,7 +209,10 @@ export async function syncDeliveredBookingToShopify(booking: {
   }
 
   const { shopDomain, orderId, trackingNumber, courierKey, courierName, customerPhone } = booking;
-  if (!shopDomain || !orderId) return false;
+  if (!shopDomain || !orderId || !trackingNumber || !trackingNumber.trim()) {
+    console.warn(`[Shopify Sync] Rejected sync for ${orderId}: missing shopDomain or trackingNumber`);
+    return false;
+  }
 
   await connectDB();
 
@@ -248,7 +251,7 @@ export async function syncDeliveredBookingToShopify(booking: {
     await addShopifyOrderTags(admin, orderGid, [`${partnerName} Delivered`]);
 
     // 3. Mark synchronized in MongoDB ShipmentBooking
-    const filter = booking._id ? { _id: booking._id } : { shopDomain, orderId };
+    const filter = booking._id ? { _id: booking._id, shopDomain } : { shopDomain, orderId };
     await ShipmentBooking.updateOne(filter, {
       $set: {
         shopifySyncedPaidFulfilled: true,
