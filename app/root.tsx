@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import {
   Links,
   Meta,
@@ -11,6 +12,20 @@ import { Analytics } from "@vercel/analytics/remix";
 import { SpeedInsights } from "@vercel/speed-insights/remix";
 
 export default function App() {
+  // Safe Free Skew Protection against stale chunk cache when new deployments occur
+  useEffect(() => {
+    const handlePreloadError = () => {
+      const lastReload = sessionStorage.getItem("skew_reload_ts");
+      const now = Date.now();
+      if (!lastReload || now - Number(lastReload) > 10000) {
+        sessionStorage.setItem("skew_reload_ts", String(now));
+        window.location.reload();
+      }
+    };
+    window.addEventListener("vite:preloadError", handlePreloadError);
+    return () => window.removeEventListener("vite:preloadError", handlePreloadError);
+  }, []);
+
   return (
     <html>
       <head>

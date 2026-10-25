@@ -3,6 +3,7 @@
   "framework": "remix",
   "buildCommand": "npm run build",
   "installCommand": "npm install --legacy-peer-deps",
+  "regions": ["sin1"],
   "git": {
     "deploymentEnabled": {
       "main": true,
