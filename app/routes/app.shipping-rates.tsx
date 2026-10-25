@@ -814,46 +814,137 @@ export default function ShippingRatesPage() {
     >
       <TitleBar title="Shipping Rates" />
 
-      <BlockStack gap="600">
-        {showBanner && actionData?.message && (
-          <Banner
-            title={actionData.success ? "Success" : "Validation Error"}
-            tone={actionData.success ? "success" : "critical"}
-            onDismiss={() => setShowBanner(false)}
-          >
-            <p>{actionData.message}</p>
-          </Banner>
-        )}
+      <div className="shipping-rates-wrapper">
+        <style>{`
+          /* Sharpen all outer container card outlines */
+          .shipping-rates-wrapper .Polaris-Card {
+            border: 1px solid #E2E8F0 !important;
+            border-radius: 12px !important;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05) !important;
+            transition: border-color 0.15s ease-in-out;
+          }
+          .shipping-rates-wrapper .division-card .Polaris-Card {
+            border: 1px solid #E2E8F0 !important;
+            border-radius: 8px !important;
+            box-shadow: none !important;
+            background-color: #FAFAFA !important;
+          }
 
-        <BlockStack gap="100">
-          <Text as="h2" variant="headingLg">
-            Delivery Charge Rules
-          </Text>
-          <Text as="p" variant="bodyMd" tone="subdued">
-            Define customized delivery rates, weight rules, and Cash-on-Delivery (COD) fees across all 64 districts in Bangladesh.
-          </Text>
-        </BlockStack>
+          /* Primary Action Button ("Sync Checkout CarrierService" in page header & variants) */
+          .Polaris-Page-Header .Polaris-Button--variantPrimary,
+          .shipping-rates-wrapper .Polaris-Button--variantPrimary {
+            background-color: #000000 !important;
+            color: #FFFFFF !important;
+            font-weight: 600 !important;
+            border-radius: 8px !important;
+            border: 1px solid #000000 !important;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12) !important;
+            transition: background-color 0.15s ease-in-out, border-color 0.15s ease-in-out !important;
+          }
+          .Polaris-Page-Header .Polaris-Button--variantPrimary:hover,
+          .shipping-rates-wrapper .Polaris-Button--variantPrimary:hover {
+            background-color: #1F2937 !important;
+            border-color: #1F2937 !important;
+          }
 
-        <Layout>
-          {/* Zone Builder & Nested 8-Division / 64-District Selector */}
-          <Layout.Section>
-            <Grid>
-              {/* Left Column: Zone Pricing, Weight Tiers & COD Surcharge */}
-              <Grid.Cell columnSpan={{ xs: 6, sm: 6, md: 6, lg: 6, xl: 6 }}>
-                <Card padding="500">
-                  <BlockStack gap="400">
-                    <InlineStack align="space-between" blockAlign="center">
-                      <Text as="h3" variant="headingMd">
-                        {editingZoneId
-                          ? "Edit Shipping Zone"
-                          : "Configure Rates & Weight Tiers"}
-                      </Text>
-                      {editingZoneId && (
-                        <Button size="slim" onClick={handleResetBuilder}>
-                          + Create New Zone Instead
-                        </Button>
-                      )}
-                    </InlineStack>
+          /* Form Input Blocks: clean, thin, defined outlines */
+          .shipping-rates-wrapper .Polaris-TextField {
+            border: 1px solid #D1D5DB !important;
+            border-radius: 6px !important;
+            background-color: #FFFFFF !important;
+            transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out !important;
+          }
+          .shipping-rates-wrapper .Polaris-TextField:focus-within,
+          .shipping-rates-wrapper .Polaris-TextField--focus {
+            border-color: #000000 !important;
+            box-shadow: 0 0 0 1px #000000 !important;
+            outline: none !important;
+          }
+          .shipping-rates-wrapper .Polaris-TextField__Backdrop {
+            border: none !important;
+          }
+          .shipping-rates-wrapper .Polaris-TextField__Input {
+            outline: none !important;
+          }
+
+          /* Interactive Toggles & Checkboxes: Black accent & dark focus indicators */
+          .shipping-rates-wrapper input[type="checkbox"] {
+            accent-color: #000000 !important;
+          }
+          .shipping-rates-wrapper .Polaris-Checkbox__Input:checked + .Polaris-Checkbox__Backdrop {
+            background-color: #000000 !important;
+            border-color: #000000 !important;
+          }
+          .shipping-rates-wrapper .Polaris-Checkbox__Input:focus + .Polaris-Checkbox__Backdrop {
+            border-color: #000000 !important;
+            box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.2) !important;
+          }
+          .shipping-rates-wrapper .Polaris-Checkbox:hover .Polaris-Checkbox__Backdrop {
+            border-color: #000000 !important;
+          }
+        `}</style>
+
+        <BlockStack gap="600">
+          {showBanner && actionData?.message && (
+            <Banner
+              title={actionData.success ? "Success" : "Validation Error"}
+              tone={actionData.success ? "success" : "critical"}
+              onDismiss={() => setShowBanner(false)}
+            >
+              <p>{actionData.message}</p>
+            </Banner>
+          )}
+
+          <BlockStack gap="100">
+            <Text as="h2" variant="headingLg">
+              Delivery Charge Rules
+            </Text>
+            <Text as="p" variant="bodyMd" tone="subdued">
+              Define customized delivery rates, weight rules, and Cash-on-Delivery (COD) fees across all 64 districts in Bangladesh.
+            </Text>
+          </BlockStack>
+
+          <Layout>
+            {/* Zone Builder & Nested 8-Division / 64-District Selector */}
+            <Layout.Section>
+              <Grid>
+                {/* Left Column: Zone Pricing, Weight Tiers & COD Surcharge */}
+                <Grid.Cell columnSpan={{ xs: 6, sm: 6, md: 6, lg: 6, xl: 6 }}>
+                  <Card padding="500">
+                    <BlockStack gap="400">
+                      <InlineStack align="space-between" blockAlign="center">
+                        <Text as="h3" variant="headingMd">
+                          {editingZoneId
+                            ? "Edit Shipping Zone"
+                            : "Configure Rates & Weight Tiers"}
+                        </Text>
+                        {editingZoneId && (
+                          <button
+                            type="button"
+                            onClick={handleResetBuilder}
+                            className="bg-black text-white px-3 py-1 text-sm rounded transition-all hover:bg-gray-800 font-medium cursor-pointer"
+                            style={{
+                              backgroundColor: "#000000",
+                              color: "#FFFFFF",
+                              padding: "4px 12px",
+                              fontSize: "13px",
+                              borderRadius: "6px",
+                              fontWeight: 500,
+                              border: "none",
+                              cursor: "pointer",
+                              transition: "all 0.15s ease-in-out",
+                            }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.backgroundColor = "#1F2937";
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.backgroundColor = "#000000";
+                            }}
+                          >
+                            + Create New Zone Instead
+                          </button>
+                        )}
+                      </InlineStack>
 
                     <TextField
                       label="Zone Name"
@@ -886,9 +977,30 @@ export default function ShippingRatesPage() {
                             Add incremental weight surcharges for heavier consignments.
                           </Text>
                         </BlockStack>
-                        <Button size="slim" onClick={handleAddWeightTier}>
+                        <button
+                          type="button"
+                          onClick={handleAddWeightTier}
+                          className="bg-black text-white px-3 py-1 text-sm rounded transition-all hover:bg-gray-800 font-medium cursor-pointer"
+                          style={{
+                            backgroundColor: "#000000",
+                            color: "#FFFFFF",
+                            padding: "4px 12px",
+                            fontSize: "13px",
+                            borderRadius: "6px",
+                            fontWeight: 500,
+                            border: "none",
+                            cursor: "pointer",
+                            transition: "all 0.15s ease-in-out",
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.backgroundColor = "#1F2937";
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.backgroundColor = "#000000";
+                          }}
+                        >
                           + Add Weight Tier
-                        </Button>
+                        </button>
                       </InlineStack>
 
                       {weightTiers.map((tier, idx) => (
@@ -924,13 +1036,34 @@ export default function ShippingRatesPage() {
                             columnSpan={{ xs: 6, sm: 6, md: 6, lg: 2, xl: 2 }}
                           >
                             <Box paddingBlockStart="500">
-                              <Button
-                                tone="critical"
-                                size="slim"
+                              <button
+                                type="button"
                                 onClick={() => handleRemoveWeightTier(idx)}
+                                className="text-slate-600 hover:text-slate-900 border border-slate-300 hover:border-slate-500 bg-transparent px-3 py-1 text-sm rounded transition-colors font-medium cursor-pointer"
+                                style={{
+                                  backgroundColor: "transparent",
+                                  color: "#475569",
+                                  border: "1px solid #CBD5E1",
+                                  borderRadius: "6px",
+                                  padding: "4px 12px",
+                                  fontSize: "13px",
+                                  fontWeight: 500,
+                                  cursor: "pointer",
+                                  transition: "all 0.15s ease-in-out",
+                                }}
+                                onMouseEnter={(e) => {
+                                  e.currentTarget.style.color = "#0F172A";
+                                  e.currentTarget.style.borderColor = "#64748B";
+                                  e.currentTarget.style.backgroundColor = "#F8FAFC";
+                                }}
+                                onMouseLeave={(e) => {
+                                  e.currentTarget.style.color = "#475569";
+                                  e.currentTarget.style.borderColor = "#CBD5E1";
+                                  e.currentTarget.style.backgroundColor = "transparent";
+                                }}
                               >
                                 Remove
-                              </Button>
+                              </button>
                             </Box>
                           </Grid.Cell>
                         </Grid>
@@ -965,15 +1098,57 @@ export default function ShippingRatesPage() {
 
                     <InlineStack align="end" gap="200">
                       {editingZoneId && (
-                        <Button onClick={handleResetBuilder}>Cancel</Button>
+                        <button
+                          type="button"
+                          onClick={handleResetBuilder}
+                          className="border border-slate-300 hover:border-slate-400 text-slate-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer bg-white"
+                          style={{
+                            border: "1px solid #CBD5E1",
+                            color: "#334155",
+                            backgroundColor: "#FFFFFF",
+                            borderRadius: "8px",
+                            padding: "8px 16px",
+                            fontSize: "14px",
+                            fontWeight: 500,
+                            cursor: "pointer",
+                            transition: "all 0.15s ease-in-out",
+                          }}
+                        >
+                          Cancel
+                        </button>
                       )}
-                      <Button
-                        variant="primary"
-                        loading={isSavingZone}
+                      <button
+                        type="button"
+                        disabled={isSavingZone}
                         onClick={handleSaveZone}
+                        className="bg-black text-white font-semibold px-4 py-2 rounded-lg hover:bg-gray-800 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 text-sm cursor-pointer"
+                        style={{
+                          backgroundColor: "#000000",
+                          color: "#FFFFFF",
+                          fontWeight: 600,
+                          borderRadius: "8px",
+                          padding: "8px 16px",
+                          border: "none",
+                          cursor: isSavingZone ? "not-allowed" : "pointer",
+                          boxShadow: "0 1px 3px rgba(0, 0, 0, 0.12)",
+                          transition: "background-color 0.15s ease-in-out",
+                          fontSize: "14px",
+                        }}
+                        onMouseEnter={(e) => {
+                          if (!isSavingZone) e.currentTarget.style.backgroundColor = "#1F2937";
+                        }}
+                        onMouseLeave={(e) => {
+                          if (!isSavingZone) e.currentTarget.style.backgroundColor = "#000000";
+                        }}
                       >
+                        {isSavingZone && (
+                          <svg className="animate-spin h-4 w-4 text-white" viewBox="0 0 24 24" fill="none">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                          </svg>
+                        )}
                         {editingZoneId ? "Update Zone" : "Save Shipping Zone"}
-                      </Button>
+                      </button>
                     </InlineStack>
                   </BlockStack>
                 </Card>
@@ -1007,83 +1182,104 @@ export default function ShippingRatesPage() {
                         ).length;
 
                         return (
-                          <Card key={divGroup.divisionId} padding="300">
-                            <BlockStack gap="200">
-                              <InlineStack align="space-between" blockAlign="center">
-                                <Button
-                                  variant="plain"
-                                  onClick={() =>
-                                    handleToggleDivision(divGroup.divisionId)
-                                  }
-                                >
-                                  <InlineStack gap="200" blockAlign="center">
-                                    <Text as="span" variant="bodyMd" fontWeight="bold">
-                                      {divGroup.divisionName}
-                                    </Text>
-                                    <Text as="span" variant="bodySm" tone="subdued">
-                                      ({divGroup.bengaliName})
-                                    </Text>
-                                  </InlineStack>
-                                </Button>
-
-                                <InlineStack gap="200" blockAlign="center">
-                                  <Badge
-                                    tone={
-                                      selectedInDiv === divDistIds.length
-                                        ? "success"
-                                        : selectedInDiv > 0
-                                        ? "info"
-                                        : undefined
-                                    }
-                                  >
-                                    {`${selectedInDiv} / ${divDistIds.length}`}
-                                  </Badge>
+                          <div key={divGroup.divisionId} className="division-card">
+                            <Card padding="300">
+                              <BlockStack gap="200">
+                                <InlineStack align="space-between" blockAlign="center">
                                   <Button
-                                    size="slim"
+                                    variant="plain"
                                     onClick={() =>
-                                      handleSelectAllInDivision(divGroup)
+                                      handleToggleDivision(divGroup.divisionId)
                                     }
                                   >
-                                    {selectedInDiv === divDistIds.length
-                                      ? "Deselect All"
-                                      : "Select All"}
+                                    <InlineStack gap="200" blockAlign="center">
+                                      <Text as="span" variant="bodyMd" fontWeight="bold">
+                                        {divGroup.divisionName}
+                                      </Text>
+                                      <Text as="span" variant="bodySm" tone="subdued">
+                                        ({divGroup.bengaliName})
+                                      </Text>
+                                    </InlineStack>
                                   </Button>
-                                </InlineStack>
-                              </InlineStack>
 
-                              <Collapsible open={isOpen} id={divGroup.divisionId}>
-                                <Box paddingBlockStart="200">
-                                  <Grid>
-                                    {divGroup.districts.map((district) => {
-                                      const isChecked = selectedDistricts.includes(
-                                        district.id
-                                      );
-                                      return (
-                                        <Grid.Cell
-                                          key={district.id}
-                                          columnSpan={{
-                                            xs: 6,
-                                            sm: 6,
-                                            md: 4,
-                                            lg: 4,
-                                            xl: 4,
-                                          }}
-                                        >
-                                          <Checkbox
-                                            label={district.name}
-                                            checked={isChecked}
-                                            onChange={() =>
-                                              handleToggleDistrict(district.id)
-                                            }
-                                          />
-                                        </Grid.Cell>
-                                      );
-                                    })}
-                                  </Grid>
-                                </Box>
-                              </Collapsible>
-                            </BlockStack>
-                          </Card>
+                                  <InlineStack gap="200" blockAlign="center">
+                                    <Badge
+                                      tone={
+                                        selectedInDiv === divDistIds.length
+                                          ? "success"
+                                          : selectedInDiv > 0
+                                          ? "info"
+                                          : undefined
+                                      }
+                                    >
+                                      {`${selectedInDiv} / ${divDistIds.length}`}
+                                    </Badge>
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        handleSelectAllInDivision(divGroup)
+                                      }
+                                      className="bg-black text-white px-3 py-1 text-sm rounded transition-all hover:bg-gray-800 font-medium cursor-pointer"
+                                      style={{
+                                        backgroundColor: "#000000",
+                                        color: "#FFFFFF",
+                                        padding: "4px 12px",
+                                        fontSize: "13px",
+                                        borderRadius: "6px",
+                                        fontWeight: 500,
+                                        border: "none",
+                                        cursor: "pointer",
+                                        transition: "all 0.15s ease-in-out",
+                                        whiteSpace: "nowrap",
+                                      }}
+                                      onMouseEnter={(e) => {
+                                        e.currentTarget.style.backgroundColor = "#1F2937";
+                                      }}
+                                      onMouseLeave={(e) => {
+                                        e.currentTarget.style.backgroundColor = "#000000";
+                                      }}
+                                    >
+                                      {selectedInDiv === divDistIds.length
+                                        ? "Deselect All"
+                                        : "Select All"}
+                                    </button>
+                                  </InlineStack>
+                                </InlineStack>
+
+                                <Collapsible open={isOpen} id={divGroup.divisionId}>
+                                  <Box paddingBlockStart="200">
+                                    <Grid>
+                                      {divGroup.districts.map((district) => {
+                                        const isChecked = selectedDistricts.includes(
+                                          district.id
+                                        );
+                                        return (
+                                          <Grid.Cell
+                                            key={district.id}
+                                            columnSpan={{
+                                              xs: 6,
+                                              sm: 6,
+                                              md: 4,
+                                              lg: 4,
+                                              xl: 4,
+                                            }}
+                                          >
+                                            <Checkbox
+                                              label={district.name}
+                                              checked={isChecked}
+                                              onChange={() =>
+                                                handleToggleDistrict(district.id)
+                                              }
+                                            />
+                                          </Grid.Cell>
+                                        );
+                                      })}
+                                    </Grid>
+                                  </Box>
+                                </Collapsible>
+                              </BlockStack>
+                            </Card>
+                          </div>
                         );
                       })}
                     </BlockStack>
@@ -1106,9 +1302,22 @@ export default function ShippingRatesPage() {
                       Configured delivery zones and shipping rules. During Shopify checkout, customer shipping addresses are matched against these zones to calculate real-time delivery charges.
                     </Text>
                   </BlockStack>
-                  <Badge tone="info">
+                  <span
+                    className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-700 border border-slate-300"
+                    style={{
+                      backgroundColor: "#F1F5F9",
+                      color: "#334155",
+                      border: "1px solid #CBD5E1",
+                      fontSize: "12px",
+                      fontWeight: 600,
+                      padding: "3px 10px",
+                      borderRadius: "12px",
+                      lineHeight: "1.2",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
                     {`${savedZones.length} Zone${savedZones.length === 1 ? "" : "s"} Active`}
-                  </Badge>
+                  </span>
                 </InlineStack>
 
                 {savedZones.length === 0 ? (
@@ -1191,19 +1400,60 @@ export default function ShippingRatesPage() {
 
                         <IndexTable.Cell>
                           <InlineStack gap="150">
-                            <Button
-                              size="slim"
+                            <button
+                              type="button"
                               onClick={() => handleLoadZoneForEdit(zone)}
+                              className="border border-slate-300 hover:border-slate-500 text-slate-700 px-2.5 py-1 text-xs rounded font-medium transition-colors cursor-pointer bg-white"
+                              style={{
+                                border: "1px solid #CBD5E1",
+                                color: "#334155",
+                                backgroundColor: "#FFFFFF",
+                                borderRadius: "6px",
+                                padding: "4px 10px",
+                                fontSize: "12px",
+                                fontWeight: 500,
+                                cursor: "pointer",
+                                transition: "all 0.15s ease-in-out",
+                              }}
+                              onMouseEnter={(e) => {
+                                e.currentTarget.style.borderColor = "#94A3B8";
+                                e.currentTarget.style.backgroundColor = "#F8FAFC";
+                              }}
+                              onMouseLeave={(e) => {
+                                e.currentTarget.style.borderColor = "#CBD5E1";
+                                e.currentTarget.style.backgroundColor = "#FFFFFF";
+                              }}
                             >
                               Edit
-                            </Button>
-                            <Button
-                              size="slim"
-                              tone="critical"
+                            </button>
+                            <button
+                              type="button"
                               onClick={() => handleDeleteZone(zone.id)}
+                              className="border border-slate-300 hover:border-slate-500 text-slate-600 hover:text-slate-900 px-2.5 py-1 text-xs rounded font-medium transition-colors cursor-pointer bg-white"
+                              style={{
+                                border: "1px solid #CBD5E1",
+                                color: "#475569",
+                                backgroundColor: "#FFFFFF",
+                                borderRadius: "6px",
+                                padding: "4px 10px",
+                                fontSize: "12px",
+                                fontWeight: 500,
+                                cursor: "pointer",
+                                transition: "all 0.15s ease-in-out",
+                              }}
+                              onMouseEnter={(e) => {
+                                e.currentTarget.style.borderColor = "#94A3B8";
+                                e.currentTarget.style.color = "#0F172A";
+                                e.currentTarget.style.backgroundColor = "#F8FAFC";
+                              }}
+                              onMouseLeave={(e) => {
+                                e.currentTarget.style.borderColor = "#CBD5E1";
+                                e.currentTarget.style.color = "#475569";
+                                e.currentTarget.style.backgroundColor = "#FFFFFF";
+                              }}
                             >
                               Delete
-                            </Button>
+                            </button>
                           </InlineStack>
                         </IndexTable.Cell>
                       </IndexTable.Row>
@@ -1215,6 +1465,7 @@ export default function ShippingRatesPage() {
           </Layout.Section>
         </Layout>
       </BlockStack>
+    </div>
     </Page>
   );
 }
