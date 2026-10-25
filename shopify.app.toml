@@ -1,7 +1,7 @@
 # Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
 
 client_id = "bc8cab60c84e1dcbb55b4c057645e5c8"
-name = "Delivery1"
+name = "SafeParcel BD"
 application_url = "https://b-dcourier-solution.vercel.app"
 embedded = true
 
