@@ -240,6 +240,13 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       String(storeConfig.currentPlan || "").toLowerCase() !==
       verifiedTier.id.toLowerCase();
 
+    const expiresAt =
+      activeInterval === "6months"
+        ? validActiveOneTime?.createdAt
+          ? new Date(new Date(validActiveOneTime.createdAt).getTime() + SIX_MONTHS_MS)
+          : new Date(Date.now() + SIX_MONTHS_MS)
+        : null;
+
     if (isPlanChanged) {
       // Newly activated plan tier: update tier, status, and reset billingCycleStart
       await CourierConfig.findOneAndUpdate(
@@ -250,6 +257,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
             currentPlan: verifiedTier.id,
             billingStatus: shopifyBillingStatus,
             shopifySubscriptionId: activeSubId,
+            prepaidPlanExpiresAt: expiresAt,
             billingCycleStart: new Date(),
           },
         },
@@ -258,6 +266,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       storeConfig.currentPlan = verifiedTier.id;
       storeConfig.billingStatus = shopifyBillingStatus;
       storeConfig.shopifySubscriptionId = activeSubId;
+      storeConfig.prepaidPlanExpiresAt = expiresAt;
       storeConfig.billingCycleStart = new Date();
     } else {
       // Retain existing billingCycleStart, sync status and subscription ID
@@ -267,10 +276,12 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
           $set: {
             billingStatus: shopifyBillingStatus,
             shopifySubscriptionId: activeSubId,
+            prepaidPlanExpiresAt: expiresAt,
           },
         }
       );
       storeConfig.billingStatus = shopifyBillingStatus;
+      storeConfig.prepaidPlanExpiresAt = expiresAt;
     }
   } else {
     // If Shopify has NO active paid subscription and not in dev store bypass, ensure store is safely on Free plan
@@ -282,11 +293,13 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
             currentPlan: "Free",
             billingStatus: "FREE PLAN ($0.00/mo)",
             shopifySubscriptionId: "",
+            prepaidPlanExpiresAt: null,
           },
         }
       );
       storeConfig.currentPlan = "Free";
       storeConfig.billingStatus = "FREE PLAN ($0.00/mo)";
+      storeConfig.prepaidPlanExpiresAt = null;
     }
     shopifyBillingStatus = "FREE PLAN ($0.00/mo)";
   }
@@ -306,17 +319,25 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     ) {
       justUpgraded = true;
       if (isDevStore && (!verifiedTier || verifiedTier.id !== requestedTier?.id)) {
+        const devExpiresAt =
+          upgradedIntervalParam === "6months"
+            ? new Date(Date.now() + SIX_MONTHS_MS)
+            : null;
+
         await CourierConfig.findOneAndUpdate(
           { shopDomain },
           {
             $set: {
               currentPlan: requestedTier.id,
               billingStatus: "ACTIVE (Dev Store Bypass - Test Charge)",
+              shopifySubscriptionId: "dev_test_sub",
+              prepaidPlanExpiresAt: devExpiresAt,
               billingCycleStart: new Date(),
             },
           }
         );
         storeConfig.currentPlan = requestedTier.id;
+        storeConfig.prepaidPlanExpiresAt = devExpiresAt;
         verifiedTier = requestedTier;
       }
     } else {
@@ -363,6 +384,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       isLimitReached,
       billingCycleStart,
       billingStatus: shopifyBillingStatus,
+      prepaidPlanExpiresAt: storeConfig.prepaidPlanExpiresAt
+        ? new Date(storeConfig.prepaidPlanExpiresAt).toISOString()
+        : null,
     },
     tiers: SIX_TIER_PRICING_PLANS,
   };
@@ -450,6 +474,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           currentPlan: "Free",
           billingStatus: "FREE PLAN ($0.00/mo)",
           shopifySubscriptionId: "",
+          prepaidPlanExpiresAt: null,
         },
       },
       { upsert: true, new: true, setDefaultsOnInsert: true }

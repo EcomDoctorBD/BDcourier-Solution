@@ -42,6 +42,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           webhookSecret: "",
           billingStatus: "UNINSTALLED",
           currentPlan: "Free",
+          shopifySubscriptionId: "",
+          prepaidPlanExpiresAt: null,
         },
       }
     );

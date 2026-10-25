@@ -293,6 +293,10 @@ const courierConfigSchema = new mongoose.Schema(
       type: String,
       default: "",
     },
+    prepaidPlanExpiresAt: {
+      type: Date,
+      default: null,
+    },
     // Task 2: Automated Routing & Risk Safety Net Parameters (Legacy & Enterprise Dynamic Geo-Routing)
     autoRoutingEnabled: {
       type: Boolean,
@@ -422,7 +426,8 @@ export async function ensureWebhookSecret(shopDomain, existingSecret) {
 
 /**
  * Automatically checks and rolls over the merchant's 30-day billing cycle.
- * Resets monthlyOrderCount to 0 when 30 days have elapsed.
+ * - Resets monthlyOrderCount to 0 when 30 days have elapsed (applies to all tiers, including 6-month prepaid).
+ * - Checks prepaidPlanExpiresAt: if new Date() > prepaidPlanExpiresAt, automatically downgrades store back to "Free" tier.
  */
 export async function ensureBillingCycleCurrent(shopDomain: string) {
   if (!shopDomain) return null;
@@ -430,22 +435,50 @@ export async function ensureBillingCycleCurrent(shopDomain: string) {
   const config = await CourierConfig.findOne({ shopDomain });
   if (!config) return null;
 
+  const now = new Date();
+  const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+
+  // 1. Check prepaid expiration for 6-month upfront tiers
+  if (config.prepaidPlanExpiresAt && now > new Date(config.prepaidPlanExpiresAt)) {
+    const elapsedSinceCycle = config.billingCycleStart
+      ? now.getTime() - new Date(config.billingCycleStart).getTime()
+      : THIRTY_DAYS_MS;
+    const isCycleElapsed = elapsedSinceCycle >= THIRTY_DAYS_MS;
+
+    const downgraded = await CourierConfig.findOneAndUpdate(
+      { shopDomain },
+      {
+        $set: {
+          currentPlan: "Free",
+          billingStatus: "FREE PLAN ($0.00/mo) - PREPAID EXPIRED",
+          shopifySubscriptionId: "",
+          prepaidPlanExpiresAt: null,
+          ...(isCycleElapsed
+            ? { monthlyOrderCount: 0, billingCycleStart: now }
+            : {}),
+        },
+      },
+      { new: true }
+    );
+    return downgraded;
+  }
+
+  // 2. Initialize billingCycleStart if missing
   if (!config.billingCycleStart) {
-    config.billingCycleStart = new Date();
+    config.billingCycleStart = now;
     await config.save();
     return config;
   }
 
-  const elapsedMs = Date.now() - new Date(config.billingCycleStart).getTime();
-  const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
-
+  // 3. 30-day rolling quota reset (guarantees monthlyOrderCount resets every 30 days for 6-month prepaid & all tiers)
+  const elapsedMs = now.getTime() - new Date(config.billingCycleStart).getTime();
   if (elapsedMs >= THIRTY_DAYS_MS) {
     const updated = await CourierConfig.findOneAndUpdate(
       { shopDomain },
       {
         $set: {
           monthlyOrderCount: 0,
-          billingCycleStart: new Date(),
+          billingCycleStart: now,
         },
       },
       { new: true }
