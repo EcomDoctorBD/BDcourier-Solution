@@ -62,61 +62,19 @@ function CheckFeatureIcon(props: SVGProps<SVGSVGElement>) {
 }
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { admin, session, billing } = await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
   const shopDomain = session.shop;
 
   await connectDB();
 
   const url = new URL(request.url);
   const upgradedPlanParam = url.searchParams.get("upgradedPlan");
-  const chargeIdParam = url.searchParams.get("charge_id");
 
-  if (upgradedPlanParam) {
-    const matchedTier = SIX_TIER_PRICING_PLANS.find(
-      (t) => t.id.toLowerCase() === upgradedPlanParam.toLowerCase()
-    );
-    if (matchedTier) {
-      await CourierConfig.findOneAndUpdate(
-        { shopDomain },
-        {
-          $set: {
-            shopDomain,
-            currentPlan: matchedTier.id,
-            billingStatus: "ACTIVE (Shopify Billing Confirmed)",
-            billingCycleStart: new Date(),
-            ...(chargeIdParam ? { shopifySubscriptionId: chargeIdParam } : {}),
-          },
-        },
-        { upsert: true, new: true, setDefaultsOnInsert: true }
-      );
-    }
-  }
-
-  let storeConfig: any = await CourierConfig.findOne({
-    shopDomain,
-  }).lean();
-
-  if (!storeConfig) {
-    const created = await CourierConfig.create({
-      shopDomain,
-      currentPlan: "Free",
-      monthlyOrderCount: 0,
-      billingCycleStart: new Date(),
-      billingStatus: "ACTIVE",
-    });
-    storeConfig = created.toObject();
-  }
-
-  const activePlanKey = String(storeConfig.currentPlan || "Free");
-  const monthlyOrderCount = Number(storeConfig.monthlyOrderCount ?? 0);
-  const billingCycleStart = storeConfig.billingCycleStart
-    ? new Date(storeConfig.billingCycleStart).toISOString()
-    : new Date().toISOString();
-
-  let shopifyBillingStatus = storeConfig.billingStatus || "ACTIVE";
+  // Step 1: Query Shopify Admin GraphQL for live active subscriptions (Authoritative Source of Truth)
+  let activeSubs: any[] = [];
+  let shopifyBillingStatus = "ACTIVE";
 
   try {
-    const hasBillingObject = Boolean(billing);
     const billingQuery = `#graphql
       query GetActiveSubscriptions {
         currentAppInstallation {
@@ -125,29 +83,141 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
             name
             status
             test
+            currentPeriodEnd
           }
         }
       }
     `;
     const response = await admin.graphql(billingQuery);
     const result: any = await response.json();
-    const activeSubs =
+    activeSubs =
       result?.data?.currentAppInstallation?.activeSubscriptions || [];
-
-    if (activeSubs.length > 0) {
-      const latestSub = activeSubs[0];
-      shopifyBillingStatus = `${latestSub.status}${
-        latestSub.test ? " (Sandbox Test)" : ""
-      }`;
-    } else if (hasBillingObject) {
-      shopifyBillingStatus =
-        activePlanKey.toLowerCase() === "free"
-          ? "FREE PLAN ($0.00/mo)"
-          : `${storeConfig.billingStatus || "ACTIVE"}`;
-    }
-  } catch {
-    // Fallback to stored MongoDB billing status
+  } catch (err) {
+    console.warn(
+      "[Billing] Failed to query active subscriptions from Shopify GraphQL:",
+      err
+    );
   }
+
+  // Find confirmed active recurring subscription
+  const activePaidSub = activeSubs.find((sub: any) => sub.status === "ACTIVE");
+
+  let verifiedTier: PricingTierConfig | undefined;
+  if (activePaidSub) {
+    const subName = String(activePaidSub.name || "").toLowerCase();
+    verifiedTier = SIX_TIER_PRICING_PLANS.find(
+      (t) =>
+        t.price > 0 &&
+        (subName.includes(t.name.toLowerCase()) ||
+          subName.includes(t.id.toLowerCase()))
+    );
+    shopifyBillingStatus = `${activePaidSub.status}${
+      activePaidSub.test ? " (Test Charge)" : ""
+    }`;
+  }
+
+  // Step 2: Fetch or initialize store configuration in MongoDB
+  let storeConfig: any = await CourierConfig.findOne({ shopDomain }).lean();
+
+  if (!storeConfig) {
+    const created = await CourierConfig.create({
+      shopDomain,
+      currentPlan: "Free",
+      monthlyOrderCount: 0,
+      billingCycleStart: new Date(),
+      billingStatus: "FREE PLAN ($0.00/mo)",
+    });
+    storeConfig = created.toObject();
+  }
+
+  // Step 3: Synchronize MongoDB with Authoritative Shopify Billing
+  if (verifiedTier) {
+    const isPlanChanged =
+      String(storeConfig.currentPlan || "").toLowerCase() !==
+      verifiedTier.id.toLowerCase();
+
+    if (isPlanChanged) {
+      // Newly activated plan tier: update tier, status, and reset billingCycleStart
+      await CourierConfig.findOneAndUpdate(
+        { shopDomain },
+        {
+          $set: {
+            shopDomain,
+            currentPlan: verifiedTier.id,
+            billingStatus: `ACTIVE (Shopify Billing Confirmed${
+              activePaidSub.test ? " - Test Charge" : ""
+            })`,
+            shopifySubscriptionId: activePaidSub.id,
+            billingCycleStart: new Date(),
+          },
+        },
+        { upsert: true, new: true, setDefaultsOnInsert: true }
+      );
+      storeConfig.currentPlan = verifiedTier.id;
+      storeConfig.billingStatus = `ACTIVE (Shopify Billing Confirmed${
+        activePaidSub.test ? " - Test Charge" : ""
+      })`;
+      storeConfig.shopifySubscriptionId = activePaidSub.id;
+      storeConfig.billingCycleStart = new Date();
+    } else {
+      // Retain existing billingCycleStart, sync status and subscription ID
+      await CourierConfig.findOneAndUpdate(
+        { shopDomain },
+        {
+          $set: {
+            billingStatus: `ACTIVE (Shopify Billing Confirmed${
+              activePaidSub.test ? " - Test Charge" : ""
+            })`,
+            shopifySubscriptionId: activePaidSub.id,
+          },
+        }
+      );
+      storeConfig.billingStatus = `ACTIVE (Shopify Billing Confirmed${
+        activePaidSub.test ? " - Test Charge" : ""
+      })`;
+    }
+  } else {
+    // If Shopify has NO active paid subscription, ensure store is safely on Free plan
+    if (String(storeConfig.currentPlan || "Free").toLowerCase() !== "free") {
+      await CourierConfig.findOneAndUpdate(
+        { shopDomain },
+        {
+          $set: {
+            currentPlan: "Free",
+            billingStatus: "FREE PLAN ($0.00/mo)",
+            shopifySubscriptionId: "",
+          },
+        }
+      );
+      storeConfig.currentPlan = "Free";
+      storeConfig.billingStatus = "FREE PLAN ($0.00/mo)";
+    }
+    shopifyBillingStatus = "FREE PLAN ($0.00/mo)";
+  }
+
+  // Step 4: Validate URL parameter against verified GraphQL tier (Stop URL Exploit)
+  let justUpgraded = false;
+  let upgradeWarning = "";
+
+  if (upgradedPlanParam) {
+    const requestedTier = SIX_TIER_PRICING_PLANS.find(
+      (t) => t.id.toLowerCase() === upgradedPlanParam.toLowerCase()
+    );
+
+    if (verifiedTier && requestedTier && verifiedTier.id === requestedTier.id) {
+      justUpgraded = true;
+    } else {
+      upgradeWarning = `The requested upgrade to "${upgradedPlanParam}" could not be confirmed by Shopify Billing. Active plan is ${
+        verifiedTier?.name || "Free Plan"
+      }.`;
+    }
+  }
+
+  const activePlanKey = String(storeConfig.currentPlan || "Free");
+  const monthlyOrderCount = Number(storeConfig.monthlyOrderCount ?? 0);
+  const billingCycleStart = storeConfig.billingCycleStart
+    ? new Date(storeConfig.billingCycleStart).toISOString()
+    : new Date().toISOString();
 
   const currentTier =
     SIX_TIER_PRICING_PLANS.find(
@@ -164,7 +234,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   return {
     shopDomain,
-    justUpgraded: Boolean(upgradedPlanParam),
+    justUpgraded,
+    upgradeWarning,
     subscription: {
       currentPlan: currentTier.id,
       planDisplayName: currentTier.name,
@@ -202,15 +273,60 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     };
   }
 
+  // ==================== 1. DOWNGRADE TO FREE PLAN ($0.00/mo) ====================
   if (selectedTier.price === 0) {
+    try {
+      const activeSubsQuery = `#graphql
+        query GetActiveSubscriptions {
+          currentAppInstallation {
+            activeSubscriptions {
+              id
+              name
+              status
+            }
+          }
+        }
+      `;
+      const subsRes = await admin.graphql(activeSubsQuery);
+      const subsData: any = await subsRes.json();
+      const activeSubs =
+        subsData?.data?.currentAppInstallation?.activeSubscriptions || [];
+
+      for (const sub of activeSubs) {
+        if (sub.status === "ACTIVE" && sub.id) {
+          const cancelMutation = `#graphql
+            mutation CancelAppSubscription($id: ID!) {
+              appSubscriptionCancel(id: $id) {
+                appSubscription {
+                  id
+                  status
+                }
+                userErrors {
+                  field
+                  message
+                }
+              }
+            }
+          `;
+          await admin.graphql(cancelMutation, { variables: { id: sub.id } });
+        }
+      }
+    } catch (cancelErr) {
+      console.warn(
+        "[Billing] Error cancelling active Shopify subscriptions on Free downgrade:",
+        cancelErr
+      );
+    }
+
+    // Update CourierConfig to Free tier (preserving monthlyOrderCount to prevent quota resets)
     await CourierConfig.findOneAndUpdate(
       { shopDomain },
       {
         $set: {
           shopDomain,
-          currentPlan: selectedTier.id,
-          billingCycleStart: new Date(),
+          currentPlan: "Free",
           billingStatus: "FREE PLAN ($0.00/mo)",
+          shopifySubscriptionId: "",
         },
       },
       { upsert: true, new: true, setDefaultsOnInsert: true }
@@ -219,8 +335,39 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return {
       success: true,
       confirmationUrl: null,
-      message: `Switched your store subscription to ${selectedTier.name} (${selectedTier.priceDisplay} / mo — ${selectedTier.orderLimitDisplay}).`,
+      message:
+        "Successfully switched to the Free Plan ($0.00/mo). Any active recurring Shopify billing charges have been cancelled.",
     };
+  }
+
+  // ==================== 2. UPGRADE TO PAID TIER (SHOPIFY BILLING) ====================
+  // Check shop plan type dynamically to determine test mode (Dev stores vs Real paid stores)
+  let isTestCharge = process.env.NODE_ENV !== "production";
+  try {
+    const shopPlanQuery = `#graphql
+      query GetShopPlanType {
+        shop {
+          plan {
+            partnerDevelopment
+            displayName
+          }
+        }
+      }
+    `;
+    const shopRes = await admin.graphql(shopPlanQuery);
+    const shopData: any = await shopRes.json();
+    const plan = shopData?.data?.shop?.plan;
+    const isDevStore =
+      Boolean(plan?.partnerDevelopment) ||
+      plan?.displayName === "affiliate" ||
+      plan?.displayName === "partner_test";
+
+    isTestCharge = isDevStore || process.env.NODE_ENV !== "production";
+  } catch (err) {
+    console.warn(
+      "[Billing] Could not determine shop plan type, defaulting test mode:",
+      err
+    );
   }
 
   const appBaseUrl = process.env.SHOPIFY_APP_URL || new URL(request.url).origin;
@@ -268,76 +415,54 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       variables: {
         name: `Delivery1 Courier Hub - ${selectedTier.name}`,
         returnUrl,
-        test: true,
+        test: isTestCharge,
         amount: selectedTier.price,
       },
     });
 
     const result: any = await response.json();
     const payload = result?.data?.appSubscriptionCreate;
+    const userErrors = payload?.userErrors || [];
     const confirmationUrl = payload?.confirmationUrl;
-    const subscriptionId = payload?.appSubscription?.id || "";
 
-    await CourierConfig.findOneAndUpdate(
-      { shopDomain },
-      {
-        $set: {
-          shopDomain,
-          currentPlan: selectedTier.id,
-          billingCycleStart: new Date(),
-          billingStatus: confirmationUrl
-            ? "PENDING_CONFIRMATION"
-            : "ACTIVE (Sandbox Mode)",
-          shopifySubscriptionId: subscriptionId,
-        },
-      },
-      { upsert: true, new: true, setDefaultsOnInsert: true }
-    );
-
-    if (confirmationUrl) {
+    if (userErrors.length > 0) {
       return {
-        success: true,
-        confirmationUrl,
-        message: `Redirecting to Shopify Billing Portal to approve ${selectedTier.name} (${selectedTier.priceDisplay} / mo)...`,
+        success: false,
+        confirmationUrl: null,
+        message: `Shopify Billing Error: ${userErrors[0].message}`,
       };
     }
 
-    const userErrorMsg =
-      payload?.userErrors?.[0]?.message ||
-      result?.errors?.[0]?.message ||
-      null;
+    if (!confirmationUrl) {
+      return {
+        success: false,
+        confirmationUrl: null,
+        message:
+          "Unable to generate subscription confirmation URL with Shopify Billing.",
+      };
+    }
 
+    // DO NOT upgrade currentPlan in MongoDB before merchant approves charge on Shopify!
+    // Return confirmationUrl so the browser redirects to Shopify's confirmation page.
     return {
       success: true,
-      confirmationUrl: null,
-      message: userErrorMsg
-        ? `Plan updated to ${selectedTier.name} (${selectedTier.priceDisplay} / mo — ${selectedTier.orderLimitDisplay}) in MongoDB! (Shopify Sandbox Note: ${userErrorMsg})`
-        : `Successfully subscribed to ${selectedTier.name} (${selectedTier.priceDisplay} / mo — ${selectedTier.orderLimitDisplay})!`,
+      confirmationUrl,
+      message: `Redirecting to Shopify Billing to approve ${selectedTier.name} (${selectedTier.priceDisplay} / mo)...`,
     };
-  } catch {
-    await CourierConfig.findOneAndUpdate(
-      { shopDomain },
-      {
-        $set: {
-          shopDomain,
-          currentPlan: selectedTier.id,
-          billingCycleStart: new Date(),
-          billingStatus: "ACTIVE (Sandbox Mode)",
-        },
-      },
-      { upsert: true, new: true, setDefaultsOnInsert: true }
-    );
-
+  } catch (err: any) {
+    console.error("[Billing] Failed to create app subscription:", err);
     return {
-      success: true,
+      success: false,
       confirmationUrl: null,
-      message: `Subscribed to ${selectedTier.name} (${selectedTier.priceDisplay} / mo — ${selectedTier.orderLimitDisplay}) in Sandbox Mode.`,
+      message: `Failed to initiate subscription: ${
+        err?.message || "Unknown error"
+      }`,
     };
   }
 };
 
 export default function PricingAndBillingPage() {
-  const { shopDomain, justUpgraded, subscription, tiers } =
+  const { shopDomain, justUpgraded, upgradeWarning, subscription, tiers } =
     useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const submit = useSubmit();
@@ -495,6 +620,17 @@ export default function PricingAndBillingPage() {
                   Your monthly order allowance and tier features have been
                   activated and synced with MongoDB.
                 </p>
+              </Banner>
+            </Layout.Section>
+          )}
+
+          {upgradeWarning && !showBanner && (
+            <Layout.Section>
+              <Banner
+                title="Subscription Not Confirmed"
+                tone="critical"
+              >
+                <p>{upgradeWarning}</p>
               </Banner>
             </Layout.Section>
           )}

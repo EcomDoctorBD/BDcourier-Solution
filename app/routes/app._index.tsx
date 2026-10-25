@@ -12,6 +12,7 @@ import {
   useNavigation,
   Link,
   useSearchParams,
+  useNavigate,
 } from "@remix-run/react";
 import { TitleBar } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-remix/server";
@@ -166,7 +167,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
  * 2. SERVER ACTION: Handles Courier Credentials & Quick Plan Switching
  */
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const { session } = await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
   const shopDomain = session.shop;
 
   await connectDB();
@@ -178,14 +179,69 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const targetPlan = String(formData.get("targetPlan") || "Free");
     const matchedTier = getPricingTier(targetPlan);
 
+    // Paid tiers CANNOT be directly activated from the Dashboard without Shopify Billing
+    if (matchedTier.price > 0) {
+      return json({
+        success: false,
+        actionType: "switchPlan",
+        redirectToBilling: true,
+        message: `Upgrades to ${matchedTier.name} must be approved via Shopify Billing on the Pricing page.`,
+      });
+    }
+
+    // Free plan ($0.00/mo): Cancel any active recurring subscriptions via Shopify GraphQL
+    try {
+      const activeSubsQuery = `#graphql
+        query GetActiveSubscriptions {
+          currentAppInstallation {
+            activeSubscriptions {
+              id
+              name
+              status
+            }
+          }
+        }
+      `;
+      const subsRes = await admin.graphql(activeSubsQuery);
+      const subsData: any = await subsRes.json();
+      const activeSubs =
+        subsData?.data?.currentAppInstallation?.activeSubscriptions || [];
+
+      for (const sub of activeSubs) {
+        if (sub.status === "ACTIVE" && sub.id) {
+          const cancelMutation = `#graphql
+            mutation CancelAppSubscription($id: ID!) {
+              appSubscriptionCancel(id: $id) {
+                appSubscription {
+                  id
+                  status
+                }
+                userErrors {
+                  field
+                  message
+                }
+              }
+            }
+          `;
+          await admin.graphql(cancelMutation, { variables: { id: sub.id } });
+        }
+      }
+    } catch (cancelErr) {
+      console.warn(
+        "[Dashboard Billing] Error cancelling subscription on Free downgrade:",
+        cancelErr
+      );
+    }
+
+    // Set plan to Free in MongoDB (preserving monthlyOrderCount to prevent quota reset abuse)
     await CourierConfig.findOneAndUpdate(
       { shopDomain },
       {
         $set: {
           shopDomain,
-          currentPlan: matchedTier.id,
-          billingStatus: "ACTIVE",
-          billingCycleStart: new Date(),
+          currentPlan: "Free",
+          billingStatus: "FREE PLAN ($0.00/mo)",
+          shopifySubscriptionId: "",
         },
       },
       { upsert: true, new: true, setDefaultsOnInsert: true }
@@ -194,7 +250,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return json({
       success: true,
       actionType: "switchPlan",
-      message: `Plan successfully updated to ${matchedTier.name}. Order quota updated to ${matchedTier.orderLimit} orders/month.`,
+      message:
+        "Switched to Free Plan (120 orders/month). Active recurring Shopify billing charges have been cancelled.",
     });
   }
 
@@ -299,6 +356,7 @@ export default function CourierDashboard() {
   const actionData = useActionData<typeof action>();
   const submit = useSubmit();
   const navigation = useNavigation();
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
 
   // Search string to preserve shop and host across in-app links
@@ -403,9 +461,12 @@ export default function CourierDashboard() {
         if (actionData.actionType === "saveSteadfast") setShowSteadfastForm(false);
         if (actionData.actionType === "saveRedX") setShowRedxForm(false);
         if (actionData.actionType === "switchPlan") setIsPlanModalOpen(false);
+      } else if ((actionData as any)?.redirectToBilling) {
+        setIsPlanModalOpen(false);
+        navigate(`/app/pricing${searchStr}`);
       }
     }
-  }, [actionData]);
+  }, [actionData, navigate, searchStr]);
 
   const isPathaoConnected = Boolean(
     courierConfig.pathaoClientId?.trim() &&
@@ -472,7 +533,12 @@ export default function CourierDashboard() {
     submit(formData, { method: "post" });
   };
 
-  const handleSwitchPlan = (tierId: string) => {
+  const handleSwitchPlan = (tierId: string, price = 0) => {
+    if (price > 0) {
+      setIsPlanModalOpen(false);
+      navigate(`/app/pricing${searchStr}`);
+      return;
+    }
     const formData = new FormData();
     formData.append("actionType", "switchPlan");
     formData.append("targetPlan", tierId);
@@ -1257,9 +1323,11 @@ export default function CourierDashboard() {
                               isSwitchingPlan &&
                               pendingTargetPlan === tier.id
                             }
-                            onClick={() => handleSwitchPlan(tier.id)}
+                            onClick={() => handleSwitchPlan(tier.id, tier.price)}
                           >
-                            Switch to {tier.name}
+                            {tier.price > 0
+                              ? `Upgrade to ${tier.name} →`
+                              : `Switch to ${tier.name}`}
                           </Button>
                         )}
                       </BlockStack>
