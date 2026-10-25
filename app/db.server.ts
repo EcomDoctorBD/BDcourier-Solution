@@ -365,6 +365,15 @@ const courierConfigSchema = new mongoose.Schema(
         },
       ],
     },
+    // Dynamic Shipping Rates & CarrierService Synchronization State
+    shippingRatesSynced: {
+      type: Boolean,
+      default: false,
+    },
+    shippingRatesLastSyncedAt: {
+      type: Date,
+      default: null,
+    },
   },
   {
     timestamps: true,
