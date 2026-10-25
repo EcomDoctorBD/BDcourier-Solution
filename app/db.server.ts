@@ -16,76 +16,161 @@ if (!process.env.MONGODB_URI && MONGODB_URI) {
   process.env.MONGODB_URI = MONGODB_URI;
 }
 
+// Optimize pooling and timeouts specifically for Vercel Serverless Lambdas
+export const SERVERLESS_MONGO_OPTS: mongoose.ConnectOptions = {
+  bufferCommands: false,
+  maxPoolSize: 5,
+  minPoolSize: 0,
+  maxIdleTimeMS: 15000,
+  serverSelectionTimeoutMS: 5000,
+  connectTimeoutMS: 5000,
+  socketTimeoutMS: 20000,
+  heartbeatFrequencyMS: 10000,
+  family: 4, // CRITICAL: Force IPv4 DNS resolution to prevent 25s secureConnect timeout on Vercel/AWS
+};
+
+export function sanitizeMongoUri(uri: string): string {
+  if (!uri) return "";
+  try {
+    const urlObj = new URL(uri);
+    urlObj.searchParams.set("family", "4");
+    urlObj.searchParams.set("serverSelectionTimeoutMS", "5000");
+    urlObj.searchParams.set("connectTimeoutMS", "5000");
+    urlObj.searchParams.set("socketTimeoutMS", "20000");
+    urlObj.searchParams.set("maxPoolSize", "5");
+    urlObj.searchParams.set("minPoolSize", "0");
+    urlObj.searchParams.set("maxIdleTimeMS", "15000");
+    urlObj.searchParams.set("waitQueueTimeoutMS", "5000");
+    return urlObj.toString();
+  } catch {
+    let clean = uri;
+    const required = [
+      "family=4",
+      "serverSelectionTimeoutMS=5000",
+      "connectTimeoutMS=5000",
+      "socketTimeoutMS=20000",
+      "maxPoolSize=5",
+      "minPoolSize=0",
+      "maxIdleTimeMS=15000",
+      "waitQueueTimeoutMS=5000",
+    ];
+    for (const req of required) {
+      const key = req.split("=")[0];
+      if (!clean.includes(`${key}=`)) {
+        clean += (clean.includes("?") ? "&" : "?") + req;
+      }
+    }
+    return clean;
+  }
+}
+
 // Serverless connection caching on globalThis to reuse MongoDB connections across lambda warmups
+declare global {
+  var __mongooseCache: {
+    conn: typeof mongoose | null;
+    promise: Promise<typeof mongoose> | null;
+  } | undefined;
+  var __mongooseListenersRegistered: boolean | undefined;
+}
+
+if (!globalThis.__mongooseListenersRegistered) {
+  globalThis.__mongooseListenersRegistered = true;
+  mongoose.connection.on("disconnected", () => {
+    console.warn("⚠️ MongoDB disconnected. Resetting cached connection state.");
+    if (globalThis.__mongooseCache) {
+      globalThis.__mongooseCache.conn = null;
+      globalThis.__mongooseCache.promise = null;
+    }
+  });
+  mongoose.connection.on("error", (err) => {
+    console.warn("⚠️ MongoDB connection error event:", err?.message || err);
+    if (globalThis.__mongooseCache) {
+      globalThis.__mongooseCache.conn = null;
+      globalThis.__mongooseCache.promise = null;
+    }
+  });
+}
+
 let cached = globalThis.__mongooseCache;
 
 if (!cached) {
   cached = globalThis.__mongooseCache = { conn: null, promise: null };
 }
 
-export async function connectDB() {
-  // If already connected, reuse the active connection immediately
+/**
+ * Resilient Serverless MongoDB Connection Handler
+ * Implements exponential retry, timeout protection, and IPv4 enforcement
+ */
+export async function connectDB(): Promise<typeof mongoose | null> {
+  // If already connected and ready, reuse connection immediately
   if (cached.conn && mongoose.connection.readyState === 1) {
     return cached.conn;
   }
 
-  // If a connection attempt is in-flight, await that promise
+  // If a connection attempt is in-flight, await that promise with timeout protection
   if (cached.promise && mongoose.connection.readyState === 2) {
-    cached.conn = await cached.promise;
-    return cached.conn;
+    try {
+      cached.conn = await cached.promise;
+      return cached.conn;
+    } catch {
+      cached.promise = null;
+      cached.conn = null;
+    }
   }
 
-  const activeUri =
+  const rawUri =
     process.env.MONGODB_URI?.trim() ||
     process.env.DATABASE_URL?.trim() ||
     MONGODB_URI;
 
-  if (!activeUri) {
-    throw new Error(
-      "Missing MONGODB_URI or DATABASE_URL environment variable. Please configure this in your Vercel project environment settings."
+  if (!rawUri) {
+    console.warn(
+      "⚠️ Missing MONGODB_URI or DATABASE_URL environment variable. Please configure this in your Vercel project environment settings."
     );
+    return null;
   }
 
-  // Optimize pooling for serverless (prevent socket exhaustion during concurrent checkouts)
-  const opts = {
-    bufferCommands: false,
-    maxPoolSize: 10,
-    minPoolSize: 0,
-    serverSelectionTimeoutMS: 5000,
-    connectTimeoutMS: 10000,
-    socketTimeoutMS: 45000,
-  };
+  const sanitizedUri = sanitizeMongoUri(rawUri);
 
-  if (!cached.promise || mongoose.connection.readyState === 0 || mongoose.connection.readyState === 3) {
-    cached.promise = mongoose
-      .connect(activeUri, opts)
-      .then((mongooseInstance) => {
-        console.log("✅ Connected to MongoDB successfully (Serverless pool reused).");
-        return mongooseInstance;
-      })
-      .catch((error) => {
-        cached.promise = null;
-        console.error("❌ MongoDB connection error:", error);
+  // Resilient connection loop: attempt up to 2 times with a strict timeout guard
+  const MAX_ATTEMPTS = 2;
+  const ATTEMPT_TIMEOUT_MS = 6000;
+
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    try {
+      // Disconnect cleanly if stuck in connecting (2) or disconnecting (3) state
+      if (mongoose.connection.readyState === 2 || mongoose.connection.readyState === 3) {
+        await mongoose.disconnect().catch(() => {});
+      }
+
+      cached.promise = mongoose.connect(sanitizedUri, SERVERLESS_MONGO_OPTS);
+
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(
+          () => reject(new Error(`MongoDB connection timed out after ${ATTEMPT_TIMEOUT_MS}ms`)),
+          ATTEMPT_TIMEOUT_MS
+        )
+      );
+
+      cached.conn = await Promise.race([cached.promise, timeoutPromise]);
+      console.log(`✅ Connected to MongoDB successfully (attempt ${attempt}, Serverless pool reused).`);
+      return cached.conn;
+    } catch (error: any) {
+      console.warn(`⚠️ MongoDB connection attempt ${attempt}/${MAX_ATTEMPTS} failed:`, error?.message || error);
+      cached.promise = null;
+      cached.conn = null;
+      await mongoose.disconnect().catch(() => {});
+
+      if (attempt < MAX_ATTEMPTS) {
+        await new Promise((resolve) => setTimeout(resolve, 350));
+      } else {
+        console.error("❌ MongoDB connection failed after all resilient attempts:", error?.message || error);
         throw error;
-      });
-  }
-
-  try {
-    cached.conn = await cached.promise;
-  } catch (err) {
-    cached.promise = null;
-    cached.conn = null;
-    throw err;
+      }
+    }
   }
 
   return cached.conn;
-}
-
-// Background non-blocking warm-up connection (does not halt bootstrap if slow)
-if (MONGODB_URI) {
-  connectDB().catch((err) =>
-    console.warn("Initial MongoDB connection attempt deferred to first request:", err.message)
-  );
 }
 
 /**
@@ -440,62 +525,67 @@ export async function ensureWebhookSecret(shopDomain, existingSecret) {
  */
 export async function ensureBillingCycleCurrent(shopDomain: string) {
   if (!shopDomain) return null;
-  await connectDB();
-  const config = await CourierConfig.findOne({ shopDomain });
-  if (!config) return null;
+  try {
+    await connectDB();
+    const config = await CourierConfig.findOne({ shopDomain });
+    if (!config) return null;
 
-  const now = new Date();
-  const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+    const now = new Date();
+    const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 
-  // 1. Check prepaid expiration for 6-month upfront tiers
-  if (config.prepaidPlanExpiresAt && now > new Date(config.prepaidPlanExpiresAt)) {
-    const elapsedSinceCycle = config.billingCycleStart
-      ? now.getTime() - new Date(config.billingCycleStart).getTime()
-      : THIRTY_DAYS_MS;
-    const isCycleElapsed = elapsedSinceCycle >= THIRTY_DAYS_MS;
+    // 1. Check prepaid expiration for 6-month upfront tiers
+    if (config.prepaidPlanExpiresAt && now > new Date(config.prepaidPlanExpiresAt)) {
+      const elapsedSinceCycle = config.billingCycleStart
+        ? now.getTime() - new Date(config.billingCycleStart).getTime()
+        : THIRTY_DAYS_MS;
+      const isCycleElapsed = elapsedSinceCycle >= THIRTY_DAYS_MS;
 
-    const downgraded = await CourierConfig.findOneAndUpdate(
-      { shopDomain },
-      {
-        $set: {
-          currentPlan: "Free",
-          billingStatus: "FREE PLAN ($0.00/mo) - PREPAID EXPIRED",
-          shopifySubscriptionId: "",
-          prepaidPlanExpiresAt: null,
-          ...(isCycleElapsed
-            ? { monthlyOrderCount: 0, billingCycleStart: now }
-            : {}),
+      const downgraded = await CourierConfig.findOneAndUpdate(
+        { shopDomain },
+        {
+          $set: {
+            currentPlan: "Free",
+            billingStatus: "FREE PLAN ($0.00/mo) - PREPAID EXPIRED",
+            shopifySubscriptionId: "",
+            prepaidPlanExpiresAt: null,
+            ...(isCycleElapsed
+              ? { monthlyOrderCount: 0, billingCycleStart: now }
+              : {}),
+          },
         },
-      },
-      { new: true }
-    );
-    return downgraded;
-  }
+        { new: true }
+      );
+      return downgraded;
+    }
 
-  // 2. Initialize billingCycleStart if missing
-  if (!config.billingCycleStart) {
-    config.billingCycleStart = now;
-    await config.save();
+    // 2. Initialize billingCycleStart if missing
+    if (!config.billingCycleStart) {
+      config.billingCycleStart = now;
+      await config.save();
+      return config;
+    }
+
+    // 3. 30-day rolling quota reset (guarantees monthlyOrderCount resets every 30 days for 6-month prepaid & all tiers)
+    const elapsedMs = now.getTime() - new Date(config.billingCycleStart).getTime();
+    if (elapsedMs >= THIRTY_DAYS_MS) {
+      const updated = await CourierConfig.findOneAndUpdate(
+        { shopDomain },
+        {
+          $set: {
+            monthlyOrderCount: 0,
+            billingCycleStart: now,
+          },
+        },
+        { new: true }
+      );
+      return updated;
+    }
+
     return config;
+  } catch (err: any) {
+    console.warn("⚠️ ensureBillingCycleCurrent error caught gracefully:", err?.message || err);
+    return null;
   }
-
-  // 3. 30-day rolling quota reset (guarantees monthlyOrderCount resets every 30 days for 6-month prepaid & all tiers)
-  const elapsedMs = now.getTime() - new Date(config.billingCycleStart).getTime();
-  if (elapsedMs >= THIRTY_DAYS_MS) {
-    const updated = await CourierConfig.findOneAndUpdate(
-      { shopDomain },
-      {
-        $set: {
-          monthlyOrderCount: 0,
-          billingCycleStart: now,
-        },
-      },
-      { new: true }
-    );
-    return updated;
-  }
-
-  return config;
 }
 
 /**
@@ -963,24 +1053,30 @@ if (mongoose.models.SystemConfig) {
 export const SystemConfig = mongoose.model("SystemConfig", systemConfigSchema);
 
 export async function getSystemConfig() {
-  await connectDB();
-  let config = await SystemConfig.findOne({ key: "global" }).lean();
-  if (!config) {
-    config = await SystemConfig.findOneAndUpdate(
-      { key: "global" },
-      {
-        $set: {
-          key: "global",
-          supportEmail: "ecomdoctorbd@gmail.com",
-          whatsappHelpline: "01346851322",
-          whatsappNumber: "+8801346851322",
-          tutorialLink: "https://www.youtube.com/@ecomdoctorbd",
+  const fallbackConfig = {
+    key: "global",
+    supportEmail: "ecomdoctorbd@gmail.com",
+    whatsappHelpline: "01346851322",
+    whatsappNumber: "+8801346851322",
+    tutorialLink: "https://www.youtube.com/@ecomdoctorbd",
+  };
+  try {
+    await connectDB();
+    let config = await SystemConfig.findOne({ key: "global" }).lean();
+    if (!config) {
+      config = await SystemConfig.findOneAndUpdate(
+        { key: "global" },
+        {
+          $set: fallbackConfig,
         },
-      },
-      { upsert: true, new: true, setDefaultsOnInsert: true }
-    ).lean();
+        { upsert: true, new: true, setDefaultsOnInsert: true }
+      ).lean();
+    }
+    return config || fallbackConfig;
+  } catch (err: any) {
+    console.warn("⚠️ getSystemConfig caught error gracefully, using fallback:", err?.message || err);
+    return fallbackConfig;
   }
-  return config;
 }
 
 export default CourierConfig;

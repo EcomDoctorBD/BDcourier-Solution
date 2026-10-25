@@ -91,11 +91,16 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
   const shopDomain = session.shop;
 
-  await connectDB();
-  await ensureBillingCycleCurrent(shopDomain);
-
-  const rawStoreConfig: any = await CourierConfig.findOne({ shopDomain }).lean();
-  const storeConfig = decryptCourierConfig(rawStoreConfig);
+  let storeConfig: any = null;
+  try {
+    await connectDB();
+    await ensureBillingCycleCurrent(shopDomain);
+    const rawStoreConfig: any = await CourierConfig.findOne({ shopDomain }).lean();
+    storeConfig = decryptCourierConfig(rawStoreConfig);
+  } catch (err: any) {
+    console.warn("⚠️ app._index loader database warning:", err?.message || err);
+    storeConfig = decryptCourierConfig(null);
+  }
 
   const currentPlan = String(storeConfig?.currentPlan || "Free");
   const monthlyOrderCount = Number(storeConfig?.monthlyOrderCount ?? 0);
