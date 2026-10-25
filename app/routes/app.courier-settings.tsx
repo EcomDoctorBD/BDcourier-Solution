@@ -1295,11 +1295,7 @@ export default function CourierSettingsPage() {
   };
 
   return (
-    <Page
-      title="Courier Settings"
-      subtitle={`Store: ${shopDomain} • Plan: ${currentPlan}`}
-      backAction={{ content: "Dashboard", url: `/app${searchStr}` }}
-    >
+    <Page>
       <TitleBar title="Courier Settings" />
 
       <BlockStack gap="600">
@@ -1313,22 +1309,19 @@ export default function CourierSettingsPage() {
           </Banner>
         )}
 
+        <BlockStack gap="200">
+          <Text as="h1" variant="headingXl" fontWeight="bold">
+            Courier Gateways
+          </Text>
+          <Text as="p" variant="bodyMd" tone="subdued">
+            Manage your credentials for Bangladesh&apos;s leading logistics partners to enable one-click booking and automated dispatch.
+          </Text>
+        </BlockStack>
+
         {/* ==================================================================== */}
         {/* SECTION 1: COURIER GATEWAYS LAYOUT (5 Gateways)                      */}
         {/* ==================================================================== */}
-        <BlockStack gap="300">
-          <InlineStack align="space-between" blockAlign="center" wrap>
-            <BlockStack gap="050">
-              <Text as="h2" variant="headingLg">
-                Courier Gateways
-              </Text>
-              <Text as="p" variant="bodyMd" tone="subdued">
-                Manage your credentials for Bangladesh&apos;s leading logistics partners to enable one-click booking and automated dispatch.
-              </Text>
-            </BlockStack>
-          </InlineStack>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 items-start">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 items-start">
             {/* Card 1: Pathao Settings */}
             <div className="w-full h-auto">
               <Card padding="500">
@@ -2667,7 +2660,6 @@ export default function CourierSettingsPage() {
               </Card>
             </div>
           </div>
-        </BlockStack>
 
         {/* ==================================================================== */}
         {/* SECTION 2: AUTOMATION RULES & AI WRAPPER                             */}
