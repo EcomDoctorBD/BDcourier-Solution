@@ -2667,10 +2667,10 @@ export default function CourierSettingsPage() {
         <BlockStack gap="400">
           <BlockStack gap="050">
             <Text as="h2" variant="headingLg">
-              Automatic Courier Selection &amp; Smart AI
+              স্মার্ট AI অ্যাড্রেস কারেকশন ও অটো-কুরিয়ার সিলেকশন
             </Text>
             <Text as="p" variant="bodyMd" tone="subdued">
-              Automatic courier selection for district assignments and smart address correction.
+              কাস্টমারের ভুল বা অসম্পূর্ণ ঠিকানা স্বয়ংক্রিয়ভাবে ঠিক করুন, ভুল জোনে পার্সেল যাওয়া বন্ধ করুন এবং রিটার্ন (RTO) খরচ বাঁচান।
             </Text>
           </BlockStack>
 
@@ -2685,30 +2685,32 @@ export default function CourierSettingsPage() {
                         <Icon source={SparklesIcon} tone="magic" />
                       </Box>
                       <Text as="h3" variant="headingMd">
-                        Gemini AI Address Normalizer
+                        AI অ্যাড্রেস ভেরিফায়ার ও পার্সেল সুরক্ষা
                       </Text>
                       <Badge
                         tone={aiAddressCleaningEnabled ? "success" : "critical"}
                         progress={aiAddressCleaningEnabled ? "complete" : "incomplete"}
                       >
-                        {aiAddressCleaningEnabled ? "Active" : "Inactive"}
+                        {aiAddressCleaningEnabled
+                          ? "● AI ভেরিফিকেশন চালু"
+                          : "○ AI ভেরিফিকেশন বন্ধ"}
                       </Badge>
                     </InlineStack>
 
                     <InlineStack gap="200" blockAlign="center">
                       <Badge tone={aiConfig.isGeminiConfigured ? "success" : "attention"}>
                         {aiConfig.isGeminiConfigured
-                          ? "AI Normalizer Active"
-                          : "Local Keyword Mode"}
+                          ? "Google Gemini AI মোড"
+                          : "লোকাল কি-ওয়ার্ড মোড"}
                       </Badge>
                       <Badge tone="info">
-                        {`${aiConfig.addressCacheCount} Cached Addresses`}
+                        {`${aiConfig.addressCacheCount} টি অ্যাড্রেস সেভ করা আছে`}
                       </Badge>
                     </InlineStack>
                   </InlineStack>
 
                   <Text as="p" variant="bodySm" tone="subdued">
-                    During courier dispatch, messy Bangladeshi addresses (mixed Bengali, phonetics, missing thanas) are automatically normalized into canonical District &amp; Thana without slowing down Shopify checkouts.
+                    কাস্টমাররা বাংলিশ, ভুল বানান বা থানা ছাড়া ঠিকানা লিখলেও AI স্বয়ংক্রিয়ভাবে সঠিক জেলা ও থানা খুঁজে বের করে পাঠাও, রেডএক্স ও স্টিডফাস্টে সঠিক জোনে পার্সেল এন্ট্রি নিশ্চিত করে।
                   </Text>
 
                   <Box
@@ -2718,8 +2720,8 @@ export default function CourierSettingsPage() {
                   >
                     <BlockStack gap="300">
                       <Checkbox
-                        label="Enable Gemini AI Address Normalization on Courier Dispatch"
-                        helpText="Executes strictly when 'Send to Courier' is clicked. Normalized addresses are automatically saved for instant recurring lookups."
+                        label="কুরিয়ারে অর্ডার পাঠানোর সময় Gemini AI অ্যাড্রেস কারেকশন চালু রাখুন"
+                        helpText="“Send to Courier” বাটনে ক্লিক করার সাথে সাথে ঠিকানা স্বয়ংক্রিয়ভাবে ঠিক হবে এবং ভবিষ্যতে দ্রুত পার্সেল পাঠানোর জন্য ডাটাবেজে সেভ থাকবে।"
                         checked={aiAddressCleaningEnabled}
                         onChange={handleToggleAiCleaning}
                         disabled={isSubmittingAi}
