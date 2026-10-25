@@ -33,12 +33,13 @@ import { authenticate } from "../shopify.server";
 import CourierConfig, { connectDB, ensureBillingCycleCurrent } from "../db.server";
 import {
   type PlanTierId,
+  type BillingInterval,
   type PricingTierConfig,
   SIX_TIER_PRICING_PLANS,
   getPricingTier,
 } from "../pricing-plans";
 
-export type { PlanTierId, PricingTierConfig };
+export type { PlanTierId, BillingInterval, PricingTierConfig };
 export { SIX_TIER_PRICING_PLANS, getPricingTier };
 
 function CheckFeatureIcon(props: SVGProps<SVGSVGElement>) {
@@ -69,14 +70,24 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   const url = new URL(request.url);
   const upgradedPlanParam = url.searchParams.get("upgradedPlan");
+  const upgradedIntervalParam = url.searchParams.get("interval");
 
-  // Step 1: Query Shopify Admin GraphQL for live active subscriptions (Authoritative Source of Truth)
+  // Step 1: Query Shopify Admin GraphQL for shop plan (dev store detection), live active recurring subscriptions,
+  // and active one-time prepaid purchases (oneTimePurchases)
   let activeSubs: any[] = [];
+  let oneTimePurchases: any[] = [];
+  let isDevStore = false;
   let shopifyBillingStatus = "ACTIVE";
 
   try {
-    const billingQuery = `#graphql
-      query GetActiveSubscriptions {
+    const billingAndShopQuery = `#graphql
+      query GetBillingAndShop {
+        shop {
+          plan {
+            partnerDevelopment
+            displayName
+          }
+        }
         currentAppInstallation {
           activeSubscriptions {
             id
@@ -84,17 +95,57 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
             status
             test
             currentPeriodEnd
+            lineItems {
+              plan {
+                pricingDetails {
+                  __typename
+                  ... on AppRecurringPricing {
+                    price {
+                      amount
+                      currencyCode
+                    }
+                    interval
+                  }
+                }
+              }
+            }
+          }
+          oneTimePurchases(first: 20, reverse: true) {
+            edges {
+              node {
+                id
+                name
+                status
+                test
+                createdAt
+                price {
+                  amount
+                  currencyCode
+                }
+              }
+            }
           }
         }
       }
     `;
-    const response = await admin.graphql(billingQuery);
+    const response = await admin.graphql(billingAndShopQuery);
     const result: any = await response.json();
+    const shopPlan = result?.data?.shop?.plan;
+    isDevStore =
+      Boolean(shopPlan?.partnerDevelopment) ||
+      shopPlan?.displayName === "affiliate" ||
+      shopPlan?.displayName === "partner_test" ||
+      process.env.NODE_ENV !== "production";
+
     activeSubs =
       result?.data?.currentAppInstallation?.activeSubscriptions || [];
+    oneTimePurchases =
+      (result?.data?.currentAppInstallation?.oneTimePurchases?.edges || []).map(
+        (edge: any) => edge?.node
+      ).filter(Boolean);
   } catch (err) {
     console.warn(
-      "[Billing] Failed to query active subscriptions from Shopify GraphQL:",
+      "[Billing] Failed to query active subscriptions and shop info from Shopify GraphQL:",
       err
     );
   }
@@ -102,18 +153,56 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   // Find confirmed active recurring subscription
   const activePaidSub = activeSubs.find((sub: any) => sub.status === "ACTIVE");
 
+  // Find active 6-months upfront one-time purchase within last 183 days
+  const SIX_MONTHS_MS = 183 * 24 * 60 * 60 * 1000;
+  const validActiveOneTime = oneTimePurchases.find((purchase: any) => {
+    if (purchase.status !== "ACTIVE") return false;
+    const ageMs = Date.now() - new Date(purchase.createdAt).getTime();
+    return ageMs >= 0 && ageMs < SIX_MONTHS_MS;
+  });
+
   let verifiedTier: PricingTierConfig | undefined;
+  let activeInterval: BillingInterval = "monthly";
+  let activeSubId = "";
+  let isTestChargeActive = false;
+
   if (activePaidSub) {
     const subName = String(activePaidSub.name || "").toLowerCase();
     verifiedTier = SIX_TIER_PRICING_PLANS.find(
       (t) =>
-        t.price > 0 &&
+        t.id.toLowerCase() !== "free" &&
         (subName.includes(t.name.toLowerCase()) ||
           subName.includes(t.id.toLowerCase()))
     );
-    shopifyBillingStatus = `${activePaidSub.status}${
-      activePaidSub.test ? " (Test Charge)" : ""
-    }`;
+
+    const hasAnnualLineItem = activePaidSub.lineItems?.some(
+      (item: any) => item?.plan?.pricingDetails?.interval === "ANNUAL"
+    );
+    const isYearly =
+      hasAnnualLineItem ||
+      subName.includes("yearly") ||
+      subName.includes("annual");
+
+    activeInterval = isYearly ? "yearly" : "monthly";
+    activeSubId = activePaidSub.id;
+    isTestChargeActive = Boolean(activePaidSub.test);
+    shopifyBillingStatus = `${activePaidSub.status} (${activeInterval.toUpperCase()}${
+      isTestChargeActive ? " - Test Charge" : ""
+    })`;
+  } else if (validActiveOneTime) {
+    const purchaseName = String(validActiveOneTime.name || "").toLowerCase();
+    verifiedTier = SIX_TIER_PRICING_PLANS.find(
+      (t) =>
+        t.id.toLowerCase() !== "free" &&
+        (purchaseName.includes(t.name.toLowerCase()) ||
+          purchaseName.includes(t.id.toLowerCase()))
+    );
+    activeInterval = "6months";
+    activeSubId = validActiveOneTime.id;
+    isTestChargeActive = Boolean(validActiveOneTime.test);
+    shopifyBillingStatus = `ACTIVE (6-MO PREPAID${
+      isTestChargeActive ? " - Test Charge" : ""
+    })`;
   }
 
   // Step 2: Fetch or initialize store configuration in MongoDB
@@ -130,6 +219,21 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     storeConfig = created.toObject();
   }
 
+  // Bypass active subscription locks automatically on local development / partner dev stores
+  if (!verifiedTier && isDevStore) {
+    const existingPlan = String(storeConfig?.currentPlan || "Free");
+    if (existingPlan.toLowerCase() !== "free") {
+      const devMatchedTier = SIX_TIER_PRICING_PLANS.find(
+        (t) => t.id.toLowerCase() === existingPlan.toLowerCase()
+      );
+      if (devMatchedTier) {
+        verifiedTier = devMatchedTier;
+        isTestChargeActive = true;
+        shopifyBillingStatus = `ACTIVE (Dev Store Bypass - Test Charge)`;
+      }
+    }
+  }
+
   // Step 3: Synchronize MongoDB with Authoritative Shopify Billing
   if (verifiedTier) {
     const isPlanChanged =
@@ -144,20 +248,16 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
           $set: {
             shopDomain,
             currentPlan: verifiedTier.id,
-            billingStatus: `ACTIVE (Shopify Billing Confirmed${
-              activePaidSub.test ? " - Test Charge" : ""
-            })`,
-            shopifySubscriptionId: activePaidSub.id,
+            billingStatus: shopifyBillingStatus,
+            shopifySubscriptionId: activeSubId,
             billingCycleStart: new Date(),
           },
         },
         { upsert: true, new: true, setDefaultsOnInsert: true }
       );
       storeConfig.currentPlan = verifiedTier.id;
-      storeConfig.billingStatus = `ACTIVE (Shopify Billing Confirmed${
-        activePaidSub.test ? " - Test Charge" : ""
-      })`;
-      storeConfig.shopifySubscriptionId = activePaidSub.id;
+      storeConfig.billingStatus = shopifyBillingStatus;
+      storeConfig.shopifySubscriptionId = activeSubId;
       storeConfig.billingCycleStart = new Date();
     } else {
       // Retain existing billingCycleStart, sync status and subscription ID
@@ -165,19 +265,15 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         { shopDomain },
         {
           $set: {
-            billingStatus: `ACTIVE (Shopify Billing Confirmed${
-              activePaidSub.test ? " - Test Charge" : ""
-            })`,
-            shopifySubscriptionId: activePaidSub.id,
+            billingStatus: shopifyBillingStatus,
+            shopifySubscriptionId: activeSubId,
           },
         }
       );
-      storeConfig.billingStatus = `ACTIVE (Shopify Billing Confirmed${
-        activePaidSub.test ? " - Test Charge" : ""
-      })`;
+      storeConfig.billingStatus = shopifyBillingStatus;
     }
   } else {
-    // If Shopify has NO active paid subscription, ensure store is safely on Free plan
+    // If Shopify has NO active paid subscription and not in dev store bypass, ensure store is safely on Free plan
     if (String(storeConfig.currentPlan || "Free").toLowerCase() !== "free") {
       await CourierConfig.findOneAndUpdate(
         { shopDomain },
@@ -195,7 +291,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     shopifyBillingStatus = "FREE PLAN ($0.00/mo)";
   }
 
-  // Step 4: Validate URL parameter against verified GraphQL tier (Stop URL Exploit)
+  // Step 4: Validate URL parameter against verified tier (or dev store test bypass)
   let justUpgraded = false;
   let upgradeWarning = "";
 
@@ -204,8 +300,25 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       (t) => t.id.toLowerCase() === upgradedPlanParam.toLowerCase()
     );
 
-    if (verifiedTier && requestedTier && verifiedTier.id === requestedTier.id) {
+    if (
+      (verifiedTier && requestedTier && verifiedTier.id === requestedTier.id) ||
+      (isDevStore && requestedTier)
+    ) {
       justUpgraded = true;
+      if (isDevStore && (!verifiedTier || verifiedTier.id !== requestedTier?.id)) {
+        await CourierConfig.findOneAndUpdate(
+          { shopDomain },
+          {
+            $set: {
+              currentPlan: requestedTier.id,
+              billingStatus: "ACTIVE (Dev Store Bypass - Test Charge)",
+              billingCycleStart: new Date(),
+            },
+          }
+        );
+        storeConfig.currentPlan = requestedTier.id;
+        verifiedTier = requestedTier;
+      }
     } else {
       upgradeWarning = `The requested upgrade to "${upgradedPlanParam}" could not be confirmed by Shopify Billing. Active plan is ${
         verifiedTier?.name || "Free Plan"
@@ -239,7 +352,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     subscription: {
       currentPlan: currentTier.id,
       planDisplayName: currentTier.name,
-      priceDisplay: currentTier.priceDisplay,
+      priceDisplay: currentTier.pricing[activeInterval].monthlyRate > 0
+        ? `$${currentTier.pricing[activeInterval].monthlyRate.toFixed(2)}`
+        : "$0.00",
+      activeInterval,
       monthlyOrderCount,
       maxLimit,
       usagePercentage,
@@ -260,6 +376,13 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   const formData = await request.formData();
   const targetPlanId = String(formData.get("planId") || "");
+  const intervalParam = String(formData.get("interval") || "monthly").toLowerCase();
+  const interval: BillingInterval =
+    intervalParam === "6months"
+      ? "6months"
+      : intervalParam === "yearly"
+      ? "yearly"
+      : "monthly";
 
   const selectedTier = SIX_TIER_PRICING_PLANS.find(
     (t) => t.id.toLowerCase() === targetPlanId.toLowerCase()
@@ -274,7 +397,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   }
 
   // ==================== 1. DOWNGRADE TO FREE PLAN ($0.00/mo) ====================
-  if (selectedTier.price === 0) {
+  if (selectedTier.id === "Free" || selectedTier.pricing[interval].monthlyRate === 0) {
     try {
       const activeSubsQuery = `#graphql
         query GetActiveSubscriptions {
@@ -341,8 +464,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   }
 
   // ==================== 2. UPGRADE TO PAID TIER (SHOPIFY BILLING) ====================
-  // Check shop plan type dynamically to determine test mode (Dev stores vs Real paid stores)
   let isTestCharge = process.env.NODE_ENV !== "production";
+  let isDevStore = false;
   try {
     const shopPlanQuery = `#graphql
       query GetShopPlanType {
@@ -357,7 +480,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const shopRes = await admin.graphql(shopPlanQuery);
     const shopData: any = await shopRes.json();
     const plan = shopData?.data?.shop?.plan;
-    const isDevStore =
+    isDevStore =
       Boolean(plan?.partnerDevelopment) ||
       plan?.displayName === "affiliate" ||
       plan?.displayName === "partner_test";
@@ -372,58 +495,163 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   const appBaseUrl = process.env.SHOPIFY_APP_URL || new URL(request.url).origin;
   const currentPathname = new URL(request.url).pathname;
-  const returnUrl = `${appBaseUrl}${currentPathname}?upgradedPlan=${selectedTier.id}`;
-
-  const CREATE_SUBSCRIPTION_MUTATION = `#graphql
-    mutation CreateAppSubscription(
-      $name: String!
-      $returnUrl: URL!
-      $test: Boolean!
-      $amount: Decimal!
-    ) {
-      appSubscriptionCreate(
-        name: $name
-        returnUrl: $returnUrl
-        test: $test
-        lineItems: [
-          {
-            plan: {
-              appRecurringPricingDetails: {
-                price: { amount: $amount, currencyCode: USD }
-                interval: EVERY_30_DAYS
-              }
-            }
-          }
-        ]
-      ) {
-        userErrors {
-          field
-          message
-        }
-        confirmationUrl
-        appSubscription {
-          id
-          name
-          status
-        }
-      }
-    }
-  `;
+  const returnUrl = `${appBaseUrl}${currentPathname}?upgradedPlan=${selectedTier.id}&interval=${interval}`;
 
   try {
-    const response = await admin.graphql(CREATE_SUBSCRIPTION_MUTATION, {
-      variables: {
-        name: `Delivery1 Courier Hub - ${selectedTier.name}`,
-        returnUrl,
-        test: isTestCharge,
-        amount: selectedTier.price,
-      },
-    });
+    let confirmationUrl: string | null = null;
+    let userErrors: any[] = [];
 
-    const result: any = await response.json();
-    const payload = result?.data?.appSubscriptionCreate;
-    const userErrors = payload?.userErrors || [];
-    const confirmationUrl = payload?.confirmationUrl;
+    // ==================== INTERVAL SPLIT LOGIC ====================
+    if (interval === "6months") {
+      // • For 6months: Use appPurchaseOneTimeCreate mutation, calculating the upfront amount (totalBilled)
+      const upfrontAmount = selectedTier.pricing["6months"].totalBilled;
+      const CREATE_ONE_TIME_MUTATION = `#graphql
+        mutation AppPurchaseOneTimeCreate(
+          $name: String!
+          $price: MoneyInput!
+          $returnUrl: URL!
+          $test: Boolean
+        ) {
+          appPurchaseOneTimeCreate(
+            name: $name
+            price: $price
+            returnUrl: $returnUrl
+            test: $test
+          ) {
+            userErrors {
+              field
+              message
+            }
+            confirmationUrl
+            appPurchaseOneTime {
+              id
+              status
+            }
+          }
+        }
+      `;
+
+      const response = await admin.graphql(CREATE_ONE_TIME_MUTATION, {
+        variables: {
+          name: `Delivery1 Courier Hub - ${selectedTier.name} (6 Months Upfront)`,
+          price: {
+            amount: upfrontAmount,
+            currencyCode: "USD",
+          },
+          returnUrl,
+          test: isTestCharge,
+        },
+      });
+
+      const result: any = await response.json();
+      const payload = result?.data?.appPurchaseOneTimeCreate;
+      userErrors = payload?.userErrors || [];
+      confirmationUrl = payload?.confirmationUrl || null;
+    } else if (interval === "yearly") {
+      // • For yearly: Use appSubscriptionCreate with interval: ANNUAL
+      const annualAmount = selectedTier.pricing.yearly.totalBilled;
+      const CREATE_ANNUAL_SUB_MUTATION = `#graphql
+        mutation CreateAppAnnualSubscription(
+          $name: String!
+          $returnUrl: URL!
+          $test: Boolean!
+          $amount: Decimal!
+        ) {
+          appSubscriptionCreate(
+            name: $name
+            returnUrl: $returnUrl
+            test: $test
+            lineItems: [
+              {
+                plan: {
+                  appRecurringPricingDetails: {
+                    price: { amount: $amount, currencyCode: USD }
+                    interval: ANNUAL
+                  }
+                }
+              }
+            ]
+          ) {
+            userErrors {
+              field
+              message
+            }
+            confirmationUrl
+            appSubscription {
+              id
+              name
+              status
+            }
+          }
+        }
+      `;
+
+      const response = await admin.graphql(CREATE_ANNUAL_SUB_MUTATION, {
+        variables: {
+          name: `Delivery1 Courier Hub - ${selectedTier.name} (Annual Plan)`,
+          returnUrl,
+          test: isTestCharge,
+          amount: annualAmount,
+        },
+      });
+
+      const result: any = await response.json();
+      const payload = result?.data?.appSubscriptionCreate;
+      userErrors = payload?.userErrors || [];
+      confirmationUrl = payload?.confirmationUrl || null;
+    } else {
+      // • For monthly: Use appSubscriptionCreate with interval: EVERY_30_DAYS
+      const monthlyAmount = selectedTier.pricing.monthly.totalBilled;
+      const CREATE_MONTHLY_SUB_MUTATION = `#graphql
+        mutation CreateAppMonthlySubscription(
+          $name: String!
+          $returnUrl: URL!
+          $test: Boolean!
+          $amount: Decimal!
+        ) {
+          appSubscriptionCreate(
+            name: $name
+            returnUrl: $returnUrl
+            test: $test
+            lineItems: [
+              {
+                plan: {
+                  appRecurringPricingDetails: {
+                    price: { amount: $amount, currencyCode: USD }
+                    interval: EVERY_30_DAYS
+                  }
+                }
+              }
+            ]
+          ) {
+            userErrors {
+              field
+              message
+            }
+            confirmationUrl
+            appSubscription {
+              id
+              name
+              status
+            }
+          }
+        }
+      `;
+
+      const response = await admin.graphql(CREATE_MONTHLY_SUB_MUTATION, {
+        variables: {
+          name: `Delivery1 Courier Hub - ${selectedTier.name} (Monthly)`,
+          returnUrl,
+          test: isTestCharge,
+          amount: monthlyAmount,
+        },
+      });
+
+      const result: any = await response.json();
+      const payload = result?.data?.appSubscriptionCreate;
+      userErrors = payload?.userErrors || [];
+      confirmationUrl = payload?.confirmationUrl || null;
+    }
 
     if (userErrors.length > 0) {
       return {
@@ -442,15 +670,13 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       };
     }
 
-    // DO NOT upgrade currentPlan in MongoDB before merchant approves charge on Shopify!
-    // Return confirmationUrl so the browser redirects to Shopify's confirmation page.
     return {
       success: true,
       confirmationUrl,
-      message: `Redirecting to Shopify Billing to approve ${selectedTier.name} (${selectedTier.priceDisplay} / mo)...`,
+      message: `Redirecting to Shopify Billing to approve ${selectedTier.name} (${interval})...`,
     };
   } catch (err: any) {
-    console.error("[Billing] Failed to create app subscription:", err);
+    console.error("[Billing] Failed to create charge/subscription:", err);
     return {
       success: false,
       confirmationUrl: null,
@@ -468,6 +694,9 @@ export default function PricingAndBillingPage() {
   const submit = useSubmit();
   const navigation = useNavigation();
 
+  const [selectedInterval, setSelectedInterval] = useState<BillingInterval>(
+    (subscription.activeInterval as BillingInterval) || "monthly"
+  );
   const [showBanner, setShowBanner] = useState(false);
   const [limitAlertDismissed, setLimitAlertDismissed] = useState(false);
 
@@ -491,82 +720,52 @@ export default function PricingAndBillingPage() {
   const handleSelectPlan = (planId: PlanTierId) => {
     const formData = new FormData();
     formData.append("planId", planId);
+    formData.append("interval", selectedInterval);
     submit(formData, { method: "post" });
   };
 
   const comparisonHeadings = [
     "Feature / Capability",
-    "Free ($0.00/mo)",
-    "Starter ($1.99/mo)",
-    "Growth ($3.49/mo)",
-    "Pro ($5.99/mo)",
-    "Advanced ($11.99/mo)",
-    "Enterprise ($24.99/mo)",
+    ...tiers.map(
+      (t) =>
+        `${t.name} ($${t.pricing[selectedInterval].monthlyRate.toFixed(2)}/mo)`
+    ),
   ];
 
   const comparisonMatrixRows = [
     [
-      "Monthly Price",
-      "$0.00 / mo",
-      "$1.99 / mo",
-      "$3.49 / mo",
-      "$5.99 / mo",
-      "$11.99 / mo",
-      "$24.99 / mo",
+      "Monthly Rate",
+      ...tiers.map(
+        (t) => `$${t.pricing[selectedInterval].monthlyRate.toFixed(2)} / mo`
+      ),
+    ],
+    [
+      "Billing Terms",
+      ...tiers.map((t) => t.pricing[selectedInterval].text),
     ],
     [
       "Order Limit",
-      "120 orders/month",
-      "250 orders/month",
-      "500 orders/month",
-      "1,000 orders/month",
-      "2,500 orders/month",
-      "10,000 orders/month",
+      ...tiers.map((t) => `${t.orderLimit.toLocaleString()} orders/month`),
     ],
     [
       "Core Routing & Automation",
-      "Shipping Zone & Rate, Manual Select",
-      "Shipping Zone & Rate, Manual Select",
-      "Shipping Zone & Rate, Manual Select",
-      "Automatic Courier Selection + Shipping Rates",
-      "Automatic Courier Selection + Shipping Rates",
-      "Full Automation + Shipping Rates",
+      ...tiers.map((t) => t.coreRouting),
     ],
     [
       "Bulk Order Limit",
-      "No Bulk (Single process only)",
-      "Max 10 orders/batch",
-      "Max 15 orders/batch",
-      "Max 50 orders (Auto-routed)",
-      "Max 50 orders (Auto-routed)",
-      "Max 50 orders (Auto-routed)",
+      ...tiers.map((t) => t.bulkLimit),
     ],
     [
       "Fraud Protection Level",
-      "Basic Fraud Indicator",
-      "Auto-Lock (Fixed success rate)",
-      "Custom Risk Threshold (Set X%)",
-      "Custom Threshold + Bulk Safe-Approve",
-      "AI-Enhanced Flagging",
-      "Global Fraud Network API Access",
+      ...tiers.map((t) => t.fraudProtection),
     ],
     [
       "Fulfillment, Print & Invoice",
-      "Standard tracking sheet",
-      "3-Tiered Printable Packing Slips",
-      "Custom Branded layout invoices",
-      "Custom Branded invoices + COD Surcharge Toggles",
-      "Custom Branded invoices",
-      "Industrial barcode printer sync & Tailored warehouse layouts",
+      ...tiers.map((t) => t.fulfillmentPrint),
     ],
     [
       "Support & Financials",
-      "Community Support",
-      "Standard Email",
-      "Priority Email",
-      "Priority WhatsApp Support",
-      "Zero-Risk Financial Payment Sync",
-      "Live Onboarding Manager",
+      ...tiers.map((t) => t.supportFinancials),
     ],
   ];
 
@@ -584,502 +783,610 @@ export default function PricingAndBillingPage() {
       subtitle={`Store: ${shopDomain} • 6-Tier Courier Automation SaaS Plans`}
       backAction={{ content: "Courier Dashboard", url: "/app" }}
     >
-        <TitleBar title="Pricing & Billing" />
+      <TitleBar title="Pricing & Billing" />
 
-        <Layout>
-          {subscription.isLimitReached && !limitAlertDismissed && (
-            <Layout.Section>
-              <Banner
-                title="Monthly Order Booking Limit Reached"
-                tone="critical"
-                onDismiss={() => setLimitAlertDismissed(true)}
-              >
-                <p>
-                  You have used{" "}
-                  <strong>
-                    {subscription.monthlyOrderCount.toLocaleString()} /{" "}
-                    {subscription.maxLimit.toLocaleString()}
-                  </strong>{" "}
-                  orders on your <strong>{subscription.planDisplayName}</strong>
-                  . Upgrade to a higher tier below to immediately unlock
-                  additional monthly order capacity.
-                </p>
-              </Banner>
-            </Layout.Section>
-          )}
-
-          {showBanner && actionData?.message && (
-            <Layout.Section>
-              <Banner
-                title="Subscription Update"
-                tone={actionData.success ? "success" : "critical"}
-                onDismiss={() => setShowBanner(false)}
-              >
-                <p>{actionData.message}</p>
-              </Banner>
-            </Layout.Section>
-          )}
-
-          {justUpgraded && !showBanner && (
-            <Layout.Section>
-              <Banner
-                title={`Your store is now subscribed to ${subscription.planDisplayName}!`}
-                tone="success"
-              >
-                <p>
-                  Your monthly order allowance and tier features have been
-                  activated and synced with MongoDB.
-                </p>
-              </Banner>
-            </Layout.Section>
-          )}
-
-          {upgradeWarning && !showBanner && (
-            <Layout.Section>
-              <Banner
-                title="Subscription Not Confirmed"
-                tone="critical"
-              >
-                <p>{upgradeWarning}</p>
-              </Banner>
-            </Layout.Section>
-          )}
-
-          {/* Active Plan & Monthly Quota Meter Card */}
+      <Layout>
+        {subscription.isLimitReached && !limitAlertDismissed && (
           <Layout.Section>
-            <Card>
-              <BlockStack gap="400">
-                <InlineStack align="space-between" blockAlign="center" wrap>
-                  <BlockStack gap="100">
-                    <InlineStack gap="200" blockAlign="center">
-                      <Text as="h2" variant="headingLg">
-                        {`Active Plan: ${subscription.planDisplayName}`}
-                      </Text>
-                      <Badge
-                        tone={
-                          subscription.isLimitReached ? "critical" : "success"
-                        }
-                      >
-                        {subscription.isLimitReached
-                          ? "LIMIT REACHED"
-                          : subscription.billingStatus}
-                      </Badge>
-                    </InlineStack>
-                    <Text as="p" variant="bodyMd" tone="subdued">
-                      Current Rate:{" "}
-                      <strong>{`${subscription.priceDisplay} / mo`}</strong> •
-                      Billing Cycle Started:{" "}
-                      <strong>{cycleStartFormatted}</strong>
+            <Banner
+              title="Monthly Order Booking Limit Reached"
+              tone="critical"
+              onDismiss={() => setLimitAlertDismissed(true)}
+            >
+              <p>
+                You have used{" "}
+                <strong>
+                  {subscription.monthlyOrderCount.toLocaleString()} /{" "}
+                  {subscription.maxLimit.toLocaleString()}
+                </strong>{" "}
+                order bookings for this billing period. Single and bulk courier
+                fulfillment will remain paused until you upgrade your plan or
+                until your next 30-day billing cycle resets.
+              </p>
+            </Banner>
+          </Layout.Section>
+        )}
+
+        {justUpgraded && (
+          <Layout.Section>
+            <Banner
+              title="Plan Activated Successfully"
+              tone="success"
+              onDismiss={() => {}}
+            >
+              <p>
+                Your store has been updated to the{" "}
+                <strong>{subscription.planDisplayName}</strong>. Your upgraded
+                monthly quota is now available.
+              </p>
+            </Banner>
+          </Layout.Section>
+        )}
+
+        {upgradeWarning && (
+          <Layout.Section>
+            <Banner
+              title="Subscription Verification Notice"
+              tone="warning"
+              onDismiss={() => {}}
+            >
+              <p>{upgradeWarning}</p>
+            </Banner>
+          </Layout.Section>
+        )}
+
+        {showBanner && actionData && (
+          <Layout.Section>
+            <Banner
+              title={
+                actionData.success
+                  ? "Redirecting to Shopify Billing"
+                  : "Subscription Notice"
+              }
+              tone={actionData.success ? "info" : "critical"}
+              onDismiss={() => setShowBanner(false)}
+            >
+              <p>{actionData.message}</p>
+            </Banner>
+          </Layout.Section>
+        )}
+
+        {/* SECTION 0: CURRENT ACTIVE SUBSCRIPTION & USAGE STATUS */}
+        <Layout.Section>
+          <Card padding="500">
+            <BlockStack gap="400">
+              <InlineStack align="space-between" blockAlign="center" wrap>
+                <BlockStack gap="100">
+                  <InlineStack gap="200" blockAlign="center">
+                    <Text as="p" variant="bodySm" tone="subdued">
+                      CURRENT SUBSCRIPTION TIER
+                    </Text>
+                    <Badge
+                      tone={
+                        subscription.currentPlan === "Free"
+                          ? "info"
+                          : "success"
+                      }
+                    >
+                      {subscription.currentPlan === "Free"
+                        ? "Free Tier Active"
+                        : `${subscription.planDisplayName} Active`}
+                    </Badge>
+                  </InlineStack>
+
+                  <Text as="h1" variant="headingLg" fontWeight="bold">
+                    {subscription.planDisplayName}
+                  </Text>
+                </BlockStack>
+
+                <InlineStack gap="300" blockAlign="center">
+                  <BlockStack gap="050" align="end">
+                    <Text as="p" variant="bodyXs" tone="subdued">
+                      PRICE PER MONTH
+                    </Text>
+                    <Text as="p" variant="headingMd" fontWeight="bold">
+                      {subscription.priceDisplay} / mo
                     </Text>
                   </BlockStack>
 
                   <Badge
                     tone={
-                      subscription.isLimitReached
-                        ? "critical"
-                        : subscription.usagePercentage >= 80
-                        ? "warning"
+                      subscription.billingStatus.includes("ACTIVE")
+                        ? "success"
                         : "info"
                     }
                   >
-                    {`${subscription.remainingBookings.toLocaleString()} Orders Remaining This Month`}
+                    {subscription.billingStatus}
                   </Badge>
                 </InlineStack>
-
-                <Divider />
-
-                <BlockStack gap="200">
-                  <InlineStack align="space-between" blockAlign="center">
-                    <Text as="span" variant="headingMd" fontWeight="bold">
-                      {`${subscription.monthlyOrderCount.toLocaleString()} / ${subscription.maxLimit.toLocaleString()} orders used this month`}
-                    </Text>
-                    <Text as="span" variant="bodyMd" fontWeight="bold">
-                      {`${subscription.usagePercentage}% Used`}
-                    </Text>
-                  </InlineStack>
-
-                  <ProgressBar
-                    progress={subscription.usagePercentage}
-                    tone={
-                      subscription.isLimitReached ||
-                      subscription.usagePercentage >= 90
-                        ? "critical"
-                        : subscription.usagePercentage >= 75
-                        ? "highlight"
-                        : "primary"
-                    }
-                    size="medium"
-                  />
-                </BlockStack>
-              </BlockStack>
-            </Card>
-          </Layout.Section>
-
-          {/* SECTION 1: 6-TIER PRICING CARDS GRID */}
-          <Layout.Section>
-            <BlockStack gap="300">
-              <InlineStack align="space-between" blockAlign="center">
-                <Text as="h2" variant="headingLg">
-                  Choose the Right Plan for Your Bangladeshi Store
-                </Text>
-                <Badge tone="info">Billed Every 30 Days via Shopify</Badge>
               </InlineStack>
 
-              <Grid>
-                {tiers.map((tier) => {
-                  const isCurrentPlan =
-                    subscription.currentPlan.toLowerCase() ===
-                    tier.id.toLowerCase();
-                  const isSubmittingThisTier =
-                    navigation.state === "submitting" &&
-                    submittingPlanId === tier.id;
-                  const isGrowthOrPopular =
-                    tier.id.toLowerCase() === "growth" || Boolean(tier.isMostPopular);
+              <Divider />
 
+              {/* Quota Progress Meter */}
+              <BlockStack gap="200">
+                <InlineStack align="space-between" blockAlign="center">
+                  <Text as="p" variant="bodyMd" fontWeight="semibold">
+                    Monthly Order Usage (30-Day Auto Rollover)
+                  </Text>
+                  <Text
+                    as="span"
+                    variant="bodyMd"
+                    fontWeight="bold"
+                    tone={subscription.isLimitReached ? "critical" : undefined}
+                  >
+                    {subscription.monthlyOrderCount.toLocaleString()} /{" "}
+                    {subscription.maxLimit.toLocaleString()} Orders (
+                    {subscription.usagePercentage}%)
+                  </Text>
+                </InlineStack>
+
+                <ProgressBar
+                  progress={subscription.usagePercentage}
+                  tone={
+                    subscription.usagePercentage >= 100
+                      ? "critical"
+                      : subscription.usagePercentage >= 80
+                      ? "highlight"
+                      : "primary"
+                  }
+                  size="small"
+                />
+
+                <InlineStack align="space-between" blockAlign="center">
+                  <Text as="span" variant="bodyXs" tone="subdued">
+                    Cycle Reset: Automatic after 30 days (Active Since:{" "}
+                    {cycleStartFormatted})
+                  </Text>
+                  <Text as="span" variant="bodyXs" tone="subdued">
+                    Remaining Quota:{" "}
+                    <strong>
+                      {subscription.remainingBookings.toLocaleString()} orders
+                    </strong>
+                  </Text>
+                </InlineStack>
+              </BlockStack>
+            </BlockStack>
+          </Card>
+        </Layout.Section>
+
+        {/* SECTION 1: 3-INTERVAL TIER SELECTOR & 6-TIER PRICING CARDS */}
+        <Layout.Section>
+          <BlockStack gap="400">
+            <BlockStack gap="100">
+              <Text as="h2" variant="headingLg" fontWeight="bold">
+                Available SaaS Subscription Plans
+              </Text>
+              <Text as="p" variant="bodyMd" tone="subdued">
+                Select your preferred billing interval and scale your logistics automation.
+                All paid plans are processed securely via official Shopify Billing.
+              </Text>
+            </BlockStack>
+
+            {/* 3-Interval Tier Switcher */}
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "center",
+                margin: "12px 0 20px 0",
+              }}
+            >
+              <div
+                style={{
+                  display: "inline-flex",
+                  backgroundColor: "#F1F5F9",
+                  padding: "5px",
+                  borderRadius: "12px",
+                  border: "1px solid #E2E8F0",
+                  gap: "6px",
+                  boxShadow: "0 1px 3px rgba(0,0,0,0.04)",
+                }}
+              >
+                {[
+                  { id: "monthly", label: "Monthly Billing" },
+                  { id: "6months", label: "6 Months Upfront", discount: "Save ~10%" },
+                  { id: "yearly", label: "Annual (12 Months)", discount: "Save ~18%" },
+                ].map((tab) => {
+                  const isSelected = selectedInterval === tab.id;
                   return (
-                    <Grid.Cell
-                      key={tier.id}
-                      columnSpan={{ xs: 6, sm: 6, md: 3, lg: 4, xl: 4 }}
+                    <button
+                      key={tab.id}
+                      type="button"
+                      onClick={() =>
+                        setSelectedInterval(tab.id as BillingInterval)
+                      }
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "8px",
+                        padding: "8px 18px",
+                        borderRadius: "8px",
+                        fontSize: "13px",
+                        fontWeight: isSelected ? 700 : 500,
+                        border: "none",
+                        backgroundColor: isSelected ? "#FFFFFF" : "transparent",
+                        color: isSelected ? "#0F172A" : "#64748B",
+                        boxShadow: isSelected
+                          ? "0 2px 4px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04)"
+                          : "none",
+                        cursor: "pointer",
+                        transition: "all 0.15s ease",
+                      }}
                     >
-                      <Card
-                        background={
-                          isCurrentPlan
-                            ? "bg-surface-secondary"
-                            : isGrowthOrPopular
-                            ? "bg-surface-active"
-                            : undefined
-                        }
-                      >
-                        <BlockStack gap="400">
-                          {/* Tier Header & Clean Badges */}
-                          <BlockStack gap="200">
-                            <InlineStack
-                              align="space-between"
-                              blockAlign="center"
-                              wrap
-                            >
-                              <Text as="h3" variant="headingMd" fontWeight="bold">
-                                {tier.name}
-                              </Text>
-                              {isCurrentPlan ? (
-                                <span
-                                  style={{
-                                    backgroundColor: "#BDF5D6",
-                                    color: "#065F46",
-                                    fontSize: "12px",
-                                    fontWeight: 600,
-                                    padding: "3px 10px",
-                                    borderRadius: "12px",
-                                    lineHeight: "1.2",
-                                    display: "inline-block",
-                                  }}
-                                >
-                                  Active
-                                </span>
-                              ) : isGrowthOrPopular ? (
-                                <span
-                                  style={{
-                                    backgroundColor: "#FEF08A",
-                                    color: "#713F12",
-                                    fontSize: "12px",
-                                    fontWeight: 600,
-                                    padding: "3px 10px",
-                                    borderRadius: "12px",
-                                    lineHeight: "1.2",
-                                    display: "inline-block",
-                                  }}
-                                >
-                                  Popular
-                                </span>
-                              ) : null}
-                            </InlineStack>
+                      <span>{tab.label}</span>
+                      {tab.discount && (
+                        <span
+                          style={{
+                            backgroundColor: isSelected ? "#DCFCE7" : "#E2E8F0",
+                            color: isSelected ? "#15803D" : "#475569",
+                            fontSize: "11px",
+                            fontWeight: 700,
+                            padding: "2px 7px",
+                            borderRadius: "10px",
+                          }}
+                        >
+                          {tab.discount}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
 
-                            <InlineStack gap="100" blockAlign="baseline">
-                              <Text
-                                as="span"
-                                variant="headingXl"
-                                fontWeight="bold"
+            <Grid columns={{ xs: 1, sm: 2, md: 3, lg: 3, xl: 3 }}>
+              {tiers.map((tier) => {
+                const isCurrentPlan =
+                  subscription.currentPlan.toLowerCase() ===
+                  tier.id.toLowerCase();
+                const isGrowthOrPopular = tier.id === "Growth";
+                const isSubmittingThisTier =
+                  navigation.state === "submitting" &&
+                  submittingPlanId === tier.id;
+
+                const currentIntervalPricing =
+                  tier.pricing[selectedInterval] || tier.pricing.monthly;
+
+                return (
+                  <Grid.Cell key={tier.id}>
+                    <Card
+                      padding="500"
+                      background={
+                        isCurrentPlan
+                          ? "bg-surface-secondary"
+                          : isGrowthOrPopular
+                          ? undefined
+                          : undefined
+                      }
+                    >
+                      <BlockStack gap="400">
+                        {/* Tier Header & Clean Badges */}
+                        <BlockStack gap="200">
+                          <InlineStack
+                            align="space-between"
+                            blockAlign="center"
+                            wrap
+                          >
+                            <Text as="h3" variant="headingMd" fontWeight="bold">
+                              {tier.name}
+                            </Text>
+                            {isCurrentPlan ? (
+                              <span
+                                style={{
+                                  backgroundColor: "#BDF5D6",
+                                  color: "#065F46",
+                                  fontSize: "12px",
+                                  fontWeight: 600,
+                                  padding: "3px 10px",
+                                  borderRadius: "12px",
+                                  lineHeight: "1.2",
+                                  display: "inline-block",
+                                }}
                               >
-                                {tier.priceDisplay}
-                              </Text>
-                              <Text as="span" variant="bodySm" tone="subdued">
-                                /month
+                                Active
+                              </span>
+                            ) : isGrowthOrPopular ? (
+                              <span
+                                style={{
+                                  backgroundColor: "#FEF08A",
+                                  color: "#713F12",
+                                  fontSize: "12px",
+                                  fontWeight: 600,
+                                  padding: "3px 10px",
+                                  borderRadius: "12px",
+                                  lineHeight: "1.2",
+                                  display: "inline-block",
+                                }}
+                              >
+                                Popular
+                              </span>
+                            ) : null}
+                          </InlineStack>
+
+                          <InlineStack gap="100" blockAlign="baseline">
+                            <Text
+                              as="span"
+                              variant="headingXl"
+                              fontWeight="bold"
+                            >
+                              {currentIntervalPricing.monthlyRate > 0
+                                ? `$${currentIntervalPricing.monthlyRate.toFixed(2)}`
+                                : "$0.00"}
+                            </Text>
+                            <Text as="span" variant="bodySm" tone="subdued">
+                              /month
+                            </Text>
+                          </InlineStack>
+
+                          <Text as="p" variant="bodyXs" tone="subdued">
+                            {currentIntervalPricing.text}
+                          </Text>
+
+                          {/* Uniform Sky-Blue Order Limit Bar */}
+                          <div
+                            style={{
+                              width: "100%",
+                              backgroundColor: "#E0F2FE",
+                              borderRadius: "6px",
+                              padding: "6px 12px",
+                              boxSizing: "border-box",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                            }}
+                          >
+                            <span
+                              style={{
+                                color: "#0369A1",
+                                fontWeight: 700,
+                                fontSize: "13px",
+                                lineHeight: "1.2",
+                              }}
+                            >
+                              {tier.orderLimit
+                                ? `${tier.orderLimit.toLocaleString()} orders/month`
+                                : tier.orderLimitDisplay}
+                            </span>
+                          </div>
+                        </BlockStack>
+
+                        <Divider />
+
+                        {/* Structured Tier Features List */}
+                        <BlockStack gap="200">
+                          {tier.features.map((featureText) => (
+                            <InlineStack
+                              key={`${tier.id}-${featureText}`}
+                              gap="200"
+                              blockAlign="start"
+                              wrap={false}
+                            >
+                              <div
+                                style={{
+                                  width: "18px",
+                                  height: "18px",
+                                  minWidth: "18px",
+                                  display: "flex",
+                                  alignItems: "center",
+                                  justifyContent: "center",
+                                  marginTop: "2px",
+                                  flexShrink: 0,
+                                }}
+                              >
+                                <svg
+                                  viewBox="0 0 20 20"
+                                  fill="#202223"
+                                  width="18"
+                                  height="18"
+                                  aria-hidden="true"
+                                >
+                                  <path
+                                    fillRule="evenodd"
+                                    d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm3.857-9.809a.75.75 0 0 0-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 1 0-1.06 1.061l2.5 2.5a.75.75 0 0 0 1.137-.089l4-5.5Z"
+                                    clipRule="evenodd"
+                                  />
+                                </svg>
+                              </div>
+                              <Text as="span" variant="bodySm">
+                                {featureText}
                               </Text>
                             </InlineStack>
+                          ))}
+                        </BlockStack>
 
-                            {/* Uniform Sky-Blue Order Limit Bar */}
-                            <div
+                        <Divider />
+
+                        {/* Upgrade / Subscribe / Active Action Button */}
+                        <Box>
+                          {isCurrentPlan ? (
+                            <button
+                              type="button"
+                              disabled
                               style={{
                                 width: "100%",
-                                backgroundColor: "#E0F2FE",
-                                borderRadius: "6px",
-                                padding: "6px 12px",
-                                boxSizing: "border-box",
+                                padding: "10px 16px",
+                                borderRadius: "8px",
+                                fontSize: "14px",
+                                fontWeight: 600,
+                                border: "none",
+                                backgroundColor: "#E5E7EB",
+                                color: "#9CA3AF",
+                                cursor: "default",
                                 display: "flex",
                                 alignItems: "center",
                                 justifyContent: "center",
                               }}
                             >
-                              <span
-                                style={{
-                                  color: "#0369A1",
-                                  fontWeight: 700,
-                                  fontSize: "13px",
-                                  lineHeight: "1.2",
-                                }}
-                              >
-                                {tier.orderLimit
-                                  ? `${tier.orderLimit.toLocaleString()} orders/month`
-                                  : tier.orderLimitDisplay}
-                              </span>
-                            </div>
-                          </BlockStack>
-
-                          <Divider />
-
-                          {/* Structured Tier Features List with Dark Charcoal Circular Checkmarks */}
-                          <BlockStack gap="200">
-                            {tier.features.map((featureText) => (
-                              <InlineStack
-                                key={`${tier.id}-${featureText}`}
-                                gap="200"
-                                blockAlign="start"
-                                wrap={false}
-                              >
-                                <div
-                                  style={{
-                                    width: "18px",
-                                    height: "18px",
-                                    minWidth: "18px",
-                                    display: "flex",
-                                    alignItems: "center",
-                                    justifyContent: "center",
-                                    marginTop: "2px",
-                                    flexShrink: 0,
-                                  }}
-                                >
-                                  <svg
-                                    viewBox="0 0 20 20"
-                                    fill="#202223"
-                                    width="18"
-                                    height="18"
-                                    aria-hidden="true"
-                                  >
-                                    <path
-                                      fillRule="evenodd"
-                                      d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm3.857-9.809a.75.75 0 0 0-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 1 0-1.06 1.061l2.5 2.5a.75.75 0 0 0 1.137-.089l4-5.5Z"
-                                      clipRule="evenodd"
-                                    />
-                                  </svg>
-                                </div>
-                                <Text as="span" variant="bodySm">
-                                  {featureText}
-                                </Text>
-                              </InlineStack>
-                            ))}
-                          </BlockStack>
-
-                          <Divider />
-
-                          {/* Upgrade / Subscribe / Active Action Button (Matching Popup Styling) */}
-                          <Box>
-                            {isCurrentPlan ? (
-                              <button
-                                type="button"
-                                disabled
-                                style={{
-                                  width: "100%",
-                                  padding: "10px 16px",
-                                  borderRadius: "8px",
-                                  fontSize: "14px",
-                                  fontWeight: 600,
-                                  border: "none",
-                                  backgroundColor: "#E5E7EB",
-                                  color: "#9CA3AF",
-                                  cursor: "default",
-                                  display: "flex",
-                                  alignItems: "center",
-                                  justifyContent: "center",
-                                }}
-                              >
-                                Current Active Plan
-                              </button>
-                            ) : (
-                              <button
-                                type="button"
-                                disabled={isSubmittingThisTier}
-                                onClick={() => handleSelectPlan(tier.id)}
-                                style={{
-                                  width: "100%",
-                                  padding: "10px 16px",
-                                  borderRadius: "8px",
-                                  fontSize: "14px",
-                                  fontWeight: 600,
-                                  cursor: isSubmittingThisTier ? "wait" : "pointer",
-                                  transition: "all 0.15s ease-in-out",
-                                  display: "flex",
-                                  alignItems: "center",
-                                  justifyContent: "center",
-                                  gap: "8px",
-                                  border: isGrowthOrPopular
-                                    ? "none"
-                                    : "1px solid #D1D5DB",
-                                  backgroundColor: isGrowthOrPopular
-                                    ? "#202223"
-                                    : "#FFFFFF",
-                                  color: isGrowthOrPopular
-                                    ? "#FFFFFF"
-                                    : "#1F2937",
-                                  boxShadow: isGrowthOrPopular
-                                    ? "0 1px 3px rgba(0,0,0,0.12)"
-                                    : "0 1px 2px rgba(0,0,0,0.05)",
-                                }}
-                              >
-                                {isSubmittingThisTier ? (
-                                  <span>Processing...</span>
-                                ) : tier.price === 0 ? (
-                                  "Downgrade to Free"
-                                ) : (
-                                  `Upgrade to ${tier.name} →`
-                                )}
-                              </button>
-                            )}
-                          </Box>
-                        </BlockStack>
-                      </Card>
-                    </Grid.Cell>
-                  );
-                })}
-              </Grid>
-            </BlockStack>
-          </Layout.Section>
-
-          {/* SECTION 2: DETAILED 6-TIER PLAN COMPARISON MATRIX */}
-          <Layout.Section>
-            <Card padding="0">
-              <Box padding="500">
-                <BlockStack gap="150">
-                  <Text as="h2" variant="headingMd">
-                    Detailed Plan Comparison
-                  </Text>
-                  <Text as="p" variant="bodySm" tone="subdued">
-                    আমাদের ৬টি প্ল্যানের অর্ডার লিমিট, অটোমেটিক কুরিয়ার সিলেকশন, বাল্ক প্রসেসিং লিমিট, ফ্রড প্রটেকশন, প্যাকিং স্লিপ এবং ফিনান্সিয়াল সিঙ্ক-এর একটি তুলনামূলক বিবরণ।
-                  </Text>
-                </BlockStack>
-              </Box>
-
-              <Divider />
-
-              <div
-                style={{
-                  overflowX: "auto",
-                  width: "100%",
-                  WebkitOverflowScrolling: "touch",
-                }}
-              >
-                <table
-                  style={{
-                    width: "100%",
-                    borderCollapse: "collapse",
-                    textAlign: "left",
-                    fontSize: "13px",
-                    lineHeight: "1.5",
-                  }}
-                >
-                  <thead>
-                    <tr
-                      style={{
-                        backgroundColor: "#F8FAFC",
-                        borderBottom: "1px solid #E2E8F0",
-                      }}
-                    >
-                      {comparisonHeadings.map((heading, colIdx) => {
-                        const isFirst = colIdx === 0;
-                        return (
-                          <th
-                            key={heading}
-                            style={{
-                              padding: "14px 18px",
-                              fontWeight: 700,
-                              fontSize: "13px",
-                              color: "#1E293B",
-                              borderBottom: "1px solid #E2E8F0",
-                              whiteSpace: "nowrap",
-                              width: isFirst ? "22%" : "13%",
-                              minWidth: isFirst ? "180px" : "115px",
-                            }}
-                          >
-                            <span
+                              Current Active Plan
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              disabled={isSubmittingThisTier}
+                              onClick={() => handleSelectPlan(tier.id)}
                               style={{
-                                display: "inline-flex",
+                                width: "100%",
+                                padding: "10px 16px",
+                                borderRadius: "8px",
+                                fontSize: "14px",
+                                fontWeight: 600,
+                                cursor: isSubmittingThisTier ? "wait" : "pointer",
+                                transition: "all 0.15s ease-in-out",
+                                display: "flex",
                                 alignItems: "center",
-                                gap: "6px",
+                                justifyContent: "center",
+                                gap: "8px",
+                                border: isGrowthOrPopular
+                                  ? "none"
+                                  : "1px solid #D1D5DB",
+                                backgroundColor: isGrowthOrPopular
+                                  ? "#202223"
+                                  : "#FFFFFF",
+                                color: isGrowthOrPopular
+                                  ? "#FFFFFF"
+                                  : "#1F2937",
+                                boxShadow: isGrowthOrPopular
+                                  ? "0 1px 3px rgba(0,0,0,0.12)"
+                                  : "0 1px 2px rgba(0,0,0,0.05)",
                               }}
                             >
-                              {heading}
-                              {colIdx === 3 && (
-                                <span
-                                  style={{
-                                    backgroundColor: "#E0F2FE",
-                                    color: "#0369A1",
-                                    fontSize: "10px",
-                                    fontWeight: 700,
-                                    padding: "2px 7px",
-                                    borderRadius: "10px",
-                                    textTransform: "uppercase",
-                                    letterSpacing: "0.04em",
-                                  }}
-                                >
-                                  Popular
-                                </span>
+                              {isSubmittingThisTier ? (
+                                <span>Processing...</span>
+                              ) : tier.id === "Free" ? (
+                                "Downgrade to Free"
+                              ) : (
+                                `Upgrade to ${tier.name} →`
                               )}
-                            </span>
-                          </th>
-                        );
-                      })}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {comparisonMatrixRows.map((row, rowIdx) => {
-                      const isEven = rowIdx % 2 === 0;
-                      const rowBg = isEven ? "#FFFFFF" : "#F8FAFC";
+                            </button>
+                          )}
+                        </Box>
+                      </BlockStack>
+                    </Card>
+                  </Grid.Cell>
+                );
+              })}
+            </Grid>
+          </BlockStack>
+        </Layout.Section>
+
+        {/* SECTION 2: DETAILED 6-TIER PLAN COMPARISON MATRIX */}
+        <Layout.Section>
+          <Card padding="0">
+            <Box padding="500">
+              <BlockStack gap="200">
+                <Text as="h2" variant="headingMd" fontWeight="bold">
+                  Detailed Plan Comparison
+                </Text>
+                <Text as="p" variant="bodySm" tone="subdued">
+                  আমাদের ৬টি প্ল্যানের অর্ডার লিমিট, অটোমেটিক কুরিয়ার সিলেকশন, বাল্ক প্রসেসিং লিমিট, ফ্রড প্রটেকশন, প্যাকিং স্লিপ এবং ফিনান্সিয়াল সিঙ্ক-এর একটি তুলনামূলক বিবরণ।
+                </Text>
+              </BlockStack>
+            </Box>
+
+            <Divider />
+
+            <div style={{ overflowX: "auto", width: "100%" }}>
+              <table
+                style={{
+                  width: "100%",
+                  borderCollapse: "collapse",
+                  textAlign: "left",
+                  fontSize: "13px",
+                  lineHeight: "1.5",
+                }}
+              >
+                <thead>
+                  <tr
+                    style={{
+                      backgroundColor: "#F8FAFC",
+                      borderBottom: "1px solid #E2E8F0",
+                    }}
+                  >
+                    {comparisonHeadings.map((heading, colIdx) => {
+                      const isFirst = colIdx === 0;
                       return (
-                        <tr
-                          key={row[0]}
+                        <th
+                          key={heading}
                           style={{
-                            backgroundColor: rowBg,
+                            padding: "14px 18px",
+                            fontWeight: 700,
+                            fontSize: "13px",
+                            color: "#1E293B",
                             borderBottom: "1px solid #E2E8F0",
-                            transition: "background-color 0.15s ease",
+                            whiteSpace: "nowrap",
+                            width: isFirst ? "22%" : "13%",
+                            minWidth: isFirst ? "180px" : "115px",
                           }}
                         >
-                          {row.map((cellText, colIdx) => {
-                            const isFirstCol = colIdx === 0;
-                            return (
-                              <td
-                                key={`${row[0]}-${colIdx}`}
+                          <span
+                            style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: "6px",
+                            }}
+                          >
+                            {heading}
+                            {colIdx === 3 && (
+                              <span
                                 style={{
-                                  padding: "14px 18px",
-                                  fontWeight: isFirstCol ? 600 : 400,
-                                  color: isFirstCol ? "#0F172A" : "#475569",
-                                  verticalAlign: "middle",
-                                  borderBottom: "1px solid #E2E8F0",
+                                  backgroundColor: "#E0F2FE",
+                                  color: "#0369A1",
+                                  fontSize: "10px",
+                                  fontWeight: 700,
+                                  padding: "2px 7px",
+                                  borderRadius: "10px",
+                                  textTransform: "uppercase",
+                                  letterSpacing: "0.04em",
                                 }}
                               >
-                                {cellText}
-                              </td>
-                            );
-                          })}
-                        </tr>
+                                Popular
+                              </span>
+                            )}
+                          </span>
+                        </th>
                       );
                     })}
-                  </tbody>
-                </table>
-              </div>
-            </Card>
-          </Layout.Section>
-        </Layout>
-      </Page>
-    );
+                  </tr>
+                </thead>
+                <tbody>
+                  {comparisonMatrixRows.map((row, rowIdx) => {
+                    const isEven = rowIdx % 2 === 0;
+                    return (
+                      <tr
+                        key={row[0]}
+                        style={{
+                          backgroundColor: isEven ? "#FFFFFF" : "#F8FAFC",
+                          transition: "background-color 0.15s ease",
+                        }}
+                      >
+                        {row.map((cellText, colIdx) => {
+                          const isFirstCol = colIdx === 0;
+                          return (
+                            <td
+                              key={`${row[0]}-${colIdx}`}
+                              style={{
+                                padding: "14px 18px",
+                                fontWeight: isFirstCol ? 600 : 400,
+                                color: isFirstCol ? "#0F172A" : "#475569",
+                                verticalAlign: "middle",
+                                borderBottom: "1px solid #E2E8F0",
+                              }}
+                            >
+                              {cellText}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </Card>
+        </Layout.Section>
+      </Layout>
+    </Page>
+  );
 }
 
 export const headers: HeadersFunction = (headersArgs) => {

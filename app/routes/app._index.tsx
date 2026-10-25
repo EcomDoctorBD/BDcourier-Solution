@@ -153,7 +153,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     subscription: {
       currentPlan,
       planName: tier.name,
-      priceDisplay: tier.priceDisplay,
+      priceDisplay: tier.priceDisplay || (tier.pricing ? `$${tier.pricing.monthly.monthlyRate.toFixed(2)}` : "$0.00"),
       orderLimit,
       monthlyOrderCount,
       usagePercentage,
@@ -225,7 +225,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const matchedTier = getPricingTier(targetPlan);
 
     // Paid tiers CANNOT be directly activated from the Dashboard without Shopify Billing
-    if (matchedTier.price > 0) {
+    const tierMonthly = matchedTier.price ?? matchedTier.pricing?.monthly?.monthlyRate ?? 0;
+    if (tierMonthly > 0) {
       return json({
         success: false,
         actionType: "switchPlan",
