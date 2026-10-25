@@ -1,3 +1,4 @@
+import crypto from "crypto";
 import { useState, useEffect, type SVGProps } from "react";
 import {
   json,
@@ -71,14 +72,18 @@ export interface CourierCredentials {
   pathaoEnvironment: string;
   pathaoClientId: string;
   pathaoSecret: string;
+  hasPathaoSecret?: boolean;
   pathaoUsername: string;
   pathaoPassword: string;
+  hasPathaoPassword?: boolean;
   pathaoStoreId: string;
   pathaoStoreName: string;
   steadfastApiKey: string;
   steadfastSecretKey: string;
+  hasSteadfastSecretKey?: boolean;
   redxEnvironment: string;
   redxAccessToken: string;
+  hasRedxAccessToken?: boolean;
   redxPickupStoreId: string;
   redxPickupStoreName: string;
   redxProfileId: string;
@@ -287,18 +292,24 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     process.env.SHOPIFY_APP_URL?.trim().replace(/\/$/, "") ||
     new URL(request.url).origin;
 
+  const MASKED_SECRET = "••••••••";
+
   const courierConfig: CourierCredentials = {
     pathaoEnvironment: storeConfig?.pathaoEnvironment || "production",
     pathaoClientId: storeConfig?.pathaoClientId || "",
-    pathaoSecret: storeConfig?.pathaoSecret || "",
+    pathaoSecret: storeConfig?.pathaoSecret ? MASKED_SECRET : "",
+    hasPathaoSecret: Boolean(storeConfig?.pathaoSecret),
     pathaoUsername: storeConfig?.pathaoUsername || "",
-    pathaoPassword: storeConfig?.pathaoPassword || "",
+    pathaoPassword: storeConfig?.pathaoPassword ? MASKED_SECRET : "",
+    hasPathaoPassword: Boolean(storeConfig?.pathaoPassword),
     pathaoStoreId: storeConfig?.pathaoStoreId || "",
     pathaoStoreName: storeConfig?.pathaoStoreName || "",
     steadfastApiKey: storeConfig?.steadfastApiKey || "",
-    steadfastSecretKey: storeConfig?.steadfastSecretKey || "",
+    steadfastSecretKey: storeConfig?.steadfastSecretKey ? MASKED_SECRET : "",
+    hasSteadfastSecretKey: Boolean(storeConfig?.steadfastSecretKey),
     redxEnvironment: storeConfig?.redxEnvironment || "production",
-    redxAccessToken: storeConfig?.redxAccessToken || "",
+    redxAccessToken: storeConfig?.redxAccessToken ? MASKED_SECRET : "",
+    hasRedxAccessToken: Boolean(storeConfig?.redxAccessToken),
     redxPickupStoreId: storeConfig?.redxPickupStoreId || storeConfig?.redxLocationId || "",
     redxPickupStoreName: storeConfig?.redxPickupStoreName || "",
     redxProfileId: storeConfig?.redxProfileId || "",
@@ -342,8 +353,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const formData = await request.formData();
   const actionType = String(formData.get("actionType") || "");
 
+  const isMaskedOrEmpty = (val: string) =>
+    !val || val.trim() === "" || val.trim() === "••••••••" || /^•+$/.test(val.trim());
+
   // ==================== 1. SAVE PATHAO CREDENTIALS ====================
   if (actionType === "savePathao") {
+    const rawExisting: any = await CourierConfig.findOne({ shopDomain }).lean();
     const pathaoEnvironment = String(formData.get("pathaoEnvironment") || "production").trim();
     const pathaoClientId = String(formData.get("pathaoClientId") || "").trim();
     const pathaoSecret = String(formData.get("pathaoSecret") || "").trim();
@@ -360,8 +375,17 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       pathaoStoreId,
       pathaoStoreName,
     };
-    if (pathaoSecret) updateSet.pathaoSecret = encryptSecret(pathaoSecret);
-    if (pathaoPassword) updateSet.pathaoPassword = encryptSecret(pathaoPassword);
+    if (!isMaskedOrEmpty(pathaoSecret)) {
+      updateSet.pathaoSecret = encryptSecret(pathaoSecret);
+    } else if (rawExisting?.pathaoSecret) {
+      updateSet.pathaoSecret = rawExisting.pathaoSecret;
+    }
+
+    if (!isMaskedOrEmpty(pathaoPassword)) {
+      updateSet.pathaoPassword = encryptSecret(pathaoPassword);
+    } else if (rawExisting?.pathaoPassword) {
+      updateSet.pathaoPassword = rawExisting.pathaoPassword;
+    }
 
     await CourierConfig.findOneAndUpdate(
       { shopDomain },
@@ -369,8 +393,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       { upsert: true, new: true, setDefaultsOnInsert: true }
     );
 
+    const effectiveSecret = updateSet.pathaoSecret || rawExisting?.pathaoSecret;
     const isFullyConnected = Boolean(
-      pathaoClientId && pathaoSecret && pathaoStoreId
+      pathaoClientId && effectiveSecret && pathaoStoreId
     );
 
     return json({
@@ -384,6 +409,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   // ==================== 1B. VERIFY & FETCH PATHAO STORES ====================
   if (actionType === "fetchPathaoStores") {
+    const rawExisting: any = await CourierConfig.findOne({ shopDomain }).lean();
     const pathaoEnvironment = String(formData.get("pathaoEnvironment") || "production").trim();
     const pathaoClientId = String(formData.get("pathaoClientId") || "").trim();
     const pathaoSecret = String(formData.get("pathaoSecret") || "").trim();
@@ -396,8 +422,16 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     };
     if (pathaoClientId) updateSet.pathaoClientId = pathaoClientId;
     if (pathaoUsername) updateSet.pathaoUsername = pathaoUsername;
-    if (pathaoSecret) updateSet.pathaoSecret = encryptSecret(pathaoSecret);
-    if (pathaoPassword) updateSet.pathaoPassword = encryptSecret(pathaoPassword);
+    if (!isMaskedOrEmpty(pathaoSecret)) {
+      updateSet.pathaoSecret = encryptSecret(pathaoSecret);
+    } else if (rawExisting?.pathaoSecret) {
+      updateSet.pathaoSecret = rawExisting.pathaoSecret;
+    }
+    if (!isMaskedOrEmpty(pathaoPassword)) {
+      updateSet.pathaoPassword = encryptSecret(pathaoPassword);
+    } else if (rawExisting?.pathaoPassword) {
+      updateSet.pathaoPassword = rawExisting.pathaoPassword;
+    }
 
     await CourierConfig.findOneAndUpdate(
       { shopDomain },
@@ -425,6 +459,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   // ==================== 2. SAVE STEADFAST CREDENTIALS ====================
   if (actionType === "saveSteadfast") {
+    const rawExisting: any = await CourierConfig.findOne({ shopDomain }).lean();
     const steadfastApiKey = String(
       formData.get("steadfastApiKey") || ""
     ).trim();
@@ -436,8 +471,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       shopDomain,
       steadfastApiKey,
     };
-    if (steadfastSecretKey) {
+    if (!isMaskedOrEmpty(steadfastSecretKey)) {
       updateSet.steadfastSecretKey = encryptSecret(steadfastSecretKey);
+    } else if (rawExisting?.steadfastSecretKey) {
+      updateSet.steadfastSecretKey = rawExisting.steadfastSecretKey;
     }
 
     await CourierConfig.findOneAndUpdate(
@@ -446,7 +483,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       { upsert: true, new: true, setDefaultsOnInsert: true }
     );
 
-    const isFullyConnected = Boolean(steadfastApiKey && steadfastSecretKey);
+    const effectiveSecret = updateSet.steadfastSecretKey || rawExisting?.steadfastSecretKey;
+    const isFullyConnected = Boolean(steadfastApiKey && effectiveSecret);
 
     return json({
       success: true,
@@ -459,6 +497,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   // ==================== 3. SAVE REDX CREDENTIALS ====================
   if (actionType === "saveRedX") {
+    const rawExisting: any = await CourierConfig.findOne({ shopDomain }).lean();
     const redxEnvironment = String(formData.get("redxEnvironment") || "production").trim();
     const redxAccessToken = String(formData.get("redxAccessToken") || "").trim();
     const redxPickupStoreId = String(formData.get("redxPickupStoreId") || "").trim();
@@ -477,8 +516,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       redxProfileId: profileId,
       redxLocationId: pickupId,
     };
-    if (redxAccessToken) {
+    if (!isMaskedOrEmpty(redxAccessToken)) {
       updateSet.redxAccessToken = encryptSecret(redxAccessToken);
+    } else if (rawExisting?.redxAccessToken) {
+      updateSet.redxAccessToken = rawExisting.redxAccessToken;
     }
 
     await CourierConfig.findOneAndUpdate(
@@ -487,8 +528,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       { upsert: true, new: true, setDefaultsOnInsert: true }
     );
 
+    const effectiveToken = updateSet.redxAccessToken || rawExisting?.redxAccessToken;
     const isFullyConnected = Boolean(
-      (redxAccessToken && pickupId) || (redxProfileId && redxLocationId)
+      (effectiveToken && pickupId) || (profileId && pickupId)
     );
 
     return json({
@@ -502,6 +544,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   // ==================== 3B. VERIFY & FETCH REDX STORES ====================
   if (actionType === "fetchRedxStores") {
+    const rawExisting: any = await CourierConfig.findOne({ shopDomain }).lean();
     const redxEnvironment = String(formData.get("redxEnvironment") || "production").trim();
     const redxAccessToken = String(formData.get("redxAccessToken") || "").trim();
 
@@ -509,8 +552,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       shopDomain,
       redxEnvironment: redxEnvironment === "sandbox" ? "sandbox" : "production",
     };
-    if (redxAccessToken) {
+    if (!isMaskedOrEmpty(redxAccessToken)) {
       updateSet.redxAccessToken = encryptSecret(redxAccessToken);
+    } else if (rawExisting?.redxAccessToken) {
+      updateSet.redxAccessToken = rawExisting.redxAccessToken;
     }
 
     await CourierConfig.findOneAndUpdate(
@@ -534,6 +579,24 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       actionType: "fetchRedxStores",
       message: `Verified Access Token and retrieved ${storesResult.stores.length} store(s) from RedX.`,
       stores: storesResult.stores,
+    });
+  }
+
+  // ==================== 3C. REGENERATE WEBHOOK SECRET ====================
+  if (actionType === "regenerateWebhookSecret") {
+    const newSecret = crypto.randomBytes(24).toString("hex");
+    await CourierConfig.findOneAndUpdate(
+      { shopDomain },
+      { $set: { webhookSecret: newSecret } },
+      { upsert: true, new: true, setDefaultsOnInsert: true }
+    );
+
+    return json({
+      success: true,
+      actionType: "regenerateWebhookSecret",
+      message:
+        "Webhook secret token regenerated successfully. Please update your webhook callback URLs in Pathao, Steadfast, and REDX merchant panels.",
+      newWebhookSecret: newSecret,
     });
   }
 
@@ -726,7 +789,9 @@ export default function CourierSettingsPage() {
   const [pathaoStores, setPathaoStores] = useState<PathaoStore[]>([]);
 
   const isPathaoConnected = Boolean(
-    pathaoClientId.trim() && pathaoSecret.trim() && pathaoStoreId.trim()
+    pathaoClientId.trim() &&
+      (courierConfig.hasPathaoSecret || pathaoSecret.trim()) &&
+      pathaoStoreId.trim()
   );
 
   const isSubmittingPathao =
@@ -736,6 +801,23 @@ export default function CourierSettingsPage() {
   const isFetchingPathaoStores =
     navigation.state === "submitting" &&
     navigation.formData?.get("actionType") === "fetchPathaoStores";
+
+  const isRegeneratingWebhookSecret =
+    navigation.state === "submitting" &&
+    navigation.formData?.get("actionType") === "regenerateWebhookSecret";
+
+  const handleRegenerateWebhookSecret = () => {
+    if (
+      !window.confirm(
+        "Rotate Webhook Secret Token?\n\nThis will immediately regenerate your store's webhook secret token. You must copy and update the new Webhook Callback URLs in your Pathao, Steadfast, and REDX merchant portals."
+      )
+    ) {
+      return;
+    }
+    const formData = new FormData();
+    formData.append("actionType", "regenerateWebhookSecret");
+    submit(formData, { method: "post" });
+  };
 
   const handleFetchPathaoStores = () => {
     const formData = new FormData();
@@ -767,7 +849,8 @@ export default function CourierSettingsPage() {
   const [showSteadfastSecret, setShowSteadfastSecret] = useState(false);
 
   const isSteadfastConnected = Boolean(
-    steadfastApiKey.trim() && steadfastSecretKey.trim()
+    steadfastApiKey.trim() &&
+      (courierConfig.hasSteadfastSecretKey || steadfastSecretKey.trim())
   );
 
   const isSubmittingSteadfast =
@@ -801,7 +884,7 @@ export default function CourierSettingsPage() {
   const [redxStores, setRedxStores] = useState<RedxStore[]>([]);
 
   const isRedxConnected = Boolean(
-    (redxAccessToken.trim() && redxPickupStoreId.trim()) ||
+    ((courierConfig.hasRedxAccessToken || redxAccessToken.trim()) && redxPickupStoreId.trim()) ||
     (redxProfileId.trim() && redxLocationId.trim())
   );
 
@@ -1236,6 +1319,17 @@ export default function CourierSettingsPage() {
                             }
                             helpText="Required for automated verification handshake in Pathao developer portal."
                           />
+                          <InlineStack align="end">
+                            <Button
+                              size="micro"
+                              variant="plain"
+                              tone="critical"
+                              onClick={handleRegenerateWebhookSecret}
+                              loading={isRegeneratingWebhookSecret}
+                            >
+                              Rotate / Regenerate Webhook Token
+                            </Button>
+                          </InlineStack>
                         </BlockStack>
                       </BlockStack>
 
@@ -1372,6 +1466,17 @@ export default function CourierSettingsPage() {
                           }
                           helpText="Paste in Steadfast Webhook Bearer Token / Secret field."
                         />
+                        <InlineStack align="end">
+                          <Button
+                            size="micro"
+                            variant="plain"
+                            tone="critical"
+                            onClick={handleRegenerateWebhookSecret}
+                            loading={isRegeneratingWebhookSecret}
+                          >
+                            Rotate / Regenerate Webhook Token
+                          </Button>
+                        </InlineStack>
                       </BlockStack>
 
                       <InlineStack align="space-between" blockAlign="center">
@@ -1563,6 +1668,17 @@ export default function CourierSettingsPage() {
                             }
                             helpText="Paste in RedX Webhook Secret field."
                           />
+                          <InlineStack align="end">
+                            <Button
+                              size="micro"
+                              variant="plain"
+                              tone="critical"
+                              onClick={handleRegenerateWebhookSecret}
+                              loading={isRegeneratingWebhookSecret}
+                            >
+                              Rotate / Regenerate Webhook Token
+                            </Button>
+                          </InlineStack>
                         </BlockStack>
                       </BlockStack>
 

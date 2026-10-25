@@ -5,9 +5,15 @@ import crypto from "crypto";
  */
 function getEncryptionKey(): Buffer {
   const secret =
-    process.env.ENCRYPTION_KEY ||
-    process.env.SHOPIFY_API_SECRET ||
-    "delivery1-fallback-32-byte-secret-key-bd";
+    process.env.ENCRYPTION_KEY?.trim() ||
+    process.env.SHOPIFY_API_SECRET?.trim();
+
+  if (!secret || secret.length === 0) {
+    throw new Error(
+      "CRITICAL: Missing ENCRYPTION_KEY or SHOPIFY_API_SECRET environment variable for AES-256-GCM encryption."
+    );
+  }
+
   return crypto.createHash("sha256").update(secret).digest();
 }
 
@@ -17,7 +23,7 @@ function getEncryptionKey(): Buffer {
  */
 export function encryptSecret(plainText: string): string {
   if (!plainText || typeof plainText !== "string" || !plainText.trim()) {
-    return plainText || "";
+    return "";
   }
 
   // If already encrypted in iv:authTag:cipher format, return as is to avoid double-encryption
@@ -25,7 +31,11 @@ export function encryptSecret(plainText: string): string {
   if (
     parts.length === 3 &&
     parts[0].length === 24 && // 12-byte IV in hex is 24 chars
-    parts[1].length === 32    // 16-byte AuthTag in hex is 32 chars
+    parts[1].length === 32 && // 16-byte AuthTag in hex is 32 chars
+    parts[2].length > 0 &&
+    /^[0-9a-fA-F]+$/.test(parts[0]) &&
+    /^[0-9a-fA-F]+$/.test(parts[1]) &&
+    /^[0-9a-fA-F]+$/.test(parts[2])
   ) {
     return plainText;
   }
@@ -35,15 +45,15 @@ export function encryptSecret(plainText: string): string {
     const iv = crypto.randomBytes(12); // Standard 96-bit IV for GCM
     const cipher = crypto.createCipheriv("aes-256-gcm", key, iv);
 
-    let encrypted = cipher.update(plainText, "utf8", "hex");
+    let encrypted = cipher.update(plainText.trim(), "utf8", "hex");
     encrypted += cipher.final("hex");
 
     const authTag = cipher.getAuthTag();
 
     return `${iv.toString("hex")}:${authTag.toString("hex")}:${encrypted}`;
-  } catch (err) {
-    console.error("Encryption error:", err);
-    return plainText; // Fail-safe return
+  } catch (err: any) {
+    console.error("Encryption error: Failed to encrypt sensitive credential.");
+    throw new Error("Failed to encrypt sensitive credential");
   }
 }
 
@@ -54,7 +64,7 @@ export function encryptSecret(plainText: string): string {
  */
 export function decryptSecret(cipherText: string): string {
   if (!cipherText || typeof cipherText !== "string" || !cipherText.trim()) {
-    return cipherText || "";
+    return "";
   }
 
   const parts = cipherText.split(":");
@@ -66,7 +76,14 @@ export function decryptSecret(cipherText: string): string {
   const [ivHex, authTagHex, encryptedHex] = parts;
 
   // Validate hex lengths (IV = 24 chars / 12 bytes, AuthTag = 32 chars / 16 bytes)
-  if (ivHex.length !== 24 || authTagHex.length !== 32) {
+  if (
+    ivHex.length !== 24 ||
+    authTagHex.length !== 32 ||
+    !encryptedHex ||
+    !/^[0-9a-fA-F]+$/.test(ivHex) ||
+    !/^[0-9a-fA-F]+$/.test(authTagHex) ||
+    !/^[0-9a-fA-F]+$/.test(encryptedHex)
+  ) {
     return cipherText;
   }
 
@@ -83,7 +100,7 @@ export function decryptSecret(cipherText: string): string {
 
     return decrypted;
   } catch (err) {
-    // If decryption fails (e.g., corrupted or legacy plaintext with colons), return original text
+    // If decryption fails (e.g., key rotated or legacy plaintext with colons), return original text without logging secret
     return cipherText;
   }
 }

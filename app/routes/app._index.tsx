@@ -101,10 +101,6 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   const rawStoreConfig: any = await CourierConfig.findOne({ shopDomain }).lean();
   const storeConfig = decryptCourierConfig(rawStoreConfig);
-  const webhookSecret = await ensureWebhookSecret(
-    shopDomain,
-    storeConfig?.webhookSecret
-  );
 
   const currentPlan = String(storeConfig?.currentPlan || "Free");
   const monthlyOrderCount = Number(storeConfig?.monthlyOrderCount ?? 0);
@@ -119,6 +115,26 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const remainingOrders = Math.max(0, orderLimit - monthlyOrderCount);
   const isAiNormalizerEnabled = Boolean(
     storeConfig?.aiAddressCleaningEnabled ?? true
+  );
+
+  const MASKED_SECRET = "••••••••";
+
+  const isPathaoConnected = Boolean(
+    storeConfig?.pathaoClientId?.trim() &&
+      storeConfig?.pathaoSecret?.trim() &&
+      storeConfig?.pathaoStoreId?.trim()
+  );
+
+  const isSteadfastConnected = Boolean(
+    storeConfig?.steadfastApiKey?.trim() &&
+      storeConfig?.steadfastSecretKey?.trim()
+  );
+
+  const isRedxConnected = Boolean(
+    (storeConfig?.redxAccessToken?.trim() &&
+      (storeConfig?.redxPickupStoreId?.trim() || storeConfig?.redxLocationId?.trim())) ||
+    (storeConfig?.redxProfileId?.trim() &&
+      (storeConfig?.redxLocationId?.trim() || storeConfig?.redxPickupStoreId?.trim()))
   );
 
   return json({
@@ -140,25 +156,31 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     allPlans: SIX_TIER_PRICING_PLANS,
     courierConfig: {
       shopDomain,
-      // Pathao fields
+      isPathaoConnected,
+      isSteadfastConnected,
+      isRedxConnected,
+      // Pathao public fields
       pathaoEnvironment: storeConfig?.pathaoEnvironment || "production",
       pathaoClientId: storeConfig?.pathaoClientId || "",
-      pathaoSecret: storeConfig?.pathaoSecret || "",
+      pathaoSecret: storeConfig?.pathaoSecret ? MASKED_SECRET : "",
       pathaoUsername: storeConfig?.pathaoUsername || "",
-      pathaoPassword: storeConfig?.pathaoPassword || "",
+      pathaoPassword: storeConfig?.pathaoPassword ? MASKED_SECRET : "",
       pathaoStoreId: storeConfig?.pathaoStoreId || "",
       pathaoStoreName: storeConfig?.pathaoStoreName || "",
-      // Steadfast fields
+      hasPathaoSecret: Boolean(storeConfig?.pathaoSecret),
+      hasPathaoPassword: Boolean(storeConfig?.pathaoPassword),
+      // Steadfast public fields
       steadfastApiKey: storeConfig?.steadfastApiKey || "",
-      steadfastSecretKey: storeConfig?.steadfastSecretKey || "",
-      // RedX fields
+      steadfastSecretKey: storeConfig?.steadfastSecretKey ? MASKED_SECRET : "",
+      hasSteadfastSecretKey: Boolean(storeConfig?.steadfastSecretKey),
+      // RedX public fields
       redxEnvironment: storeConfig?.redxEnvironment || "production",
-      redxAccessToken: storeConfig?.redxAccessToken || "",
+      redxAccessToken: storeConfig?.redxAccessToken ? MASKED_SECRET : "",
       redxPickupStoreId: storeConfig?.redxPickupStoreId || storeConfig?.redxLocationId || "",
       redxPickupStoreName: storeConfig?.redxPickupStoreName || "",
       redxProfileId: storeConfig?.redxProfileId || "",
       redxLocationId: storeConfig?.redxLocationId || storeConfig?.redxPickupStoreId || "",
-      webhookSecret,
+      hasRedxAccessToken: Boolean(storeConfig?.redxAccessToken),
     },
   });
 };
@@ -259,7 +281,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   let courierLabel = "";
   let isFullyConfigured = false;
 
+  const isMaskedOrEmpty = (val: string) =>
+    !val || val.trim() === "" || val.trim() === "••••••••" || /^•+$/.test(val.trim());
+
   if (actionType === "savePathao") {
+    const rawExisting: any = await CourierConfig.findOne({ shopDomain }).lean();
     const pathaoEnvironment = String(formData.get("pathaoEnvironment") || "production").trim();
     const pathaoClientId = String(formData.get("pathaoClientId") || "").trim();
     const pathaoSecret = String(formData.get("pathaoSecret") || "").trim();
@@ -273,14 +299,25 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       pathaoUsername,
       pathaoStoreId,
     };
-    if (pathaoSecret) updateFields.pathaoSecret = encryptSecret(pathaoSecret);
-    if (pathaoPassword) updateFields.pathaoPassword = encryptSecret(pathaoPassword);
+    if (!isMaskedOrEmpty(pathaoSecret)) {
+      updateFields.pathaoSecret = encryptSecret(pathaoSecret);
+    } else if (rawExisting?.pathaoSecret) {
+      updateFields.pathaoSecret = rawExisting.pathaoSecret;
+    }
+
+    if (!isMaskedOrEmpty(pathaoPassword)) {
+      updateFields.pathaoPassword = encryptSecret(pathaoPassword);
+    } else if (rawExisting?.pathaoPassword) {
+      updateFields.pathaoPassword = rawExisting.pathaoPassword;
+    }
 
     courierLabel = "Pathao Courier";
+    const effectiveSecret = updateFields.pathaoSecret || rawExisting?.pathaoSecret;
     isFullyConfigured = Boolean(
-      pathaoClientId && pathaoSecret && pathaoStoreId
+      pathaoClientId && effectiveSecret && pathaoStoreId
     );
   } else if (actionType === "saveSteadfast") {
+    const rawExisting: any = await CourierConfig.findOne({ shopDomain }).lean();
     const steadfastApiKey = String(
       formData.get("steadfastApiKey") || ""
     ).trim();
@@ -291,11 +328,17 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     updateFields = {
       steadfastApiKey,
     };
-    if (steadfastSecretKey) updateFields.steadfastSecretKey = encryptSecret(steadfastSecretKey);
+    if (!isMaskedOrEmpty(steadfastSecretKey)) {
+      updateFields.steadfastSecretKey = encryptSecret(steadfastSecretKey);
+    } else if (rawExisting?.steadfastSecretKey) {
+      updateFields.steadfastSecretKey = rawExisting.steadfastSecretKey;
+    }
 
     courierLabel = "Steadfast Courier";
-    isFullyConfigured = Boolean(steadfastApiKey && steadfastSecretKey);
+    const effectiveSecret = updateFields.steadfastSecretKey || rawExisting?.steadfastSecretKey;
+    isFullyConfigured = Boolean(steadfastApiKey && effectiveSecret);
   } else if (actionType === "saveRedX") {
+    const rawExisting: any = await CourierConfig.findOne({ shopDomain }).lean();
     const redxEnvironment = String(formData.get("redxEnvironment") || "production").trim();
     const redxAccessToken = String(formData.get("redxAccessToken") || "").trim();
     const redxPickupStoreId = String(formData.get("redxPickupStoreId") || "").trim();
@@ -311,11 +354,16 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       redxProfileId: profileId,
       redxLocationId: pickupId,
     };
-    if (redxAccessToken) updateFields.redxAccessToken = encryptSecret(redxAccessToken);
+    if (!isMaskedOrEmpty(redxAccessToken)) {
+      updateFields.redxAccessToken = encryptSecret(redxAccessToken);
+    } else if (rawExisting?.redxAccessToken) {
+      updateFields.redxAccessToken = rawExisting.redxAccessToken;
+    }
 
     courierLabel = "RedX Delivery";
+    const effectiveToken = updateFields.redxAccessToken || rawExisting?.redxAccessToken;
     isFullyConfigured = Boolean(
-      (redxAccessToken && pickupId) || (redxProfileId && redxLocationId)
+      (effectiveToken && pickupId) || (profileId && pickupId)
     );
   } else {
     return json({
@@ -469,19 +517,23 @@ export default function CourierDashboard() {
   }, [actionData, navigate, searchStr]);
 
   const isPathaoConnected = Boolean(
-    courierConfig.pathaoClientId?.trim() &&
-      courierConfig.pathaoSecret?.trim() &&
-      courierConfig.pathaoStoreId?.trim()
+    courierConfig.isPathaoConnected ??
+      (courierConfig.pathaoClientId?.trim() &&
+        (courierConfig.hasPathaoSecret || courierConfig.pathaoSecret?.trim()) &&
+        courierConfig.pathaoStoreId?.trim())
   );
 
   const isSteadfastConnected = Boolean(
-    courierConfig.steadfastApiKey?.trim() &&
-      courierConfig.steadfastSecretKey?.trim()
+    courierConfig.isSteadfastConnected ??
+      (courierConfig.steadfastApiKey?.trim() &&
+        (courierConfig.hasSteadfastSecretKey || courierConfig.steadfastSecretKey?.trim()))
   );
 
   const isRedxConnected = Boolean(
-    (courierConfig.redxAccessToken?.trim() && courierConfig.redxPickupStoreId?.trim()) ||
-    (courierConfig.redxProfileId?.trim() && courierConfig.redxLocationId?.trim())
+    courierConfig.isRedxConnected ??
+      (((courierConfig.hasRedxAccessToken || courierConfig.redxAccessToken?.trim()) &&
+        courierConfig.redxPickupStoreId?.trim()) ||
+        (courierConfig.redxProfileId?.trim() && courierConfig.redxLocationId?.trim()))
   );
 
   const activeCount = [
