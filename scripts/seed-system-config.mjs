@@ -1,6 +1,11 @@
 import mongoose from "mongoose";
 
-const MONGODB_URI = "mongodb+srv://ecomdoctorbd_db_user:otlwVJVo1JqBk6GC@cluster0.iolrd90.mongodb.net/shopify_app";
+const MONGODB_URI = process.env.MONGODB_URI || process.env.DATABASE_URL;
+
+if (!MONGODB_URI) {
+  console.error("Error: MONGODB_URI or DATABASE_URL environment variable is required.");
+  process.exit(1);
+}
 
 async function main() {
   console.log("Connecting to MongoDB Atlas...");

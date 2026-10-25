@@ -8,27 +8,28 @@ import {
 } from "@shopify/shopify-app-remix/server";
 import { MongoDBSessionStorage } from "@shopify/shopify-app-session-storage-mongodb";
 
-const fallbackUri =
-  "mongodb+srv://ecomdoctorbd_db_user:otlwVJVo1JqBk6GC@cluster0.iolrd90.mongodb.net/shopify_app";
 const rawMongoUri =
   process.env.MONGODB_URI?.trim() ||
-  process.env.DATABASE_URL?.trim();
+  process.env.DATABASE_URL?.trim() ||
+  "";
 
 // Enforce serverSelectionTimeoutMS: 5000 so the connection fails fast instead of hanging in serverless
-let mongoUri = rawMongoUri || fallbackUri;
-try {
-  const urlObj = new URL(mongoUri);
-  if (!urlObj.searchParams.has("serverSelectionTimeoutMS")) {
-    urlObj.searchParams.set("serverSelectionTimeoutMS", "5000");
-  }
-  if (!urlObj.searchParams.has("connectTimeoutMS")) {
-    urlObj.searchParams.set("connectTimeoutMS", "10000");
-  }
-  mongoUri = urlObj.toString();
-} catch (e) {
-  if (!mongoUri.includes("serverSelectionTimeoutMS")) {
-    const separator = mongoUri.includes("?") ? "&" : "?";
-    mongoUri = `${mongoUri}${separator}serverSelectionTimeoutMS=5000&connectTimeoutMS=10000`;
+let mongoUri = rawMongoUri;
+if (mongoUri) {
+  try {
+    const urlObj = new URL(mongoUri);
+    if (!urlObj.searchParams.has("serverSelectionTimeoutMS")) {
+      urlObj.searchParams.set("serverSelectionTimeoutMS", "5000");
+    }
+    if (!urlObj.searchParams.has("connectTimeoutMS")) {
+      urlObj.searchParams.set("connectTimeoutMS", "10000");
+    }
+    mongoUri = urlObj.toString();
+  } catch (e) {
+    if (!mongoUri.includes("serverSelectionTimeoutMS")) {
+      const separator = mongoUri.includes("?") ? "&" : "?";
+      mongoUri = `${mongoUri}${separator}serverSelectionTimeoutMS=5000&connectTimeoutMS=10000`;
+    }
   }
 }
 
