@@ -82,6 +82,11 @@ const shopify = shopifyApp({
         new Set([
           "read_orders",
           "write_orders",
+          "read_fulfillments",
+          "write_fulfillments",
+          "read_shipping",
+          "write_shipping",
+          "read_customers",
           ...process.env.SCOPES.split(",").map((s) => s.trim()),
         ])
       )
@@ -92,7 +97,7 @@ const shopify = shopifyApp({
         "write_fulfillments",
         "read_shipping",
         "write_shipping",
-        "write_products",
+        "read_customers",
       ],
   appUrl,
   authPathPrefix: "/auth",

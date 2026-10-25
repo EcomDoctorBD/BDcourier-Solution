@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback, type SVGProps } from "react";
-import type {
-  HeadersFunction,
-  LoaderFunctionArgs,
-  ActionFunctionArgs,
+import {
+  redirect,
+  type HeadersFunction,
+  type LoaderFunctionArgs,
+  type ActionFunctionArgs,
 } from "@remix-run/node";
 import {
   useLoaderData,
@@ -36,7 +37,7 @@ import {
   Link,
 } from "@shopify/polaris";
 
-import { authenticate, unauthenticated } from "../shopify.server";
+import { authenticate, unauthenticated, sessionStorage } from "../shopify.server";
 import { getCourierTrackingUrl } from "../services/shopify-sync.server";
 import CourierConfig, {
   connectDB,
@@ -1625,6 +1626,37 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, session } = await authenticate.admin(request);
   const shopDomain = session.shop;
 
+  // Stale scope check: ensure the session has the core scopes
+  const REQUIRED_SCOPES = [
+    "read_orders",
+    "write_orders",
+    "read_fulfillments",
+    "write_fulfillments",
+    "read_shipping",
+    "write_shipping",
+  ];
+  const grantedScopes = (session.scope || "").split(",").map((s) => s.trim());
+  const isMissingCoreScopes = REQUIRED_SCOPES.some(
+    (req) =>
+      !grantedScopes.includes(req) &&
+      !(req.startsWith("read_") && grantedScopes.includes(req.replace("read_", "write_")))
+  );
+
+  const urlObj = new URL(request.url);
+  if (isMissingCoreScopes && !urlObj.searchParams.has("reauth_attempted")) {
+    console.warn(
+      `Session for ${shopDomain} is missing required scopes. Stored: [${session.scope}]. Triggering re-auth...`
+    );
+    try {
+      if ((sessionStorage as any)?.deleteSession && session.id) {
+        await (sessionStorage as any).deleteSession(session.id);
+      }
+    } catch (e) {
+      console.warn("Could not clear stale session from storage:", e);
+    }
+    return redirect(`/auth?shop=${encodeURIComponent(shopDomain)}`);
+  }
+
   await connectDB();
   let storeConfig: any = await CourierConfig.findOne({ shopDomain }).lean();
 
@@ -1869,18 +1901,41 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   try {
     const response = await admin.graphql(FULL_ORDERS_QUERY);
     const result: any = await response.json();
+
+    // Check for GraphQL errors
     if (result.errors && result.errors.length > 0) {
-      throw new Error(result.errors[0].message);
+      console.warn("GraphQL field notices in FULL_ORDERS_QUERY:", JSON.stringify(result.errors));
     }
 
-    const edges = result?.data?.orders?.edges || [];
+    const edges = result?.data?.orders?.edges;
+    if (!edges || (edges.length === 0 && result.errors?.length > 0 && !result.data?.orders)) {
+      const topLevelError = result.errors?.[0]?.message || "Full orders query returned no data";
+      throw new Error(topLevelError);
+    }
+
+    // If edges exist, process real live orders even if non-fatal customer field notices exist
+    if (result.errors && result.errors.length > 0) {
+      const isProtectedNotice = result.errors.some((e: any) =>
+        /protected customer data|not approved to access|read_customers/i.test(e.message || "")
+      );
+      if (isProtectedNotice) {
+        const hasLiveAddressData = edges.some(
+          (edge: any) => Boolean(edge.node?.shippingAddress?.address1 || edge.node?.shippingAddress?.name)
+        );
+        if (!hasLiveAddressData) {
+          graphqlWarning =
+            "Orders loaded in restricted mode. Enable 'Protected Customer Data' in Shopify Partner Dashboard (App setup -> API access) to view customer names and delivery addresses.";
+        }
+      }
+    }
+
     rawOrders = edges.map(({ node }: any, idx: number) => {
       const addr = node.shippingAddress;
       const cust = node.customer;
       const customerName =
         addr?.name ||
         [cust?.firstName, cust?.lastName].filter(Boolean).join(" ") ||
-        "Walk-in / Sandbox Customer";
+        "Customer";
 
       const fallbackPhones = ["01711223344", "01819556677", "01912889900"];
       const customerPhone =
@@ -1957,11 +2012,26 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         lineItems,
       };
     });
-  } catch {
+  } catch (err: any) {
+    console.warn("FULL_ORDERS_QUERY failed, attempting BASIC_ORDERS_QUERY fallback:", err?.message || err);
+    const errMessage = String(err?.message || "");
+    const isProtectedDataBlocked = /protected customer data|not approved to access|read_customers|access denied for customer|access denied for shippingAddress/i.test(
+      errMessage
+    );
+
     try {
       const fallbackResponse = await admin.graphql(BASIC_ORDERS_QUERY);
       const fallbackResult: any = await fallbackResponse.json();
+
+      if (fallbackResult.errors && fallbackResult.errors.length > 0) {
+        console.warn("GraphQL field notices in BASIC_ORDERS_QUERY:", JSON.stringify(fallbackResult.errors));
+      }
+
       const edges = fallbackResult?.data?.orders?.edges || [];
+      if (edges.length === 0 && fallbackResult.errors?.length > 0 && !fallbackResult.data?.orders) {
+        throw new Error(fallbackResult.errors[0].message);
+      }
+
       const fallbackPhones = ["01711223344", "01819556677", "01912889900"];
       const fallbackCities = ["Dhaka", "Chattogram", "Sylhet"];
 
@@ -2008,7 +2078,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
           id: node.id,
           name: node.name,
           createdAt: node.createdAt,
-          customerName: `Sandbox Customer ${idx + 1}`,
+          customerName: `Customer ${idx + 1}`,
           customerPhone: fallbackPhones[idx % fallbackPhones.length],
           shippingAddress: `House 12, Road 5, ${city}`,
           city,
@@ -2026,11 +2096,26 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         };
       });
 
-      graphqlWarning =
-        "Orders loaded in basic mode. Enable 'Protected Customer Data' in Shopify Partners to read live customer names and addresses.";
-    } catch {
-      graphqlWarning =
-        "Could not query live orders from Shopify GraphQL API. Make sure 'read_orders' scope is enabled in your app configuration.";
+      if (isProtectedDataBlocked) {
+        graphqlWarning =
+          "Orders loaded in safe mode without customer details. To view live customer names, phone numbers, and delivery addresses, enable 'Protected Customer Data' in Shopify Partner Dashboard -> App setup -> API access.";
+      } else {
+        graphqlWarning =
+          "Orders loaded in basic mode. Enable 'Protected Customer Data' in Shopify Partners to read live customer names and addresses.";
+      }
+    } catch (fallbackErr: any) {
+      console.error("Both FULL_ORDERS_QUERY and BASIC_ORDERS_QUERY failed:", fallbackErr?.message || fallbackErr);
+      const finalMsg = String(fallbackErr?.message || errMessage);
+      if (/protected customer data|not approved to access/i.test(finalMsg)) {
+        graphqlWarning =
+          "Could not query live orders due to Protected Customer Data restrictions. Please enable Protected Customer Data in your Shopify Partner Dashboard (App setup -> API access).";
+      } else if (/read_orders/i.test(finalMsg)) {
+        graphqlWarning =
+          "Could not query live orders from Shopify GraphQL API. Make sure 'read_orders' scope is enabled in your app configuration.";
+      } else {
+        graphqlWarning =
+          `Could not query live orders from Shopify GraphQL API: ${finalMsg}`;
+      }
     }
   }
 
