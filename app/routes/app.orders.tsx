@@ -1102,6 +1102,8 @@ async function dispatchSingleOrderToCourier(params: {
   trackingNumber: string;
   message: string;
   slip?: DispatchedSlipRecord;
+  isRiskyLocked?: boolean;
+  limitReached?: boolean;
 }> {
   const {
     shopDomain,
@@ -1124,14 +1126,33 @@ async function dispatchSingleOrderToCourier(params: {
     manualAreaName,
   } = params;
 
-  // --------------------------------------------------------------------------
-  // AI Address Correction & Caching Pipeline (Executed precisely on Send to Courier click)
-  // --------------------------------------------------------------------------
+  // 1. Pre-Flight Double-Booking Atomic Check (Issue 8.1 & Extra Trap #5)
+  const existingBooking: any = await ShipmentBooking.findOne({ shopDomain, orderId }).lean();
+  if (existingBooking) {
+    const hasTracking = Boolean(existingBooking.trackingNumber && String(existingBooking.trackingNumber).trim());
+    const isBookedStatus = ["booked", "in_transit", "delivered", "disbursed"].includes(
+      String(existingBooking.courierStatus || "").toLowerCase()
+    );
+    const isRecentInProgress =
+      String(existingBooking.courierStatus || "").toLowerCase() === "booking_in_progress" &&
+      existingBooking.updatedAt &&
+      Date.now() - new Date(existingBooking.updatedAt).getTime() < 60000;
+
+    if (hasTracking || isBookedStatus || isRecentInProgress) {
+      return {
+        success: false,
+        orderId,
+        orderName,
+        courierName: existingBooking.courierName || "",
+        trackingNumber: existingBooking.trackingNumber || "",
+        message: `Order ${orderName} is already booked or currently being dispatched to a courier.`,
+      };
+    }
+  }
+
+  // 2. AI Address Correction & Caching Pipeline
   const addressResolution = await cleanAndCacheAddress(shippingAddress);
 
-  // If confidence returns 'LOW' or district is null:
-  // Instantly abort the automated API transmission, lock the order row grid,
-  // and trigger the amber Polaris <Badge> "Risky Order / Manual Review Required"
   if (addressResolution.confidence === "LOW" || !addressResolution.district) {
     return {
       success: false,
@@ -1143,6 +1164,76 @@ async function dispatchSingleOrderToCourier(params: {
       message: `Address Quality Alert for ${orderName}: AI Confidence is LOW or district unidentifiable. Automated dispatch aborted and order locked for manual review.`,
     };
   }
+
+  // 3. Pre-Flight Atomic Quota Reservation (Issue 8.2)
+  const activePlan = storeConfig?.currentPlan || "Free";
+  const tierLimit = getPlanLimit(activePlan);
+  let quotaReserved = false;
+
+  if (Number.isFinite(tierLimit)) {
+    const reservedConfig = await CourierConfig.findOneAndUpdate(
+      { shopDomain, monthlyOrderCount: { $lt: tierLimit } },
+      { $inc: { monthlyOrderCount: 1 } },
+      { new: true }
+    );
+    if (!reservedConfig) {
+      return {
+        success: false,
+        limitReached: true,
+        orderId,
+        orderName,
+        courierName: "",
+        trackingNumber: "",
+        message: `Monthly order quota reached for your current plan (${tierLimit} orders). Please upgrade under the Pricing tab.`,
+      };
+    }
+    quotaReserved = true;
+  } else {
+    await CourierConfig.updateOne(
+      { shopDomain },
+      { $inc: { monthlyOrderCount: 1 } }
+    );
+    quotaReserved = true;
+  }
+
+  // 4. Atomic Booking In-Progress Lock in MongoDB
+  await ShipmentBooking.findOneAndUpdate(
+    { shopDomain, orderId },
+    {
+      $set: {
+        shopDomain,
+        orderId,
+        orderName,
+        courierStatus: "booking_in_progress",
+        deliveryStatus: "booking_in_progress",
+        updatedAt: new Date(),
+      },
+    },
+    { upsert: true, new: true }
+  );
+
+  // Helper to cleanly rollback quota reservation and in-progress lock on courier failure
+  const rollbackBooking = async (errorMessage: string) => {
+    if (quotaReserved) {
+      await CourierConfig.updateOne(
+        { shopDomain, monthlyOrderCount: { $gt: 0 } },
+        { $inc: { monthlyOrderCount: -1 } }
+      );
+    }
+    await ShipmentBooking.deleteOne({
+      shopDomain,
+      orderId,
+      courierStatus: "booking_in_progress",
+    });
+    return {
+      success: false,
+      orderId,
+      orderName,
+      courierName: courierDisplayName,
+      trackingNumber: "",
+      message: errorMessage,
+    };
+  };
 
   // Automated Routing Integration:
   // If AI/Cache updates district to 'Dhaka', dispatch payload to Pathao Courier API.
@@ -1169,14 +1260,7 @@ async function dispatchSingleOrderToCourier(params: {
     const storeId = storeConfig?.pathaoStoreId?.trim();
 
     if (!clientId || !clientSecret || !storeId) {
-      return {
-        success: false,
-        orderId,
-        orderName,
-        courierName: courierDisplayName,
-        trackingNumber: "",
-        message: `Pathao credentials missing for ${orderName}.`,
-      };
+      return rollbackBooking(`Pathao credentials missing for ${orderName}.`);
     }
 
     try {
@@ -1187,14 +1271,7 @@ async function dispatchSingleOrderToCourier(params: {
       }
 
       if (!sharedPathaoTokenRef.token) {
-        return {
-          success: false,
-          orderId,
-          orderName,
-          courierName: courierDisplayName,
-          trackingNumber: "",
-          message: `Pathao Auth Token failed for ${orderName}. Please check your Merchant credentials in Courier Settings.`,
-        };
+        return rollbackBooking(`Pathao Auth Token failed for ${orderName}. Please check your Merchant credentials in Courier Settings.`);
       }
 
       // Resolve Pathao City & Zone IDs (respecting manual override if provided)
@@ -1246,6 +1323,7 @@ async function dispatchSingleOrderToCourier(params: {
             amount_to_collect: amountToCollect,
             item_description: `Order ${orderName} from ${shopDomain}`,
           }),
+          signal: AbortSignal.timeout(10000),
         }
       );
 
@@ -1257,30 +1335,16 @@ async function dispatchSingleOrderToCourier(params: {
         const validationErrors = orderResult?.errors
           ? Object.values(orderResult.errors).flat().join(" | ")
           : "";
-        return {
-          success: false,
-          orderId,
-          orderName,
-          courierName: courierDisplayName,
-          trackingNumber: "",
-          message: `Pathao Order Creation Failed (${orderName}): ${
-            validationErrors || orderResult?.message || orderResponse.status
-          }`,
-        };
+        return rollbackBooking(`Pathao Order Creation Failed (${orderName}): ${
+          validationErrors || orderResult?.message || orderResponse.status
+        }`);
       }
 
       finalTracking = String(consignmentId);
     } catch (err: any) {
-      return {
-        success: false,
-        orderId,
-        orderName,
-        courierName: courierDisplayName,
-        trackingNumber: "",
-        message: `Pathao network error on ${orderName}: ${
-          err?.message || "Unknown"
-        }`,
-      };
+      return rollbackBooking(`Pathao network error on ${orderName}: ${
+        err?.message || "Unknown"
+      }`);
     }
   } else if (activeCourier === "steadfast") {
     courierDisplayName = "Steadfast Courier";
@@ -1288,14 +1352,7 @@ async function dispatchSingleOrderToCourier(params: {
     const secretKey = storeConfig?.steadfastSecretKey?.trim();
 
     if (!apiKey || !secretKey) {
-      return {
-        success: false,
-        orderId,
-        orderName,
-        courierName: courierDisplayName,
-        trackingNumber: "",
-        message: `Steadfast credentials missing for ${orderName}. Please configure API Key and Secret Key in Courier Settings.`,
-      };
+      return rollbackBooking(`Steadfast credentials missing for ${orderName}. Please configure API Key and Secret Key in Courier Settings.`);
     }
 
     try {
@@ -1353,44 +1410,23 @@ async function dispatchSingleOrderToCourier(params: {
         const validationErrors = sfData?.errors
           ? Object.values(sfData.errors).flat().join(" | ")
           : "";
-        return {
-          success: false,
-          orderId,
-          orderName,
-          courierName: courierDisplayName,
-          trackingNumber: "",
-          message: `Steadfast Order Creation Failed (${orderName}): ${
-            validationErrors || sfData?.message || `HTTP ${sfResponse.status}`
-          }`,
-        };
+        return rollbackBooking(`Steadfast Order Creation Failed (${orderName}): ${
+          validationErrors || sfData?.message || `HTTP ${sfResponse.status}`
+        }`);
       }
 
       finalTracking = String(trackingCode);
     } catch (err: any) {
-      return {
-        success: false,
-        orderId,
-        orderName,
-        courierName: courierDisplayName,
-        trackingNumber: "",
-        message: `Steadfast network error on ${orderName}: ${
-          err?.message || "Unknown"
-        }`,
-      };
+      return rollbackBooking(`Steadfast network error on ${orderName}: ${
+        err?.message || "Unknown"
+      }`);
     }
   } else if (activeCourier === "redx") {
     courierDisplayName = "RedX Delivery";
     const token = storeConfig?.redxAccessToken?.trim();
 
     if (!token) {
-      return {
-        success: false,
-        orderId,
-        orderName,
-        courierName: courierDisplayName,
-        trackingNumber: "",
-        message: `RedX credentials missing for ${orderName}. Please configure API Access Token in Courier Settings.`,
-      };
+      return rollbackBooking(`RedX credentials missing for ${orderName}. Please configure API Access Token in Courier Settings.`);
     }
 
     try {
@@ -1461,38 +1497,17 @@ async function dispatchSingleOrderToCourier(params: {
           rdxData?.error ||
           (rdxData?.errors ? Object.values(rdxData.errors).flat().join(" | ") : "") ||
           `HTTP ${rdxResponse.status}`;
-        return {
-          success: false,
-          orderId,
-          orderName,
-          courierName: courierDisplayName,
-          trackingNumber: "",
-          message: `RedX Order Creation Failed (${orderName}): ${errorDetail}`,
-        };
+        return rollbackBooking(`RedX Order Creation Failed (${orderName}): ${errorDetail}`);
       }
 
       finalTracking = String(trackingId);
     } catch (err: any) {
-      return {
-        success: false,
-        orderId,
-        orderName,
-        courierName: courierDisplayName,
-        trackingNumber: "",
-        message: `RedX network error on ${orderName}: ${
-          err?.message || "Unknown"
-        }`,
-      };
+      return rollbackBooking(`RedX network error on ${orderName}: ${
+        err?.message || "Unknown"
+      }`);
     }
   } else {
-    return {
-      success: false,
-      orderId,
-      orderName,
-      courierName: "",
-      trackingNumber: "",
-      message: `Invalid courier selected for ${orderName}.`,
-    };
+    return rollbackBooking(`Invalid courier selected for ${orderName}.`);
   }
 
   const bookedAtIso = new Date().toISOString();
@@ -1629,6 +1644,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   }
 
   await connectDB();
+  await ensureBillingCycleCurrent(shopDomain);
   try {
     await GlobalFraudNetwork.deleteMany({ dataSource: "multi_courier_sandbox_sync" });
   } catch {}
@@ -2119,6 +2135,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const shopDomain = session.shop;
 
   await connectDB();
+  await ensureBillingCycleCurrent(shopDomain);
   try {
     await GlobalFraudNetwork.deleteMany({ dataSource: "multi_courier_sandbox_sync" });
   } catch {}
@@ -2243,19 +2260,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       .filter((r) => !r.success)
       .map((r) => r.message);
 
-    if (succeededSlips.length > 0) {
-      await CourierConfig.findOneAndUpdate(
-        { shopDomain },
-        {
-          $inc: { monthlyOrderCount: succeededSlips.length },
-          $setOnInsert: {
-            currentPlan: "Free",
-            billingCycleStart: new Date(),
-          },
-        },
-        { upsert: true, new: true }
-      );
-    }
+    // Quota was atomically reserved pre-flight per order in dispatchSingleOrderToCourier
 
     const lockedOrders = batchResults
       .filter((r) => r.isRiskyLocked)
@@ -2372,24 +2377,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     admin,
   });
 
-  if (singleResult.success) {
-    await CourierConfig.findOneAndUpdate(
-      { shopDomain },
-      {
-        $inc: { monthlyOrderCount: 1 },
-        $setOnInsert: {
-          currentPlan: "Free",
-          billingCycleStart: new Date(),
-        },
-      },
-      { upsert: true, new: true }
-    );
-  }
-
   return {
     success: singleResult.success,
     actionType: "dispatchOrder",
-    limitReached: false,
+    limitReached: singleResult.limitReached || false,
     message: singleResult.message,
     bookedSlips: singleResult.slip ? [singleResult.slip] : [],
     isRiskyLocked: singleResult.isRiskyLocked || false,

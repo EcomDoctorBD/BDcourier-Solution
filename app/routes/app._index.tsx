@@ -45,6 +45,7 @@ import CourierConfig, {
   decryptCourierConfig,
   encryptSecret,
   ensureWebhookSecret,
+  ensureBillingCycleCurrent,
 } from "../db.server";
 import {
   SIX_TIER_PRICING_PLANS,
@@ -98,6 +99,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const shopDomain = session.shop;
 
   await connectDB();
+  await ensureBillingCycleCurrent(shopDomain);
 
   const rawStoreConfig: any = await CourierConfig.findOne({ shopDomain }).lean();
   const storeConfig = decryptCourierConfig(rawStoreConfig);

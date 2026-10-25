@@ -31,7 +31,7 @@ import {
 } from "@shopify/polaris";
 import "@shopify/polaris/build/esm/styles.css";
 import { authenticate } from "../shopify.server";
-import CourierConfig, { connectDB } from "../db.server";
+import CourierConfig, { connectDB, ensureBillingCycleCurrent } from "../db.server";
 import {
   type PlanTierId,
   type PricingTierConfig,
@@ -66,6 +66,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const shopDomain = session.shop;
 
   await connectDB();
+  await ensureBillingCycleCurrent(shopDomain);
 
   const url = new URL(request.url);
   const upgradedPlanParam = url.searchParams.get("upgradedPlan");

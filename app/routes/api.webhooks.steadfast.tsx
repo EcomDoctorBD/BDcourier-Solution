@@ -163,45 +163,58 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     queryConditions.push({ orderName: { $regex: new RegExp(`^#?${cleanInvoice}$`, "i") } });
   }
 
-  const query = { shopDomain, $or: queryConditions };
+  const isTerminalDelivered = normalizedStatus === "delivered" || normalizedStatus === "disbursed";
+  const isReturnOrPartial = normalizedStatus === "returned" || normalizedStatus === "partial_delivery";
+
+  // Prevent status downgrades: If parcel is already delivered/disbursed, do NOT downgrade to in_transit/pending
+  const query: any = { shopDomain, $or: queryConditions };
+  if (!isTerminalDelivered && !isReturnOrPartial) {
+    query.courierStatus = { $nin: ["delivered", "disbursed"] };
+  }
 
   const updateDoc: any = {
     courierStatus: normalizedStatus,
+    deliveryStatus: normalizedStatus,
     updatedAt: new Date(),
   };
 
-  if (codAmount !== undefined && codAmount !== null && !Number.isNaN(Number(codAmount))) {
-    updateDoc.courierCashCollected = Number(codAmount).toFixed(2);
-  }
-
-  if (normalizedStatus === "delivered") {
-    updateDoc.shopifySyncedPaidFulfilled = true;
+  // Block negative or invalid cash amounts (Issue 9.2)
+  const parsedAmount = Number(codAmount);
+  if (
+    codAmount !== undefined &&
+    codAmount !== null &&
+    codAmount !== "" &&
+    Number.isFinite(parsedAmount) &&
+    parsedAmount >= 0 &&
+    parsedAmount <= 10_000_000
+  ) {
+    updateDoc.courierCashCollected = parsedAmount.toFixed(2);
   }
 
   const updateResult = await ShipmentBooking.updateMany(query, { $set: updateDoc });
 
-  // Non-blocking Shopify Paid & Fulfilled + Tagging sync when verified delivered or disbursed
-  if (normalizedStatus === "delivered" || normalizedStatus === "disbursed") {
-    ShipmentBooking.find(query)
-      .lean()
-      .then((matchingBookings) => {
-        for (const booking of matchingBookings) {
-          if (booking.shopDomain === shopDomain && booking.trackingNumber) {
-            syncDeliveredBookingToShopify(booking).catch((err) =>
-              console.warn(
-                `[Steadfast Webhook] Delivery sync error for ${booking.orderId}:`,
-                err?.message
-              )
+  // Await Shopify Paid & Fulfilled + Tagging sync when verified delivered or disbursed (Issue 9.1)
+  if (isTerminalDelivered) {
+    try {
+      const matchingBookings = await ShipmentBooking.find({ shopDomain, $or: queryConditions }).lean();
+      for (const booking of matchingBookings) {
+        if (booking.shopDomain === shopDomain && booking.trackingNumber) {
+          try {
+            await syncDeliveredBookingToShopify(booking);
+          } catch (syncErr: any) {
+            console.warn(
+              `[Steadfast Webhook] Delivery sync error for ${booking.orderId}:`,
+              syncErr?.message
             );
           }
         }
-      })
-      .catch((err) =>
-        console.warn(
-          "[Steadfast Webhook] Error querying matching bookings for sync:",
-          err?.message
-        )
+      }
+    } catch (err: any) {
+      console.warn(
+        "[Steadfast Webhook] Error querying matching bookings for sync:",
+        err?.message
       );
+    }
   }
 
   return new Response(

@@ -204,10 +204,6 @@ export async function syncDeliveredBookingToShopify(booking: {
   customerPhone?: string;
   shopifySyncedPaidFulfilled?: boolean;
 }): Promise<boolean> {
-  if (booking.shopifySyncedPaidFulfilled) {
-    return true;
-  }
-
   const { shopDomain, orderId, trackingNumber, courierKey, courierName, customerPhone } = booking;
   if (!shopDomain || !orderId || !trackingNumber || !trackingNumber.trim()) {
     console.warn(`[Shopify Sync] Rejected sync for ${orderId}: missing shopDomain or trackingNumber`);
@@ -216,18 +212,43 @@ export async function syncDeliveredBookingToShopify(booking: {
 
   await connectDB();
 
+  // 1. Atomic idempotency claim: verify booking is not already synced
+  const filter = booking._id
+    ? { _id: booking._id, shopDomain }
+    : { shopDomain, orderId };
+
+  const currentBooking = await ShipmentBooking.findOne(filter);
+  if (!currentBooking) {
+    return false;
+  }
+
+  if (currentBooking.shopifySyncedPaidFulfilled) {
+    return true; // Already synced successfully
+  }
+
   const trkUrl =
     booking.trackingUrl ||
-    getCourierTrackingUrl(courierKey || courierName, trackingNumber, customerPhone);
+    currentBooking.trackingUrl ||
+    getCourierTrackingUrl(
+      courierKey || courierName || currentBooking.courierKey,
+      trackingNumber,
+      customerPhone || currentBooking.customerPhone
+    );
 
-  const courierLower = (courierKey || courierName || "").toLowerCase();
+  const courierLower = (
+    courierKey ||
+    courierName ||
+    currentBooking.courierKey ||
+    currentBooking.courierName ||
+    ""
+  ).toLowerCase();
   const partnerName = courierLower.includes("pathao")
     ? "Pathao"
     : courierLower.includes("steadfast")
     ? "Steadfast"
     : courierLower.includes("redx")
     ? "RedX"
-    : courierName || "Courier";
+    : courierName || currentBooking.courierName || "Courier";
 
   try {
     const { admin } = await unauthenticated.admin(shopDomain);
@@ -238,7 +259,7 @@ export async function syncDeliveredBookingToShopify(booking: {
 
     const orderGid = formatOrderGid(orderId);
 
-    // 1. Mark paid & fulfill
+    // 2. Mark order Paid & Fulfill in Shopify Admin GraphQL
     const synced = await syncOrderPaidAndFulfilledInShopify(
       admin,
       orderGid,
@@ -247,19 +268,22 @@ export async function syncDeliveredBookingToShopify(booking: {
       trkUrl
     );
 
-    // 2. Add delivered tags non-blockingly
+    // 3. Add delivered tags non-blockingly
     await addShopifyOrderTags(admin, orderGid, [`${partnerName} Delivered`]);
 
-    // 3. Mark synchronized in MongoDB ShipmentBooking
-    const filter = booking._id ? { _id: booking._id, shopDomain } : { shopDomain, orderId };
-    await ShipmentBooking.updateOne(filter, {
-      $set: {
-        shopifySyncedPaidFulfilled: true,
-        courierStatus: "delivered",
-        trackingUrl: trkUrl,
-        updatedAt: new Date(),
-      },
-    });
+    // 4. ONLY AFTER the GraphQL operations succeed, persist shopifySyncedPaidFulfilled: true
+    if (synced) {
+      await ShipmentBooking.updateOne(filter, {
+        $set: {
+          shopifySyncedPaidFulfilled: true,
+          shopifySyncedAt: new Date(),
+          courierStatus: "delivered",
+          deliveryStatus: "delivered",
+          trackingUrl: trkUrl,
+          updatedAt: new Date(),
+        },
+      });
+    }
 
     return synced;
   } catch (err: any) {

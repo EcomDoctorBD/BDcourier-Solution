@@ -365,6 +365,42 @@ export async function ensureWebhookSecret(shopDomain, existingSecret) {
 }
 
 /**
+ * Automatically checks and rolls over the merchant's 30-day billing cycle.
+ * Resets monthlyOrderCount to 0 when 30 days have elapsed.
+ */
+export async function ensureBillingCycleCurrent(shopDomain) {
+  if (!shopDomain) return null;
+  await connectDB();
+  const config = await CourierConfig.findOne({ shopDomain });
+  if (!config) return null;
+
+  if (!config.billingCycleStart) {
+    config.billingCycleStart = new Date();
+    await config.save();
+    return config;
+  }
+
+  const elapsedMs = Date.now() - new Date(config.billingCycleStart).getTime();
+  const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+
+  if (elapsedMs >= THIRTY_DAYS_MS) {
+    const updated = await CourierConfig.findOneAndUpdate(
+      { shopDomain },
+      {
+        $set: {
+          monthlyOrderCount: 0,
+          billingCycleStart: new Date(),
+        },
+      },
+      { new: true }
+    );
+    return updated;
+  }
+
+  return config;
+}
+
+/**
  * Mongoose Schema: GlobalFraudNetwork
  * Caches aggregated delivery & return history per Bangladeshi customer phone number
  */
@@ -463,9 +499,9 @@ const shipmentBookingSchema = new mongoose.Schema(
     shopDomain: { type: String, required: true, index: true, trim: true },
     orderId: { type: String, required: true, index: true, trim: true },
     orderName: { type: String, required: true },
-    courierKey: { type: String, required: true },
-    courierName: { type: String, required: true },
-    trackingNumber: { type: String, required: true },
+    courierKey: { type: String, default: "" },
+    courierName: { type: String, default: "" },
+    trackingNumber: { type: String, default: "" },
     trackingUrl: { type: String, default: "" },
     customerName: { type: String, default: "" },
     customerPhone: { type: String, default: "" },
@@ -473,7 +509,9 @@ const shipmentBookingSchema = new mongoose.Schema(
     codAmount: { type: String, default: "0.00" },
     courierCashCollected: { type: String, default: "0.00" },
     courierStatus: { type: String, default: "in_transit" },
+    deliveryStatus: { type: String, default: "in_transit" },
     shopifySyncedPaidFulfilled: { type: Boolean, default: false },
+    shopifySyncedAt: { type: Date },
     currencyCode: { type: String, default: "BDT" },
     warehouseNote: {
       type: String,
@@ -483,6 +521,9 @@ const shipmentBookingSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+
+// Compound Unique Index: prevents duplicate booking documents for the same shop and order
+shipmentBookingSchema.index({ shopDomain: 1, orderId: 1 }, { unique: true });
 
 if (mongoose.models.ShipmentBooking) {
   delete mongoose.models.ShipmentBooking;
