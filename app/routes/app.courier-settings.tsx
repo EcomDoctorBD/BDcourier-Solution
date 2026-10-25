@@ -1328,48 +1328,179 @@ export default function CourierSettingsPage() {
             </BlockStack>
           </InlineStack>
 
-          <Grid>
-            {/* Card 1: Pathao Settings */}
-            <Grid.Cell columnSpan={{ xs: 6, sm: 6, md: 2, lg: 4, xl: 4 }}>
-              <Card padding="500">
-                <BlockStack gap="400">
-                  <InlineStack align="space-between" blockAlign="center">
-                    <InlineStack gap="300" blockAlign="center">
-                      <CourierLogo courier="pathao" size={44} />
-                      <Text as="h3" variant="headingMd">
-                        Pathao Courier
-                      </Text>
-                    </InlineStack>
+          <div
+            className="courier-gateways-grid-container"
+            style={{
+              alignItems: "stretch",
+            }}
+          >
+            <style>{`
+              .courier-gateways-grid-container .Polaris-Grid {
+                align-items: stretch;
+              }
+              .courier-gateways-grid-container .Polaris-Grid-Cell {
+                display: flex;
+                flex-direction: column;
+              }
+              .courier-gateways-grid-container .Polaris-ShadowBevel {
+                height: 100%;
+                display: flex;
+                flex-direction: column;
+                flex: 1;
+                border-radius: 12px !important;
+              }
+              .courier-gateways-grid-container .Polaris-Box {
+                height: 100%;
+                display: flex;
+                flex-direction: column;
+                flex: 1;
+                border-radius: 12px !important;
+              }
+              .courier-gateways-grid-container .Polaris-BlockStack {
+                height: 100%;
+                display: flex;
+                flex-direction: column;
+                flex: 1;
+              }
+            `}</style>
+            <Grid>
+              {/* Card 1: Pathao Settings */}
+              <Grid.Cell columnSpan={{ xs: 6, sm: 6, md: 2, lg: 4, xl: 4 }}>
+                <div
+                  style={{
+                    height: "100%",
+                    display: "flex",
+                    flexDirection: "column",
+                  }}
+                >
+                  <Card padding="500">
+                    <BlockStack gap="400">
+                      <InlineStack align="space-between" blockAlign="center">
+                        <InlineStack gap="300" blockAlign="center">
+                          <CourierLogo courier="pathao" size={44} />
+                          <Text as="h3" variant="headingMd">
+                            Pathao Courier
+                          </Text>
+                        </InlineStack>
 
-                    <Badge
-                      tone={isPathaoConnected ? "success" : "attention"}
-                      progress={isPathaoConnected ? "complete" : "incomplete"}
-                    >
-                      {isPathaoConnected ? "Connected" : "Not Configured"}
-                    </Badge>
-                  </InlineStack>
+                        {isPathaoConnected ? (
+                          <span
+                            style={{
+                              backgroundColor: "#DCFCE7",
+                              color: "#166534",
+                              fontSize: "12px",
+                              fontWeight: 600,
+                              padding: "3px 10px",
+                              borderRadius: "12px",
+                              lineHeight: "1.2",
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: "5px",
+                            }}
+                          >
+                            <span
+                              style={{
+                                width: "6px",
+                                height: "6px",
+                                borderRadius: "50%",
+                                backgroundColor: "#16A34A",
+                              }}
+                            />
+                            Connected
+                          </span>
+                        ) : (
+                          <span
+                            style={{
+                              backgroundColor: "#F3F4F6",
+                              color: "#4B5563",
+                              fontSize: "12px",
+                              fontWeight: 600,
+                              padding: "3px 10px",
+                              borderRadius: "12px",
+                              lineHeight: "1.2",
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: "5px",
+                            }}
+                          >
+                            <span
+                              style={{
+                                width: "6px",
+                                height: "6px",
+                                borderRadius: "50%",
+                                backgroundColor: "#9CA3AF",
+                              }}
+                            />
+                            Not Configured
+                          </span>
+                        )}
+                      </InlineStack>
 
-                  <Text as="p" variant="bodySm" tone="subdued">
-                    Express parcel delivery and real-time consignment tracking via Pathao Merchant API.
-                  </Text>
+                      <Divider />
 
-                  <Text as="p" variant="bodyXs" tone="subdued">
-                    Required: Client ID, Client Secret, Username, Password, Store ID
-                  </Text>
+                      <div
+                        style={{
+                          flexGrow: 1,
+                          display: "flex",
+                          flexDirection: "column",
+                        }}
+                      >
+                        <BlockStack gap="150">
+                          <Text as="p" variant="bodySm" tone="subdued">
+                            Express parcel delivery and real-time consignment tracking via Pathao Merchant API.
+                          </Text>
+                          <Text as="p" variant="bodyXs" tone="subdued">
+                            Required: <strong>Client ID, Client Secret, Username, Password, Store ID</strong>
+                          </Text>
+                        </BlockStack>
+                      </div>
 
-                  <InlineStack align="start">
-                    <Button
-                      onClick={() => setShowPathaoForm((prev) => !prev)}
-                    >
-                      {showPathaoForm
-                        ? "Hide Configuration"
-                        : isPathaoConnected
-                        ? "Update Pathao"
-                        : "Configure Pathao"}
-                    </Button>
-                  </InlineStack>
+                      <div style={{ marginTop: "auto", paddingTop: "8px" }}>
+                        <button
+                          type="button"
+                          onClick={() => setShowPathaoForm((prev) => !prev)}
+                          style={{
+                            width: "100%",
+                            padding: "9px 16px",
+                            borderRadius: "8px",
+                            fontSize: "13px",
+                            fontWeight: 600,
+                            cursor: "pointer",
+                            transition: "all 0.15s ease-in-out",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            gap: "6px",
+                            border: showPathaoForm
+                              ? "1px solid #9CA3AF"
+                              : isPathaoConnected
+                              ? "1px solid #D1D5DB"
+                              : "none",
+                            backgroundColor: showPathaoForm
+                              ? "#F3F4F6"
+                              : isPathaoConnected
+                              ? "#FFFFFF"
+                              : "#1F2937",
+                            color: showPathaoForm
+                              ? "#374151"
+                              : isPathaoConnected
+                              ? "#1F2937"
+                              : "#FFFFFF",
+                            boxShadow:
+                              !isPathaoConnected && !showPathaoForm
+                                ? "0 1px 3px rgba(0,0,0,0.12)"
+                                : "0 1px 2px rgba(0,0,0,0.05)",
+                          }}
+                        >
+                          {showPathaoForm
+                            ? "Hide Configuration"
+                            : isPathaoConnected
+                            ? "Update Pathao Settings →"
+                            : "Configure Pathao →"}
+                        </button>
+                      </div>
 
-                  {showPathaoForm && (
+                      {showPathaoForm && (
                     <BlockStack gap="400">
                       <Divider />
 
@@ -1558,10 +1689,18 @@ export default function CourierSettingsPage() {
                   )}
                 </BlockStack>
               </Card>
-            </Grid.Cell>
+            </div>
+          </Grid.Cell>
 
-            {/* Card 2: Steadfast Settings */}
-            <Grid.Cell columnSpan={{ xs: 6, sm: 6, md: 2, lg: 4, xl: 4 }}>
+          {/* Card 2: Steadfast Settings */}
+          <Grid.Cell columnSpan={{ xs: 6, sm: 6, md: 2, lg: 4, xl: 4 }}>
+            <div
+              style={{
+                height: "100%",
+                display: "flex",
+                flexDirection: "column",
+              }}
+            >
               <Card padding="500">
                 <BlockStack gap="400">
                   <InlineStack align="space-between" blockAlign="center">
@@ -1572,33 +1711,122 @@ export default function CourierSettingsPage() {
                       </Text>
                     </InlineStack>
 
-                    <Badge
-                      tone={isSteadfastConnected ? "success" : "attention"}
-                      progress={isSteadfastConnected ? "complete" : "incomplete"}
-                    >
-                      {isSteadfastConnected ? "Connected" : "Not Configured"}
-                    </Badge>
+                    {isSteadfastConnected ? (
+                      <span
+                        style={{
+                          backgroundColor: "#DCFCE7",
+                          color: "#166534",
+                          fontSize: "12px",
+                          fontWeight: 600,
+                          padding: "3px 10px",
+                          borderRadius: "12px",
+                          lineHeight: "1.2",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "5px",
+                        }}
+                      >
+                        <span
+                          style={{
+                            width: "6px",
+                            height: "6px",
+                            borderRadius: "50%",
+                            backgroundColor: "#16A34A",
+                          }}
+                        />
+                        Connected
+                      </span>
+                    ) : (
+                      <span
+                        style={{
+                          backgroundColor: "#F3F4F6",
+                          color: "#4B5563",
+                          fontSize: "12px",
+                          fontWeight: 600,
+                          padding: "3px 10px",
+                          borderRadius: "12px",
+                          lineHeight: "1.2",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "5px",
+                        }}
+                      >
+                        <span
+                          style={{
+                            width: "6px",
+                            height: "6px",
+                            borderRadius: "50%",
+                            backgroundColor: "#9CA3AF",
+                          }}
+                        />
+                        Not Configured
+                      </span>
+                    )}
                   </InlineStack>
 
-                  <Text as="p" variant="bodySm" tone="subdued">
-                    Fast Cash-on-Delivery (COD) fulfillment across all 64 Bangladeshi districts.
-                  </Text>
+                  <Divider />
 
-                  <Text as="p" variant="bodyXs" tone="subdued">
-                    Required: API Key, Secret Key
-                  </Text>
+                  <div
+                    style={{
+                      flexGrow: 1,
+                      display: "flex",
+                      flexDirection: "column",
+                    }}
+                  >
+                    <BlockStack gap="150">
+                      <Text as="p" variant="bodySm" tone="subdued">
+                        Fast Cash-on-Delivery (COD) fulfillment across all 64 Bangladeshi districts.
+                      </Text>
+                      <Text as="p" variant="bodyXs" tone="subdued">
+                        Required: <strong>API Key, Secret Key</strong>
+                      </Text>
+                    </BlockStack>
+                  </div>
 
-                  <InlineStack align="start">
-                    <Button
+                  <div style={{ marginTop: "auto", paddingTop: "8px" }}>
+                    <button
+                      type="button"
                       onClick={() => setShowSteadfastForm((prev) => !prev)}
+                      style={{
+                        width: "100%",
+                        padding: "9px 16px",
+                        borderRadius: "8px",
+                        fontSize: "13px",
+                        fontWeight: 600,
+                        cursor: "pointer",
+                        transition: "all 0.15s ease-in-out",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: "6px",
+                        border: showSteadfastForm
+                          ? "1px solid #9CA3AF"
+                          : isSteadfastConnected
+                          ? "1px solid #D1D5DB"
+                          : "none",
+                        backgroundColor: showSteadfastForm
+                          ? "#F3F4F6"
+                          : isSteadfastConnected
+                          ? "#FFFFFF"
+                          : "#1F2937",
+                        color: showSteadfastForm
+                          ? "#374151"
+                          : isSteadfastConnected
+                          ? "#1F2937"
+                          : "#FFFFFF",
+                        boxShadow:
+                          !isSteadfastConnected && !showSteadfastForm
+                            ? "0 1px 3px rgba(0,0,0,0.12)"
+                            : "0 1px 2px rgba(0,0,0,0.05)",
+                      }}
                     >
                       {showSteadfastForm
                         ? "Hide Configuration"
                         : isSteadfastConnected
-                        ? "Update Steadfast"
-                        : "Configure Steadfast"}
-                    </Button>
-                  </InlineStack>
+                        ? "Update Steadfast Settings →"
+                        : "Configure Steadfast →"}
+                    </button>
+                  </div>
 
                   {showSteadfastForm && (
                     <BlockStack gap="400">
@@ -1704,10 +1932,18 @@ export default function CourierSettingsPage() {
                   )}
                 </BlockStack>
               </Card>
-            </Grid.Cell>
+            </div>
+          </Grid.Cell>
 
-            {/* Card 3: REDX Settings */}
-            <Grid.Cell columnSpan={{ xs: 6, sm: 6, md: 2, lg: 4, xl: 4 }}>
+          {/* Card 3: REDX Settings */}
+          <Grid.Cell columnSpan={{ xs: 6, sm: 6, md: 2, lg: 4, xl: 4 }}>
+            <div
+              style={{
+                height: "100%",
+                display: "flex",
+                flexDirection: "column",
+              }}
+            >
               <Card padding="500">
                 <BlockStack gap="400">
                   <InlineStack align="space-between" blockAlign="center">
@@ -1718,33 +1954,122 @@ export default function CourierSettingsPage() {
                       </Text>
                     </InlineStack>
 
-                    <Badge
-                      tone={isRedxConnected ? "success" : "attention"}
-                      progress={isRedxConnected ? "complete" : "incomplete"}
-                    >
-                      {isRedxConnected ? "Connected" : "Not Configured"}
-                    </Badge>
+                    {isRedxConnected ? (
+                      <span
+                        style={{
+                          backgroundColor: "#DCFCE7",
+                          color: "#166534",
+                          fontSize: "12px",
+                          fontWeight: 600,
+                          padding: "3px 10px",
+                          borderRadius: "12px",
+                          lineHeight: "1.2",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "5px",
+                        }}
+                      >
+                        <span
+                          style={{
+                            width: "6px",
+                            height: "6px",
+                            borderRadius: "50%",
+                            backgroundColor: "#16A34A",
+                          }}
+                        />
+                        Connected
+                      </span>
+                    ) : (
+                      <span
+                        style={{
+                          backgroundColor: "#F3F4F6",
+                          color: "#4B5563",
+                          fontSize: "12px",
+                          fontWeight: 600,
+                          padding: "3px 10px",
+                          borderRadius: "12px",
+                          lineHeight: "1.2",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "5px",
+                        }}
+                      >
+                        <span
+                          style={{
+                            width: "6px",
+                            height: "6px",
+                            borderRadius: "50%",
+                            backgroundColor: "#9CA3AF",
+                          }}
+                        />
+                        Not Configured
+                      </span>
+                    )}
                   </InlineStack>
 
-                  <Text as="p" variant="bodySm" tone="subdued">
-                    64-district doorstep delivery network with automated pickup scheduling.
-                  </Text>
+                  <Divider />
 
-                  <Text as="p" variant="bodyXs" tone="subdued">
-                    Required: API Access Token, Pickup Store ID
-                  </Text>
+                  <div
+                    style={{
+                      flexGrow: 1,
+                      display: "flex",
+                      flexDirection: "column",
+                    }}
+                  >
+                    <BlockStack gap="150">
+                      <Text as="p" variant="bodySm" tone="subdued">
+                        64-district doorstep delivery network with automated pickup scheduling.
+                      </Text>
+                      <Text as="p" variant="bodyXs" tone="subdued">
+                        Required: <strong>API Access Token, Pickup Store ID</strong>
+                      </Text>
+                    </BlockStack>
+                  </div>
 
-                  <InlineStack align="start">
-                    <Button
+                  <div style={{ marginTop: "auto", paddingTop: "8px" }}>
+                    <button
+                      type="button"
                       onClick={() => setShowRedxForm((prev) => !prev)}
+                      style={{
+                        width: "100%",
+                        padding: "9px 16px",
+                        borderRadius: "8px",
+                        fontSize: "13px",
+                        fontWeight: 600,
+                        cursor: "pointer",
+                        transition: "all 0.15s ease-in-out",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: "6px",
+                        border: showRedxForm
+                          ? "1px solid #9CA3AF"
+                          : isRedxConnected
+                          ? "1px solid #D1D5DB"
+                          : "none",
+                        backgroundColor: showRedxForm
+                          ? "#F3F4F6"
+                          : isRedxConnected
+                          ? "#FFFFFF"
+                          : "#1F2937",
+                        color: showRedxForm
+                          ? "#374151"
+                          : isRedxConnected
+                          ? "#1F2937"
+                          : "#FFFFFF",
+                        boxShadow:
+                          !isRedxConnected && !showRedxForm
+                            ? "0 1px 3px rgba(0,0,0,0.12)"
+                            : "0 1px 2px rgba(0,0,0,0.05)",
+                      }}
                     >
                       {showRedxForm
                         ? "Hide Configuration"
                         : isRedxConnected
-                        ? "Update REDX"
-                        : "Configure REDX"}
-                    </Button>
-                  </InlineStack>
+                        ? "Update REDX Settings →"
+                        : "Configure REDX →"}
+                    </button>
+                  </div>
 
                   {showRedxForm && (
                     <BlockStack gap="400">
@@ -1907,10 +2232,18 @@ export default function CourierSettingsPage() {
                   )}
                 </BlockStack>
               </Card>
-            </Grid.Cell>
+            </div>
+          </Grid.Cell>
 
-            {/* Card 4: CarryBee Settings */}
-            <Grid.Cell columnSpan={{ xs: 6, sm: 6, md: 2, lg: 4, xl: 4 }}>
+          {/* Card 4: CarryBee Settings */}
+          <Grid.Cell columnSpan={{ xs: 6, sm: 6, md: 2, lg: 4, xl: 4 }}>
+            <div
+              style={{
+                height: "100%",
+                display: "flex",
+                flexDirection: "column",
+              }}
+            >
               <Card padding="500">
                 <BlockStack gap="400">
                   <InlineStack align="space-between" blockAlign="center">
@@ -1921,33 +2254,122 @@ export default function CourierSettingsPage() {
                       </Text>
                     </InlineStack>
 
-                    <Badge
-                      tone={isCarrybeeConnected ? "success" : "attention"}
-                      progress={isCarrybeeConnected ? "complete" : "incomplete"}
-                    >
-                      {isCarrybeeConnected ? "Connected" : "Not Configured"}
-                    </Badge>
+                    {isCarrybeeConnected ? (
+                      <span
+                        style={{
+                          backgroundColor: "#DCFCE7",
+                          color: "#166534",
+                          fontSize: "12px",
+                          fontWeight: 600,
+                          padding: "3px 10px",
+                          borderRadius: "12px",
+                          lineHeight: "1.2",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "5px",
+                        }}
+                      >
+                        <span
+                          style={{
+                            width: "6px",
+                            height: "6px",
+                            borderRadius: "50%",
+                            backgroundColor: "#16A34A",
+                          }}
+                        />
+                        Connected
+                      </span>
+                    ) : (
+                      <span
+                        style={{
+                          backgroundColor: "#F3F4F6",
+                          color: "#4B5563",
+                          fontSize: "12px",
+                          fontWeight: 600,
+                          padding: "3px 10px",
+                          borderRadius: "12px",
+                          lineHeight: "1.2",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "5px",
+                        }}
+                      >
+                        <span
+                          style={{
+                            width: "6px",
+                            height: "6px",
+                            borderRadius: "50%",
+                            backgroundColor: "#9CA3AF",
+                          }}
+                        />
+                        Not Configured
+                      </span>
+                    )}
                   </InlineStack>
 
-                  <Text as="p" variant="bodySm" tone="subdued">
-                    Tech-first automated logistics network with rapid parcel dispatch and API status sync.
-                  </Text>
+                  <Divider />
 
-                  <Text as="p" variant="bodyXs" tone="subdued">
-                    Required: Client ID, Client Secret, Client Context
-                  </Text>
+                  <div
+                    style={{
+                      flexGrow: 1,
+                      display: "flex",
+                      flexDirection: "column",
+                    }}
+                  >
+                    <BlockStack gap="150">
+                      <Text as="p" variant="bodySm" tone="subdued">
+                        Tech-first automated logistics network with rapid parcel dispatch and API status sync.
+                      </Text>
+                      <Text as="p" variant="bodyXs" tone="subdued">
+                        Required: <strong>Client ID, Client Secret, Client Context</strong>
+                      </Text>
+                    </BlockStack>
+                  </div>
 
-                  <InlineStack align="start">
-                    <Button
+                  <div style={{ marginTop: "auto", paddingTop: "8px" }}>
+                    <button
+                      type="button"
                       onClick={() => setShowCarrybeeForm((prev) => !prev)}
+                      style={{
+                        width: "100%",
+                        padding: "9px 16px",
+                        borderRadius: "8px",
+                        fontSize: "13px",
+                        fontWeight: 600,
+                        cursor: "pointer",
+                        transition: "all 0.15s ease-in-out",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: "6px",
+                        border: showCarrybeeForm
+                          ? "1px solid #9CA3AF"
+                          : isCarrybeeConnected
+                          ? "1px solid #D1D5DB"
+                          : "none",
+                        backgroundColor: showCarrybeeForm
+                          ? "#F3F4F6"
+                          : isCarrybeeConnected
+                          ? "#FFFFFF"
+                          : "#1F2937",
+                        color: showCarrybeeForm
+                          ? "#374151"
+                          : isCarrybeeConnected
+                          ? "#1F2937"
+                          : "#FFFFFF",
+                        boxShadow:
+                          !isCarrybeeConnected && !showCarrybeeForm
+                            ? "0 1px 3px rgba(0,0,0,0.12)"
+                            : "0 1px 2px rgba(0,0,0,0.05)",
+                      }}
                     >
                       {showCarrybeeForm
                         ? "Hide Configuration"
                         : isCarrybeeConnected
-                        ? "Update CarryBee"
-                        : "Configure CarryBee"}
-                    </Button>
-                  </InlineStack>
+                        ? "Update CarryBee Settings →"
+                        : "Configure CarryBee →"}
+                    </button>
+                  </div>
 
                   {showCarrybeeForm && (
                     <BlockStack gap="400">
@@ -2093,10 +2515,18 @@ export default function CourierSettingsPage() {
                   )}
                 </BlockStack>
               </Card>
-            </Grid.Cell>
+            </div>
+          </Grid.Cell>
 
-            {/* Card 5: Bahok Courier Settings */}
-            <Grid.Cell columnSpan={{ xs: 6, sm: 6, md: 2, lg: 4, xl: 4 }}>
+          {/* Card 5: Bahok Courier Settings */}
+          <Grid.Cell columnSpan={{ xs: 6, sm: 6, md: 2, lg: 4, xl: 4 }}>
+            <div
+              style={{
+                height: "100%",
+                display: "flex",
+                flexDirection: "column",
+              }}
+            >
               <Card padding="500">
                 <BlockStack gap="400">
                   <InlineStack align="space-between" blockAlign="center">
@@ -2107,33 +2537,122 @@ export default function CourierSettingsPage() {
                       </Text>
                     </InlineStack>
 
-                    <Badge
-                      tone={isBahokConnected ? "success" : "attention"}
-                      progress={isBahokConnected ? "complete" : "incomplete"}
-                    >
-                      {isBahokConnected ? "Connected" : "Not Configured"}
-                    </Badge>
+                    {isBahokConnected ? (
+                      <span
+                        style={{
+                          backgroundColor: "#DCFCE7",
+                          color: "#166534",
+                          fontSize: "12px",
+                          fontWeight: 600,
+                          padding: "3px 10px",
+                          borderRadius: "12px",
+                          lineHeight: "1.2",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "5px",
+                        }}
+                      >
+                        <span
+                          style={{
+                            width: "6px",
+                            height: "6px",
+                            borderRadius: "50%",
+                            backgroundColor: "#16A34A",
+                          }}
+                        />
+                        Connected
+                      </span>
+                    ) : (
+                      <span
+                        style={{
+                          backgroundColor: "#F3F4F6",
+                          color: "#4B5563",
+                          fontSize: "12px",
+                          fontWeight: 600,
+                          padding: "3px 10px",
+                          borderRadius: "12px",
+                          lineHeight: "1.2",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "5px",
+                        }}
+                      >
+                        <span
+                          style={{
+                            width: "6px",
+                            height: "6px",
+                            borderRadius: "50%",
+                            backgroundColor: "#9CA3AF",
+                          }}
+                        />
+                        Not Configured
+                      </span>
+                    )}
                   </InlineStack>
 
-                  <Text as="p" variant="bodySm" tone="subdued">
-                    Reliable nationwide e-commerce courier service with doorstep delivery across Bangladesh.
-                  </Text>
+                  <Divider />
 
-                  <Text as="p" variant="bodyXs" tone="subdued">
-                    Required: Merchant ID, API Key, API Secret / Token
-                  </Text>
+                  <div
+                    style={{
+                      flexGrow: 1,
+                      display: "flex",
+                      flexDirection: "column",
+                    }}
+                  >
+                    <BlockStack gap="150">
+                      <Text as="p" variant="bodySm" tone="subdued">
+                        Reliable nationwide e-commerce courier service with doorstep delivery across Bangladesh.
+                      </Text>
+                      <Text as="p" variant="bodyXs" tone="subdued">
+                        Required: <strong>Merchant ID, API Key, API Secret / Token</strong>
+                      </Text>
+                    </BlockStack>
+                  </div>
 
-                  <InlineStack align="start">
-                    <Button
+                  <div style={{ marginTop: "auto", paddingTop: "8px" }}>
+                    <button
+                      type="button"
                       onClick={() => setShowBahokForm((prev) => !prev)}
+                      style={{
+                        width: "100%",
+                        padding: "9px 16px",
+                        borderRadius: "8px",
+                        fontSize: "13px",
+                        fontWeight: 600,
+                        cursor: "pointer",
+                        transition: "all 0.15s ease-in-out",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: "6px",
+                        border: showBahokForm
+                          ? "1px solid #9CA3AF"
+                          : isBahokConnected
+                          ? "1px solid #D1D5DB"
+                          : "none",
+                        backgroundColor: showBahokForm
+                          ? "#F3F4F6"
+                          : isBahokConnected
+                          ? "#FFFFFF"
+                          : "#1F2937",
+                        color: showBahokForm
+                          ? "#374151"
+                          : isBahokConnected
+                          ? "#1F2937"
+                          : "#FFFFFF",
+                        boxShadow:
+                          !isBahokConnected && !showBahokForm
+                            ? "0 1px 3px rgba(0,0,0,0.12)"
+                            : "0 1px 2px rgba(0,0,0,0.05)",
+                      }}
                     >
                       {showBahokForm
                         ? "Hide Configuration"
                         : isBahokConnected
-                        ? "Update Bahok"
-                        : "Configure Bahok"}
-                    </Button>
-                  </InlineStack>
+                        ? "Update Bahok Settings →"
+                        : "Configure Bahok →"}
+                    </button>
+                  </div>
 
                   {showBahokForm && (
                     <BlockStack gap="400">
@@ -2250,9 +2769,11 @@ export default function CourierSettingsPage() {
                   )}
                 </BlockStack>
               </Card>
-            </Grid.Cell>
-          </Grid>
-        </BlockStack>
+            </div>
+          </Grid.Cell>
+        </Grid>
+      </div>
+    </BlockStack>
 
         {/* ==================================================================== */}
         {/* SECTION 2: AUTOMATION RULES & AI WRAPPER                             */}
