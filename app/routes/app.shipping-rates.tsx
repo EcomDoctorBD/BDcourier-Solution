@@ -949,6 +949,14 @@ export default function ShippingRatesPage() {
             box-shadow: none !important;
             background-color: #FAFAFA !important;
           }
+          .shipping-rates-wrapper .division-card .division-header-toggle,
+          .shipping-rates-wrapper .division-card .division-header-toggle * {
+            color: #202223 !important;
+            text-decoration: none !important;
+          }
+          .shipping-rates-wrapper .division-card .division-header-toggle:hover * {
+            color: #000000 !important;
+          }
 
           /* Primary Action Button ("Sync Checkout CarrierService" in page header & variants) */
           .Polaris-Page-Header .Polaris-Button--variantPrimary,
@@ -1092,7 +1100,7 @@ export default function ShippingRatesPage() {
                         <Text as="h3" variant="headingMd">
                           {editingZoneId
                             ? "Edit Shipping Zone"
-                            : "Configure Rates & Weight Tiers"}
+                            : "Shipping Zone Details"}
                         </Text>
                         {editingZoneId && (
                           <button
@@ -1149,9 +1157,11 @@ export default function ShippingRatesPage() {
                           <Text as="h4" variant="headingSm">
                             Weight Tiers (kg → Extra BDT)
                           </Text>
-                          <Text as="p" variant="bodySm" tone="subdued">
-                            Add incremental weight surcharges for heavier consignments.
-                          </Text>
+                          <Box paddingBlockStart="200" paddingBlockEnd="200">
+                            <Text as="p" variant="bodySm" tone="subdued">
+                              অতিরিক্ত ওজনের পার্সেলের জন্য বাড়তি ডেলিভারি চার্জ নির্ধারণ করুন।
+                            </Text>
+                          </Box>
                         </BlockStack>
                         <button
                           type="button"
@@ -1356,70 +1366,150 @@ export default function ShippingRatesPage() {
                         const selectedInDiv = divDistIds.filter((id) =>
                           selectedDistricts.includes(id)
                         ).length;
+                        const cleanBengaliName = divGroup.bengaliName.replace(
+                          /\s*\(\d+\s*Districts\)/i,
+                          ""
+                        );
 
                         return (
                           <div key={divGroup.divisionId} className="division-card">
                             <Card padding="300">
                               <BlockStack gap="200">
-                                <InlineStack align="space-between" blockAlign="center">
-                                  <Button
-                                    variant="plain"
+                                <InlineStack align="space-between" blockAlign="center" wrap={false}>
+                                  {/* Left side: Division Name + Bengali Name + District Counter */}
+                                  <button
+                                    type="button"
                                     onClick={() =>
                                       handleToggleDivision(divGroup.divisionId)
                                     }
+                                    className="division-header-toggle"
+                                    style={{
+                                      background: "transparent",
+                                      border: "none",
+                                      padding: 0,
+                                      cursor: "pointer",
+                                      textAlign: "left",
+                                      display: "inline-flex",
+                                      alignItems: "center",
+                                      gap: "8px",
+                                      color: "#202223",
+                                      flex: "1 1 auto",
+                                      minWidth: 0,
+                                    }}
                                   >
-                                    <InlineStack gap="200" blockAlign="center">
-                                      <Text as="span" variant="bodyMd" fontWeight="bold">
-                                        {divGroup.divisionName}
-                                      </Text>
-                                      <Text as="span" variant="bodySm" tone="subdued">
-                                        ({divGroup.bengaliName})
-                                      </Text>
-                                    </InlineStack>
-                                  </Button>
-
-                                  <InlineStack gap="200" blockAlign="center">
-                                    <Badge
-                                      tone={
-                                        selectedInDiv === divDistIds.length
-                                          ? "success"
-                                          : selectedInDiv > 0
-                                          ? "info"
-                                          : undefined
-                                      }
+                                    <svg
+                                      width="14"
+                                      height="14"
+                                      viewBox="0 0 20 20"
+                                      fill="currentColor"
+                                      style={{
+                                        transform: isOpen ? "rotate(90deg)" : "rotate(0deg)",
+                                        transition: "transform 0.15s ease",
+                                        color: "#5C5F62",
+                                        flexShrink: 0,
+                                      }}
                                     >
-                                      {`${selectedInDiv} / ${divDistIds.length}`}
-                                    </Badge>
+                                      <path
+                                        fillRule="evenodd"
+                                        d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z"
+                                        clipRule="evenodd"
+                                      />
+                                    </svg>
+                                    <span style={{ display: "inline-flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
+                                      <span style={{ fontSize: "14px", fontWeight: 700, color: "#202223" }}>
+                                        {divGroup.divisionName}
+                                      </span>
+                                      <span style={{ fontSize: "13px", color: "#6D7175" }}>
+                                        ({cleanBengaliName})
+                                      </span>
+                                      <span
+                                        style={{
+                                          fontSize: "12px",
+                                          fontWeight: 600,
+                                          padding: "2px 8px",
+                                          borderRadius: "10px",
+                                          backgroundColor:
+                                            selectedInDiv === divDistIds.length
+                                              ? "#DEF7EC"
+                                              : selectedInDiv > 0
+                                              ? "#E1EFFE"
+                                              : "#F3F4F6",
+                                          color:
+                                            selectedInDiv === divDistIds.length
+                                              ? "#03543F"
+                                              : selectedInDiv > 0
+                                              ? "#1E429F"
+                                              : "#4B5563",
+                                          border: `1px solid ${
+                                            selectedInDiv === divDistIds.length
+                                              ? "#BCF0DA"
+                                              : selectedInDiv > 0
+                                              ? "#B4C6FC"
+                                              : "#E5E7EB"
+                                          }`,
+                                          marginLeft: "4px",
+                                          whiteSpace: "nowrap",
+                                        }}
+                                      >
+                                        {`(${selectedInDiv}/${divDistIds.length} Districts)`}
+                                      </span>
+                                    </span>
+                                  </button>
+
+                                  {/* Right side: Sleek, Polished "Select All" Button */}
+                                  <div style={{ flexShrink: 0, marginLeft: "12px" }}>
                                     <button
                                       type="button"
                                       onClick={() =>
                                         handleSelectAllInDivision(divGroup)
                                       }
-                                      className="bg-black text-white px-3 py-1 text-sm rounded transition-all hover:bg-gray-800 font-medium cursor-pointer"
+                                      className="select-all-btn"
                                       style={{
-                                        backgroundColor: "#000000",
-                                        color: "#FFFFFF",
+                                        backgroundColor:
+                                          selectedInDiv === divDistIds.length
+                                            ? "#1F2937"
+                                            : "#FFFFFF",
+                                        color:
+                                          selectedInDiv === divDistIds.length
+                                            ? "#FFFFFF"
+                                            : "#374151",
+                                        border:
+                                          selectedInDiv === divDistIds.length
+                                            ? "1px solid #1F2937"
+                                            : "1px solid #D1D5DB",
                                         padding: "4px 12px",
-                                        fontSize: "13px",
+                                        fontSize: "12px",
                                         borderRadius: "6px",
                                         fontWeight: 500,
-                                        border: "none",
                                         cursor: "pointer",
+                                        boxShadow: "0 1px 2px rgba(0, 0, 0, 0.05)",
                                         transition: "all 0.15s ease-in-out",
                                         whiteSpace: "nowrap",
                                       }}
                                       onMouseEnter={(e) => {
-                                        e.currentTarget.style.backgroundColor = "#1F2937";
+                                        if (selectedInDiv === divDistIds.length) {
+                                          e.currentTarget.style.backgroundColor = "#111827";
+                                        } else {
+                                          e.currentTarget.style.backgroundColor = "#F9FAFB";
+                                          e.currentTarget.style.borderColor = "#9CA3AF";
+                                          e.currentTarget.style.color = "#111827";
+                                        }
                                       }}
                                       onMouseLeave={(e) => {
-                                        e.currentTarget.style.backgroundColor = "#000000";
+                                        if (selectedInDiv === divDistIds.length) {
+                                          e.currentTarget.style.backgroundColor = "#1F2937";
+                                        } else {
+                                          e.currentTarget.style.backgroundColor = "#FFFFFF";
+                                          e.currentTarget.style.borderColor = "#D1D5DB";
+                                          e.currentTarget.style.color = "#374151";
+                                        }
                                       }}
                                     >
                                       {selectedInDiv === divDistIds.length
                                         ? "Deselect All"
                                         : "Select All"}
                                     </button>
-                                  </InlineStack>
+                                  </div>
                                 </InlineStack>
 
                                 <Collapsible open={isOpen} id={divGroup.divisionId}>
@@ -1475,7 +1565,7 @@ export default function ShippingRatesPage() {
                       Active Delivery Charge Rules
                     </Text>
                     <Text as="p" variant="bodySm" tone="subdued">
-                      Configured delivery zones and shipping rules. During Shopify checkout, customer shipping addresses are matched against these zones to calculate real-time delivery charges.
+                      আপনার সেভ করা ডেলিভারি জোন এবং শিপিং রুলসের তালিকা। কাস্টমার যখন শপিফাইতে অর্ডার সাবমিট করবেন, তখন তার ঠিকানার সাথে মিলিয়ে এখান থেকে লাইভ ডেলিভারি চার্জ হিসাব করা হবে।
                     </Text>
                   </BlockStack>
                   <span
