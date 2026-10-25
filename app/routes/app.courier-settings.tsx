@@ -2692,8 +2692,8 @@ export default function CourierSettingsPage() {
                         progress={aiAddressCleaningEnabled ? "complete" : "incomplete"}
                       >
                         {aiAddressCleaningEnabled
-                          ? "● AI ভেরিফিকেশন চালু"
-                          : "○ AI ভেরিফিকেশন বন্ধ"}
+                          ? "●Active"
+                          : "○ Inactive"}
                       </Badge>
                     </InlineStack>
 
@@ -2701,7 +2701,7 @@ export default function CourierSettingsPage() {
                       <Badge tone={aiConfig.isGeminiConfigured ? "success" : "attention"}>
                         {aiConfig.isGeminiConfigured
                           ? "Google Gemini AI মোড"
-                          : "লোকাল কি-ওয়ার্ড মোড"}
+                          : "Local Keyword Mode"}
                       </Badge>
                       <Badge tone="info">
                         {`${aiConfig.addressCacheCount} টি অ্যাড্রেস সেভ করা আছে`}
@@ -2789,7 +2789,7 @@ export default function CourierSettingsPage() {
                       </BlockStack>
 
                       <Button variant="secondary" onClick={handleAddRuleRow}>
-                        + Add Routing Rule
+                        + Create New Rule
                       </Button>
                     </InlineStack>
 
