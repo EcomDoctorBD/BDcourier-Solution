@@ -798,11 +798,7 @@ export default function PricingAndBillingPage() {
   });
 
   return (
-    <Page
-      title="Subscription Plans & Billing"
-      subtitle={`Store: ${shopDomain} • 6-Tier Courier Automation SaaS Plans`}
-      backAction={{ content: "Courier Dashboard", url: "/app" }}
-    >
+    <Page>
       <TitleBar title="Pricing & Billing" />
 
       <Layout>
