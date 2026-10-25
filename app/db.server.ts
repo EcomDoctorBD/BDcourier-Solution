@@ -424,7 +424,7 @@ export async function ensureWebhookSecret(shopDomain, existingSecret) {
  * Automatically checks and rolls over the merchant's 30-day billing cycle.
  * Resets monthlyOrderCount to 0 when 30 days have elapsed.
  */
-export async function ensureBillingCycleCurrent(shopDomain) {
+export async function ensureBillingCycleCurrent(shopDomain: string) {
   if (!shopDomain) return null;
   await connectDB();
   const config = await CourierConfig.findOne({ shopDomain });
