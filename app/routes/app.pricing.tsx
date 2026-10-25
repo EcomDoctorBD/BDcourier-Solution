@@ -984,57 +984,59 @@ export default function PricingAndBillingPage() {
                     textAlign: "left",
                     fontSize: "13px",
                     lineHeight: "1.5",
-                    minWidth: "920px",
                   }}
                 >
                   <thead>
                     <tr
                       style={{
-                        backgroundColor: "#1F2937",
-                        color: "#FFFFFF",
+                        backgroundColor: "#F8FAFC",
+                        borderBottom: "1px solid #E2E8F0",
                       }}
                     >
-                      {comparisonHeadings.map((heading, colIdx) => (
-                        <th
-                          key={heading}
-                          style={{
-                            padding: "14px 16px",
-                            fontWeight: 700,
-                            fontSize: "13px",
-                            letterSpacing: "0.01em",
-                            color: colIdx === 3 ? "#FDE047" : "#FFFFFF",
-                            backgroundColor: colIdx === 3 ? "#111827" : "#1F2937",
-                            borderBottom: "2px solid #374151",
-                            whiteSpace: "nowrap",
-                          }}
-                        >
-                          <span
+                      {comparisonHeadings.map((heading, colIdx) => {
+                        const isFirst = colIdx === 0;
+                        return (
+                          <th
+                            key={heading}
                             style={{
-                              display: "inline-flex",
-                              alignItems: "center",
-                              gap: "6px",
+                              padding: "14px 18px",
+                              fontWeight: 700,
+                              fontSize: "13px",
+                              color: "#1E293B",
+                              borderBottom: "1px solid #E2E8F0",
+                              whiteSpace: "nowrap",
+                              width: isFirst ? "22%" : "13%",
+                              minWidth: isFirst ? "180px" : "115px",
                             }}
                           >
-                            {heading}
-                            {colIdx === 3 && (
-                              <span
-                                style={{
-                                  backgroundColor: "#FEF08A",
-                                  color: "#854D0E",
-                                  fontSize: "10px",
-                                  fontWeight: 800,
-                                  padding: "2px 6px",
-                                  borderRadius: "4px",
-                                  textTransform: "uppercase",
-                                  letterSpacing: "0.05em",
-                                }}
-                              >
-                                Popular
-                              </span>
-                            )}
-                          </span>
-                        </th>
-                      ))}
+                            <span
+                              style={{
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: "6px",
+                              }}
+                            >
+                              {heading}
+                              {colIdx === 3 && (
+                                <span
+                                  style={{
+                                    backgroundColor: "#E0F2FE",
+                                    color: "#0369A1",
+                                    fontSize: "10px",
+                                    fontWeight: 700,
+                                    padding: "2px 7px",
+                                    borderRadius: "10px",
+                                    textTransform: "uppercase",
+                                    letterSpacing: "0.04em",
+                                  }}
+                                >
+                                  Popular
+                                </span>
+                              )}
+                            </span>
+                          </th>
+                        );
+                      })}
                     </tr>
                   </thead>
                   <tbody>
@@ -1052,25 +1054,15 @@ export default function PricingAndBillingPage() {
                         >
                           {row.map((cellText, colIdx) => {
                             const isFirstCol = colIdx === 0;
-                            const isGrowthCol = colIdx === 3;
                             return (
                               <td
                                 key={`${row[0]}-${colIdx}`}
                                 style={{
-                                  padding: "12px 16px",
-                                  fontWeight: isFirstCol ? 600 : isGrowthCol ? 600 : 400,
-                                  color: isFirstCol
-                                    ? "#0F172A"
-                                    : isGrowthCol
-                                    ? "#1E293B"
-                                    : "#334155",
-                                  backgroundColor: isGrowthCol
-                                    ? isEven
-                                      ? "#FEFCE8"
-                                      : "#FEF9C3"
-                                    : undefined,
-                                  whiteSpace: isFirstCol ? "nowrap" : "normal",
+                                  padding: "14px 18px",
+                                  fontWeight: isFirstCol ? 600 : 400,
+                                  color: isFirstCol ? "#0F172A" : "#475569",
                                   verticalAlign: "middle",
+                                  borderBottom: "1px solid #E2E8F0",
                                 }}
                               >
                                 {cellText}
