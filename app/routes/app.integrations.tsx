@@ -292,11 +292,7 @@ export default function IntegrationsPage() {
   };
 
   return (
-    <Page
-      title="Integrations"
-      subtitle="Connect third-party productivity and automated spreadsheet tools."
-      backAction={{ content: "Dashboard", url: "/app" }}
-    >
+    <Page>
       <TitleBar title="Integrations" />
 
       <BlockStack gap="400">
