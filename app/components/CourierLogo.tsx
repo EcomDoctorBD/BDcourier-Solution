@@ -20,13 +20,13 @@ export function CourierLogo({
       name: "Pathao Courier",
       src: "/logos/pathao.png",
       bgColor: "#FFFFFF",
-      padding: "4px",
+      padding: "2px",
     },
     steadfast: {
       name: "Steadfast Courier",
       src: "/logos/steadfast.png",
       bgColor: "#E8FCE8",
-      padding: "3px",
+      padding: "0px",
     },
     redx: {
       name: "REDX Delivery",
@@ -68,7 +68,7 @@ export function CourierLogo({
           style={{
             width: "100%",
             height: "100%",
-            objectFit: "contain",
+            objectFit: courier === "steadfast" ? "cover" : "contain",
             display: "block",
           }}
           loading="lazy"
