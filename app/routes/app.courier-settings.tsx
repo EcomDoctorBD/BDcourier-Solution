@@ -2747,7 +2747,7 @@ export default function CourierSettingsPage() {
                         </Badge>
                       </InlineStack>
                       <Text as="p" variant="bodySm" tone="subdued">
-                        Map Bangladesh&apos;s 8 Divisions and 64 Districts to preferred couriers with fallback protection.
+                        বাংলাদেশের ৮টি বিভাগ এবং ৬৪টি জেলার জন্য আপনার পছন্দের কুরিয়ার সেটআপ করুন।
                       </Text>
                     </BlockStack>
 
@@ -2770,7 +2770,7 @@ export default function CourierSettingsPage() {
                   >
                     <Checkbox
                       label="Enable Automatic Courier Selection & Fraud Protection"
-                      helpText="Incoming orders are evaluated against your fraud threshold and routed to the assigned Division/District courier."
+                      helpText="নতুন অর্ডার আসার সাথে সাথে কাস্টমারের ঠিকানার উপর ভিত্তি করে স্বয়ংক্রিয়ভাবে নির্ধারিত কুরিয়ার সিলেক্ট হবে এবং ফ্রড (প্রতারণা) ফিল্টারিং চেক হবে।"
                       checked={isAutoRoutingEnabled}
                       onChange={(newChecked) => setIsAutoRoutingEnabled(newChecked)}
                     />
@@ -2784,7 +2784,7 @@ export default function CourierSettingsPage() {
                           Custom Division &amp; District Rules ({customRoutes.length})
                         </Text>
                         <Text as="p" variant="bodySm" tone="subdued">
-                          Evaluated top to bottom. Specific district rules override division-wide rules.
+                          এই নিয়মগুলো উপর থেকে নিচে ক্রমানুসারে কাজ করবে। নির্দিষ্ট কোনো জেলার নিয়ম তার পুরো বিভাগের নিয়মের চেয়ে বেশি অগ্রাধিকার পাবে।
                         </Text>
                       </BlockStack>
 
@@ -2906,7 +2906,7 @@ export default function CourierSettingsPage() {
                         options={COURIER_OPTIONS}
                         value={insideDhakaCourier}
                         onChange={(val) => setInsideDhakaCourier(val)}
-                        helpText="Primary courier assigned for orders inside Dhaka city."
+                        helpText="ঢাকা সিটির ভেতরের সমস্ত অর্ডারের জন্য প্রধান কুরিয়ার।"
                       />
                     </Grid.Cell>
 
@@ -2916,7 +2916,7 @@ export default function CourierSettingsPage() {
                         options={COURIER_OPTIONS}
                         value={outsideDhakaCourier}
                         onChange={(val) => setOutsideDhakaCourier(val)}
-                        helpText="Primary courier assigned for orders outside Dhaka."
+                        helpText="ঢাকা সিটির বাইরের সমস্ত অর্ডারের জন্য প্রধান কুরিয়ার।"
                       />
                     </Grid.Cell>
 
@@ -2926,7 +2926,7 @@ export default function CourierSettingsPage() {
                         options={COURIER_OPTIONS}
                         value={defaultCourier}
                         onChange={(val) => setDefaultCourier(val)}
-                        helpText="Fallback when no specific regional rule matches."
+                        helpText="উপরে কোনো কাস্টম বা আঞ্চলিক নিয়ম ম্যাচ না করলে এই ব্যাকআপ কুরিয়ারটি ব্যবহার করা হবে।"
                       />
                     </Grid.Cell>
                   </Grid>
@@ -2940,7 +2940,7 @@ export default function CourierSettingsPage() {
                         value={minSuccessRate}
                         onChange={(val) => setMinSuccessRate(val)}
                         autoComplete="off"
-                        helpText="Orders from customers with a historical delivery success rate below this threshold are locked for manual verification before sending to courier."
+                        helpText="যেসব কাস্টমারের আগের পার্সেল ডেলিভারির সফলতার হার (Success Rate) এই পার্সেন্টেজের চেয়ে কম, কুরিয়ারে লস এড়াতে তাদের অর্ডারগুলো স্বয়ংক্রিয়ভাবে লক হয়ে যাবে যাতে আপনি ম্যানুয়ালি চেক করতে পারেন।"
                       />
                     </Grid.Cell>
                   </Grid>
