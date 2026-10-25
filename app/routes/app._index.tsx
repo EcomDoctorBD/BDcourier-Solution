@@ -8,8 +8,6 @@ import {
 import {
   useLoaderData,
   useActionData,
-  useSubmit,
-  useNavigation,
   Link,
   useSearchParams,
   useNavigate,
@@ -26,15 +24,11 @@ import {
   Grid,
   Icon,
   Button,
-  Form,
-  FormLayout,
-  TextField,
   InlineStack,
   Divider,
   Box,
   Banner,
   ProgressBar,
-  Select,
 } from "@shopify/polaris";
 
 import { authenticate } from "../shopify.server";
@@ -431,110 +425,19 @@ export default function CourierDashboard() {
   const { shopDomain, subscription, aiConfig, allPlans, courierConfig } =
     useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
-  const submit = useSubmit();
-  const navigation = useNavigation();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
 
   // Search string to preserve shop and host across in-app links
   const searchStr = searchParams.toString() ? `?${searchParams.toString()}` : "";
 
-  // Courier Forms Visibility States
-  const [showPathaoForm, setShowPathaoForm] = useState(false);
-  const [showSteadfastForm, setShowSteadfastForm] = useState(false);
-  const [showRedxForm, setShowRedxForm] = useState(false);
-
-  // Pathao Input States
-  const [pathaoEnvironment, setPathaoEnvironment] = useState(
-    courierConfig.pathaoEnvironment || "production"
-  );
-  const [pathaoClientId, setPathaoClientId] = useState(
-    courierConfig.pathaoClientId
-  );
-  const [pathaoSecret, setPathaoSecret] = useState(courierConfig.pathaoSecret);
-  const [pathaoUsername, setPathaoUsername] = useState(
-    courierConfig.pathaoUsername || ""
-  );
-  const [pathaoPassword, setPathaoPassword] = useState(
-    courierConfig.pathaoPassword || ""
-  );
-  const [pathaoStoreId, setPathaoStoreId] = useState(
-    courierConfig.pathaoStoreId
-  );
-  const [showPathaoSecret, setShowPathaoSecret] = useState(false);
-  const [showPathaoPassword, setShowPathaoPassword] = useState(false);
-
-  // Steadfast Input States
-  const [steadfastApiKey, setSteadfastApiKey] = useState(
-    courierConfig.steadfastApiKey
-  );
-  const [steadfastSecretKey, setSteadfastSecretKey] = useState(
-    courierConfig.steadfastSecretKey
-  );
-  const [showSteadfastSecret, setShowSteadfastSecret] = useState(false);
-
-  // RedX Input States
-  const [redxEnvironment, setRedxEnvironment] = useState(
-    courierConfig.redxEnvironment || "production"
-  );
-  const [redxAccessToken, setRedxAccessToken] = useState(
-    courierConfig.redxAccessToken || ""
-  );
-  const [redxPickupStoreId, setRedxPickupStoreId] = useState(
-    courierConfig.redxPickupStoreId || courierConfig.redxLocationId || ""
-  );
-  const [redxProfileId, setRedxProfileId] = useState(
-    courierConfig.redxProfileId
-  );
-  const [redxLocationId, setRedxLocationId] = useState(
-    courierConfig.redxLocationId || courierConfig.redxPickupStoreId || ""
-  );
-  const [showRedxToken, setShowRedxToken] = useState(false);
-
   // Feedback Banner
   const [showBanner, setShowBanner] = useState(false);
-
-  // Sync inputs when loader data changes
-  useEffect(() => {
-    setPathaoEnvironment(courierConfig.pathaoEnvironment || "production");
-    setPathaoClientId(courierConfig.pathaoClientId);
-    setPathaoSecret(courierConfig.pathaoSecret);
-    setPathaoUsername(courierConfig.pathaoUsername || "");
-    setPathaoPassword(courierConfig.pathaoPassword || "");
-    setPathaoStoreId(courierConfig.pathaoStoreId);
-
-    setSteadfastApiKey(courierConfig.steadfastApiKey);
-    setSteadfastSecretKey(courierConfig.steadfastSecretKey);
-
-    setRedxEnvironment(courierConfig.redxEnvironment || "production");
-    setRedxAccessToken(courierConfig.redxAccessToken || "");
-    setRedxPickupStoreId(courierConfig.redxPickupStoreId || courierConfig.redxLocationId || "");
-    setRedxProfileId(courierConfig.redxProfileId);
-    setRedxLocationId(courierConfig.redxLocationId || courierConfig.redxPickupStoreId || "");
-  }, [
-    courierConfig.pathaoEnvironment,
-    courierConfig.pathaoClientId,
-    courierConfig.pathaoSecret,
-    courierConfig.pathaoUsername,
-    courierConfig.pathaoPassword,
-    courierConfig.pathaoStoreId,
-    courierConfig.steadfastApiKey,
-    courierConfig.steadfastSecretKey,
-    courierConfig.redxEnvironment,
-    courierConfig.redxAccessToken,
-    courierConfig.redxPickupStoreId,
-    courierConfig.redxProfileId,
-    courierConfig.redxLocationId,
-  ]);
 
   useEffect(() => {
     if (actionData?.message) {
       setShowBanner(true);
-      if (actionData.success) {
-        if (actionData.actionType === "savePathao") setShowPathaoForm(false);
-        if (actionData.actionType === "saveSteadfast") setShowSteadfastForm(false);
-        if (actionData.actionType === "saveRedX") setShowRedxForm(false);
-      } else if ((actionData as any)?.redirectToBilling) {
+      if (!actionData.success && (actionData as any)?.redirectToBilling) {
         navigate(`/app/pricing${searchStr}`);
       }
     }
@@ -580,49 +483,6 @@ export default function CourierDashboard() {
     isCarrybeeConnected,
     isBahokConnected,
   ].filter(Boolean).length;
-
-  const pendingActionType = navigation.formData?.get("actionType");
-  const pendingTargetPlan = navigation.formData?.get("targetPlan");
-
-  const isSubmittingPathao =
-    navigation.state === "submitting" && pendingActionType === "savePathao";
-  const isSubmittingSteadfast =
-    navigation.state === "submitting" && pendingActionType === "saveSteadfast";
-  const isSubmittingRedx =
-    navigation.state === "submitting" && pendingActionType === "saveRedX";
-  const isSwitchingPlan =
-    navigation.state === "submitting" && pendingActionType === "switchPlan";
-
-  const handleSavePathao = () => {
-    const formData = new FormData();
-    formData.append("actionType", "savePathao");
-    formData.append("pathaoEnvironment", pathaoEnvironment);
-    formData.append("pathaoClientId", pathaoClientId);
-    formData.append("pathaoSecret", pathaoSecret);
-    formData.append("pathaoUsername", pathaoUsername);
-    formData.append("pathaoPassword", pathaoPassword);
-    formData.append("pathaoStoreId", pathaoStoreId);
-    submit(formData, { method: "post" });
-  };
-
-  const handleSaveSteadfast = () => {
-    const formData = new FormData();
-    formData.append("actionType", "saveSteadfast");
-    formData.append("steadfastApiKey", steadfastApiKey);
-    formData.append("steadfastSecretKey", steadfastSecretKey);
-    submit(formData, { method: "post" });
-  };
-
-  const handleSaveRedX = () => {
-    const formData = new FormData();
-    formData.append("actionType", "saveRedX");
-    formData.append("redxEnvironment", redxEnvironment);
-    formData.append("redxAccessToken", redxAccessToken);
-    formData.append("redxPickupStoreId", redxPickupStoreId);
-    formData.append("redxProfileId", redxProfileId || redxPickupStoreId);
-    formData.append("redxLocationId", redxPickupStoreId);
-    submit(formData, { method: "post" });
-  };
 
   return (
     <Page
@@ -856,7 +716,7 @@ export default function CourierDashboard() {
                       ⚙️ Courier Settings
                     </Text>
                     <Text as="p" variant="bodySm" tone="subdued">
-                      Configure Pathao, Steadfast, and REDX API credentials and automatic courier selection.
+                      Configure API credentials and automatic courier selection for all 5 courier partners.
                     </Text>
                     <Link to={`/app/courier-settings${searchStr}`}>
                       <Button variant="plain">Configure Routing →</Button>
@@ -975,104 +835,12 @@ export default function CourierDashboard() {
 
                     <InlineStack align="end">
                       <Button
-                        variant={
-                          showPathaoForm
-                            ? "tertiary"
-                            : isPathaoConnected
-                            ? "secondary"
-                            : "primary"
-                        }
-                        onClick={() => setShowPathaoForm((prev) => !prev)}
+                        url={`/app/courier-settings${searchStr}`}
+                        variant={isPathaoConnected ? "secondary" : "primary"}
                       >
-                        {showPathaoForm
-                          ? "Cancel"
-                          : isPathaoConnected
-                          ? "Update Pathao"
-                          : "Configure Pathao"}
+                        {isPathaoConnected ? "Update Pathao" : "Configure Pathao"}
                       </Button>
                     </InlineStack>
-
-                    {showPathaoForm && (
-                      <>
-                        <Divider />
-                        <Form onSubmit={handleSavePathao}>
-                          <FormLayout>
-                            <Select
-                              label="API Environment"
-                              options={[
-                                { label: "Production (Hermes Live)", value: "production" },
-                                { label: "Sandbox / Test API", value: "sandbox" },
-                              ]}
-                              value={pathaoEnvironment}
-                              onChange={(val) => setPathaoEnvironment(val)}
-                            />
-                            <TextField
-                              label="Client ID"
-                              value={pathaoClientId}
-                              onChange={(val) => setPathaoClientId(val)}
-                              placeholder="Enter Pathao Client ID..."
-                              autoComplete="off"
-                            />
-                            <TextField
-                              label="Client Secret"
-                              type={showPathaoSecret ? "text" : "password"}
-                              value={pathaoSecret}
-                              onChange={(val) => setPathaoSecret(val)}
-                              placeholder="Enter Pathao Client Secret..."
-                              autoComplete="off"
-                              connectedRight={
-                                <Button
-                                  variant="plain"
-                                  onClick={() => setShowPathaoSecret((prev) => !prev)}
-                                >
-                                  {showPathaoSecret ? "Hide" : "Show"}
-                                </Button>
-                              }
-                            />
-                            <TextField
-                              label="Merchant Username (Email)"
-                              value={pathaoUsername}
-                              onChange={(val) => setPathaoUsername(val)}
-                              placeholder="merchant@example.com"
-                              autoComplete="off"
-                            />
-                            <TextField
-                              label="Merchant Password"
-                              type={showPathaoPassword ? "text" : "password"}
-                              value={pathaoPassword}
-                              onChange={(val) => setPathaoPassword(val)}
-                              placeholder="••••••••••••••••"
-                              autoComplete="off"
-                              connectedRight={
-                                <Button
-                                  variant="plain"
-                                  onClick={() => setShowPathaoPassword((prev) => !prev)}
-                                >
-                                  {showPathaoPassword ? "Hide" : "Show"}
-                                </Button>
-                              }
-                            />
-                            <TextField
-                              label="Store ID"
-                              value={pathaoStoreId}
-                              onChange={(val) => setPathaoStoreId(val)}
-                              placeholder="Enter Pathao Store ID..."
-                              autoComplete="off"
-                              helpText="For store lookup dropdown, visit Courier Settings page."
-                            />
-                            <InlineStack align="end">
-                              <Button
-                                submit
-                                variant="primary"
-                                loading={isSubmittingPathao}
-                              >
-                                Save Credentials
-                              </Button>
-                            </InlineStack>
-                          </FormLayout>
-                        </Form>
-                      </>
-                    )}
                   </BlockStack>
                 </Card>
               </Grid.Cell>
@@ -1114,64 +882,12 @@ export default function CourierDashboard() {
 
                     <InlineStack align="end">
                       <Button
-                        variant={
-                          showSteadfastForm
-                            ? "tertiary"
-                            : isSteadfastConnected
-                            ? "secondary"
-                            : "primary"
-                        }
-                        onClick={() => setShowSteadfastForm((prev) => !prev)}
+                        url={`/app/courier-settings${searchStr}`}
+                        variant={isSteadfastConnected ? "secondary" : "primary"}
                       >
-                        {showSteadfastForm
-                          ? "Cancel"
-                          : isSteadfastConnected
-                          ? "Update Steadfast"
-                          : "Configure Steadfast"}
+                        {isSteadfastConnected ? "Update Steadfast" : "Configure Steadfast"}
                       </Button>
                     </InlineStack>
-
-                    {showSteadfastForm && (
-                      <>
-                        <Divider />
-                        <Form onSubmit={handleSaveSteadfast}>
-                          <FormLayout>
-                            <TextField
-                              label="API Key"
-                              value={steadfastApiKey}
-                              onChange={(val) => setSteadfastApiKey(val)}
-                              placeholder="Enter Steadfast API Key..."
-                              autoComplete="off"
-                            />
-                            <TextField
-                              label="Secret Key"
-                              type={showSteadfastSecret ? "text" : "password"}
-                              value={steadfastSecretKey}
-                              onChange={(val) => setSteadfastSecretKey(val)}
-                              placeholder="Enter Steadfast Secret Key..."
-                              autoComplete="off"
-                              connectedRight={
-                                <Button
-                                  variant="plain"
-                                  onClick={() => setShowSteadfastSecret((prev) => !prev)}
-                                >
-                                  {showSteadfastSecret ? "Hide" : "Show"}
-                                </Button>
-                              }
-                            />
-                            <InlineStack align="end">
-                              <Button
-                                submit
-                                variant="primary"
-                                loading={isSubmittingSteadfast}
-                              >
-                                Save Credentials
-                              </Button>
-                            </InlineStack>
-                          </FormLayout>
-                        </Form>
-                      </>
-                    )}
                   </BlockStack>
                 </Card>
               </Grid.Cell>
@@ -1211,74 +927,12 @@ export default function CourierDashboard() {
 
                     <InlineStack align="end">
                       <Button
-                        variant={
-                          showRedxForm
-                            ? "tertiary"
-                            : isRedxConnected
-                            ? "secondary"
-                            : "primary"
-                        }
-                        onClick={() => setShowRedxForm((prev) => !prev)}
+                        url={`/app/courier-settings${searchStr}`}
+                        variant={isRedxConnected ? "secondary" : "primary"}
                       >
-                        {showRedxForm
-                          ? "Cancel"
-                          : isRedxConnected
-                          ? "Update RedX"
-                          : "Configure RedX"}
+                        {isRedxConnected ? "Update RedX" : "Configure RedX"}
                       </Button>
                     </InlineStack>
-
-                    {showRedxForm && (
-                      <>
-                        <Divider />
-                        <Form onSubmit={handleSaveRedX}>
-                          <FormLayout>
-                            <Select
-                              label="API Environment"
-                              options={[
-                                { label: "Production (OpenAPI Live)", value: "production" },
-                                { label: "Sandbox / Test API", value: "sandbox" },
-                              ]}
-                              value={redxEnvironment}
-                              onChange={(val) => setRedxEnvironment(val)}
-                            />
-                            <TextField
-                              label="API Access Token"
-                              type={showRedxToken ? "text" : "password"}
-                              value={redxAccessToken}
-                              onChange={(val) => setRedxAccessToken(val)}
-                              placeholder="Enter REDX API Access Token..."
-                              autoComplete="off"
-                              connectedRight={
-                                <Button
-                                  variant="plain"
-                                  onClick={() => setShowRedxToken((prev) => !prev)}
-                                >
-                                  {showRedxToken ? "Hide" : "Show"}
-                                </Button>
-                              }
-                            />
-                            <TextField
-                              label="Pickup Store ID"
-                              value={redxPickupStoreId}
-                              onChange={(val) => setRedxPickupStoreId(val)}
-                              placeholder="Enter RedX Pickup Store ID..."
-                              autoComplete="off"
-                              helpText="For pickup store auto-fetch, visit Courier Settings page."
-                            />
-                            <InlineStack align="end">
-                              <Button
-                                submit
-                                variant="primary"
-                                loading={isSubmittingRedx}
-                              >
-                                Save Credentials
-                              </Button>
-                            </InlineStack>
-                          </FormLayout>
-                        </Form>
-                      </>
-                    )}
                   </BlockStack>
                 </Card>
               </Grid.Cell>
