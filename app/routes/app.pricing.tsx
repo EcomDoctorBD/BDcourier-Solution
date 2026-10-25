@@ -719,9 +719,7 @@ export default function PricingAndBillingPage() {
   const submit = useSubmit();
   const navigation = useNavigation();
 
-  const [selectedInterval, setSelectedInterval] = useState<BillingInterval>(
-    (subscription.activeInterval as BillingInterval) || "monthly"
-  );
+  const [interval, setInterval] = useState<"monthly" | "6months" | "yearly">("monthly");
   const [showBanner, setShowBanner] = useState(false);
   const [limitAlertDismissed, setLimitAlertDismissed] = useState(false);
 
@@ -745,7 +743,7 @@ export default function PricingAndBillingPage() {
   const handleSelectPlan = (planId: PlanTierId) => {
     const formData = new FormData();
     formData.append("planId", planId);
-    formData.append("interval", selectedInterval);
+    formData.append("interval", interval);
     submit(formData, { method: "post" });
   };
 
@@ -753,7 +751,7 @@ export default function PricingAndBillingPage() {
     "Feature / Capability",
     ...tiers.map(
       (t) =>
-        `${t.name} ($${t.pricing[selectedInterval].monthlyRate.toFixed(2)}/mo)`
+        `${t.name} ($${t.pricing[interval].monthlyRate.toFixed(2)}/mo)`
     ),
   ];
 
@@ -761,12 +759,12 @@ export default function PricingAndBillingPage() {
     [
       "Monthly Rate",
       ...tiers.map(
-        (t) => `$${t.pricing[selectedInterval].monthlyRate.toFixed(2)} / mo`
+        (t) => `$${t.pricing[interval].monthlyRate.toFixed(2)} / mo`
       ),
     ],
     [
       "Billing Terms",
-      ...tiers.map((t) => t.pricing[selectedInterval].text),
+      ...tiers.map((t) => t.pricing[interval].text),
     ],
     [
       "Order Limit",
@@ -988,71 +986,66 @@ export default function PricingAndBillingPage() {
               </Text>
             </BlockStack>
 
-            {/* 3-Interval Tier Switcher */}
+            {/* Centralized Floating Capsule Segmented Controller */}
             <div
+              className="flex justify-center mb-6"
               style={{
                 display: "flex",
                 justifyContent: "center",
-                margin: "12px 0 20px 0",
+                margin: "16px 0 28px 0",
               }}
             >
               <div
+                className="inline-flex p-1.5 bg-slate-100 rounded-full border border-slate-200 shadow-sm gap-1"
                 style={{
                   display: "inline-flex",
+                  alignItems: "center",
                   backgroundColor: "#F1F5F9",
                   padding: "5px",
-                  borderRadius: "12px",
+                  borderRadius: "9999px",
                   border: "1px solid #E2E8F0",
-                  gap: "6px",
-                  boxShadow: "0 1px 3px rgba(0,0,0,0.04)",
+                  boxShadow: "0 1px 3px rgba(0, 0, 0, 0.05)",
+                  gap: "4px",
                 }}
               >
                 {[
-                  { id: "monthly", label: "Monthly Billing" },
-                  { id: "6months", label: "6 Months Upfront", discount: "Save ~10%" },
-                  { id: "yearly", label: "Annual (12 Months)", discount: "Save ~18%" },
+                  { id: "monthly", label: "Monthly" },
+                  { id: "6months", label: "6 Months (Save 10%)" },
+                  { id: "yearly", label: "Annually (Save 18%)" },
                 ].map((tab) => {
-                  const isSelected = selectedInterval === tab.id;
+                  const isSelected = interval === tab.id;
                   return (
                     <button
                       key={tab.id}
                       type="button"
                       onClick={() =>
-                        setSelectedInterval(tab.id as BillingInterval)
+                        setInterval(tab.id as "monthly" | "6months" | "yearly")
                       }
+                      className={`flex items-center gap-1.5 px-5 py-2 rounded-full text-xs font-semibold transition-all duration-150 ${
+                        isSelected
+                          ? "bg-white text-slate-900 shadow-sm font-bold"
+                          : "text-slate-600 hover:text-slate-900"
+                      }`}
                       style={{
                         display: "inline-flex",
                         alignItems: "center",
-                        gap: "8px",
-                        padding: "8px 18px",
-                        borderRadius: "8px",
+                        gap: "6px",
+                        padding: "8px 20px",
+                        borderRadius: "9999px",
                         fontSize: "13px",
                         fontWeight: isSelected ? 700 : 500,
                         border: "none",
                         backgroundColor: isSelected ? "#FFFFFF" : "transparent",
                         color: isSelected ? "#0F172A" : "#64748B",
                         boxShadow: isSelected
-                          ? "0 2px 4px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04)"
+                          ? "0 2px 4px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04)"
                           : "none",
                         cursor: "pointer",
                         transition: "all 0.15s ease",
+                        outline: "none",
                       }}
                     >
                       <span>{tab.label}</span>
-                      {tab.discount && (
-                        <span
-                          style={{
-                            backgroundColor: isSelected ? "#DCFCE7" : "#E2E8F0",
-                            color: isSelected ? "#15803D" : "#475569",
-                            fontSize: "11px",
-                            fontWeight: 700,
-                            padding: "2px 7px",
-                            borderRadius: "10px",
-                          }}
-                        >
-                          {tab.discount}
-                        </span>
-                      )}
                     </button>
                   );
                 })}
@@ -1070,110 +1063,171 @@ export default function PricingAndBillingPage() {
                   submittingPlanId === tier.id;
 
                 const currentIntervalPricing =
-                  tier.pricing[selectedInterval] || tier.pricing.monthly;
+                  tier.pricing[interval] || tier.pricing.monthly;
 
                 return (
                   <Grid.Cell key={tier.id}>
-                    <Card
-                      padding="500"
-                      background={
-                        isCurrentPlan
-                          ? "bg-surface-secondary"
-                          : isGrowthOrPopular
-                          ? undefined
-                          : undefined
-                      }
+                    <div
+                      style={{
+                        position: "relative",
+                        height: "100%",
+                        overflow: "hidden",
+                        borderRadius: "12px",
+                      }}
                     >
-                      <BlockStack gap="400">
-                        {/* Tier Header & Clean Badges */}
-                        <BlockStack gap="200">
-                          <InlineStack
-                            align="space-between"
-                            blockAlign="center"
-                            wrap
-                          >
-                            <Text as="h3" variant="headingMd" fontWeight="bold">
-                              {tier.name}
-                            </Text>
-                            {isCurrentPlan ? (
-                              <span
-                                style={{
-                                  backgroundColor: "#BDF5D6",
-                                  color: "#065F46",
-                                  fontSize: "12px",
-                                  fontWeight: 600,
-                                  padding: "3px 10px",
-                                  borderRadius: "12px",
-                                  lineHeight: "1.2",
-                                  display: "inline-block",
-                                }}
-                              >
-                                Active
-                              </span>
-                            ) : isGrowthOrPopular ? (
-                              <span
-                                style={{
-                                  backgroundColor: "#FEF08A",
-                                  color: "#713F12",
-                                  fontSize: "12px",
-                                  fontWeight: 600,
-                                  padding: "3px 10px",
-                                  borderRadius: "12px",
-                                  lineHeight: "1.2",
-                                  display: "inline-block",
-                                }}
-                              >
-                                Popular
-                              </span>
-                            ) : null}
-                          </InlineStack>
+                      {/* Top-Right Ribbon: for non-free plans when active toggle is not monthly */}
+                      {tier.id !== "Free" && interval !== "monthly" && (
+                        <div
+                          style={{
+                            position: "absolute",
+                            top: "14px",
+                            right: "-32px",
+                            transform: "rotate(45deg)",
+                            backgroundColor: "#16A34A",
+                            color: "#FFFFFF",
+                            fontSize: "10px",
+                            fontWeight: 800,
+                            letterSpacing: "0.06em",
+                            padding: "4px 34px",
+                            textAlign: "center",
+                            boxShadow: "0 2px 4px rgba(0, 0, 0, 0.15)",
+                            textTransform: "uppercase",
+                            zIndex: 10,
+                            pointerEvents: "none",
+                          }}
+                        >
+                          {interval === "6months" ? "10% Save" : "18% Save"}
+                        </div>
+                      )}
 
-                          <InlineStack gap="100" blockAlign="baseline">
-                            <Text
-                              as="span"
-                              variant="headingXl"
-                              fontWeight="bold"
+                      <Card
+                        padding="500"
+                        background={
+                          isCurrentPlan
+                            ? "bg-surface-secondary"
+                            : isGrowthOrPopular
+                            ? undefined
+                            : undefined
+                        }
+                      >
+                        <BlockStack gap="400">
+                          {/* Tier Header & Clean Badges */}
+                          <BlockStack gap="200">
+                            <InlineStack
+                              align="space-between"
+                              blockAlign="center"
+                              wrap
                             >
-                              {currentIntervalPricing.monthlyRate > 0
-                                ? `$${currentIntervalPricing.monthlyRate.toFixed(2)}`
-                                : "$0.00"}
-                            </Text>
-                            <Text as="span" variant="bodySm" tone="subdued">
-                              /month
-                            </Text>
-                          </InlineStack>
+                              <Text as="h3" variant="headingMd" fontWeight="bold">
+                                {tier.name}
+                              </Text>
+                              {isCurrentPlan ? (
+                                <span
+                                  style={{
+                                    backgroundColor: "#BDF5D6",
+                                    color: "#065F46",
+                                    fontSize: "12px",
+                                    fontWeight: 600,
+                                    padding: "3px 10px",
+                                    borderRadius: "12px",
+                                    lineHeight: "1.2",
+                                    display: "inline-block",
+                                  }}
+                                >
+                                  Active
+                                </span>
+                              ) : isGrowthOrPopular ? (
+                                <span
+                                  style={{
+                                    backgroundColor: "#FEF08A",
+                                    color: "#713F12",
+                                    fontSize: "12px",
+                                    fontWeight: 600,
+                                    padding: "3px 10px",
+                                    borderRadius: "12px",
+                                    lineHeight: "1.2",
+                                    display: "inline-block",
+                                  }}
+                                >
+                                  Popular
+                                </span>
+                              ) : null}
+                            </InlineStack>
 
-                          <Text as="p" variant="bodyXs" tone="subdued">
-                            {currentIntervalPricing.text}
-                          </Text>
-
-                          {/* Uniform Sky-Blue Order Limit Bar */}
-                          <div
-                            style={{
-                              width: "100%",
-                              backgroundColor: "#E0F2FE",
-                              borderRadius: "6px",
-                              padding: "6px 12px",
-                              boxSizing: "border-box",
-                              display: "flex",
-                              alignItems: "center",
-                              justifyContent: "center",
-                            }}
-                          >
-                            <span
+                            {/* Large Target Font: prominent rate formatted as $X.XX /month */}
+                            <div
                               style={{
-                                color: "#0369A1",
-                                fontWeight: 700,
-                                fontSize: "13px",
-                                lineHeight: "1.2",
+                                display: "flex",
+                                alignItems: "baseline",
+                                gap: "6px",
+                                marginTop: "2px",
                               }}
                             >
-                              {tier.orderLimit
-                                ? `${tier.orderLimit.toLocaleString()} orders/month`
-                                : tier.orderLimitDisplay}
-                            </span>
-                          </div>
-                        </BlockStack>
+                              <span
+                                style={{
+                                  fontSize: "30px",
+                                  fontWeight: 800,
+                                  letterSpacing: "-0.02em",
+                                  color: "#0F172A",
+                                  lineHeight: "1.1",
+                                }}
+                              >
+                                {currentIntervalPricing.monthlyRate > 0
+                                  ? `$${currentIntervalPricing.monthlyRate.toFixed(2)}`
+                                  : "$0.00"}
+                              </span>
+                              <span
+                                style={{
+                                  fontSize: "14px",
+                                  fontWeight: 500,
+                                  color: "#64748B",
+                                }}
+                              >
+                                /month
+                              </span>
+                            </div>
+
+                            {/* Grey Sub-Label: dynamically declared billed sums */}
+                            <p
+                              style={{
+                                fontSize: "12px",
+                                color: "#64748B",
+                                margin: "2px 0 0 0",
+                                fontWeight: 500,
+                                lineHeight: "1.3",
+                              }}
+                            >
+                              {currentIntervalPricing.text}
+                            </p>
+
+                            {/* Uniform Sky-Blue Order Limit Bar */}
+                            <div
+                              style={{
+                                width: "100%",
+                                backgroundColor: "#E0F2FE",
+                                borderRadius: "6px",
+                                padding: "6px 12px",
+                                boxSizing: "border-box",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                marginTop: "6px",
+                              }}
+                            >
+                              <span
+                                style={{
+                                  color: "#0369A1",
+                                  fontWeight: 700,
+                                  fontSize: "13px",
+                                  lineHeight: "1.2",
+                                }}
+                              >
+                                {tier.orderLimit
+                                  ? `${tier.orderLimit.toLocaleString()} orders/month`
+                                  : tier.orderLimitDisplay}
+                              </span>
+                            </div>
+                          </BlockStack>
 
                         <Divider />
 
@@ -1287,7 +1341,8 @@ export default function PricingAndBillingPage() {
                         </Box>
                       </BlockStack>
                     </Card>
-                  </Grid.Cell>
+                  </div>
+                </Grid.Cell>
                 );
               })}
             </Grid>
