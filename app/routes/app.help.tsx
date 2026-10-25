@@ -333,14 +333,9 @@ export default function HelpAndSupportRoute() {
 
                       <Divider />
 
-                      <InlineStack align="space-between" blockAlign="center">
-                        <Text as="span" variant="bodyXs" tone="subdued">
-                          Standard Response Time: Within 24 business hours
-                        </Text>
-                        <Text as="span" variant="bodyXs" tone="subdued">
-                          Sunday - Thursday, 9:00 AM - 6:00 PM (BST)
-                        </Text>
-                      </InlineStack>
+                      <Text as="p" variant="bodyXs" tone="subdued">
+                        Standard Response Time: Within 24 business hours
+                      </Text>
                     </BlockStack>
                   </Box>
 
@@ -348,16 +343,68 @@ export default function HelpAndSupportRoute() {
 
                   {/* Upgrade Callout for Priority WhatsApp */}
                   <Banner tone="info">
-                    <InlineStack align="space-between" blockAlign="center" wrap>
-                      <Text as="p" variant="bodySm">
-                        <strong>Want 24/7 instant WhatsApp Helpline access?</strong>{" "}
-                        Upgrade to our Unlimited / Pro plans for dedicated priority
-                        logistics support.
-                      </Text>
-                      <Link to={`/app/pricing${searchStr}`}>
-                        <Button size="slim">View Plans</Button>
-                      </Link>
-                    </InlineStack>
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        gap: "16px",
+                        width: "100%",
+                        flexWrap: "wrap",
+                      }}
+                    >
+                      <div style={{ flex: "1 1 300px" }}>
+                        <Text as="p" variant="bodySm">
+                          <strong>Want 24/7 instant WhatsApp Helpline access?</strong>{" "}
+                          Upgrade to our Unlimited / Pro plans for dedicated priority
+                          logistics support.
+                        </Text>
+                      </div>
+                      <div
+                        style={{
+                          marginLeft: "auto",
+                          display: "flex",
+                          alignItems: "center",
+                          flexShrink: 0,
+                        }}
+                      >
+                        <Link
+                          to={`/app/pricing${searchStr}`}
+                          style={{ textDecoration: "none" }}
+                        >
+                          <button
+                            type="button"
+                            style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              backgroundColor: "#202223",
+                              color: "#FFFFFF",
+                              border: "1px solid #202223",
+                              borderRadius: "8px",
+                              padding: "7px 16px",
+                              fontSize: "13px",
+                              fontWeight: 600,
+                              cursor: "pointer",
+                              boxShadow: "0 1px 3px rgba(0, 0, 0, 0.12)",
+                              transition: "all 0.15s ease-in-out",
+                              whiteSpace: "nowrap",
+                              lineHeight: "1.4",
+                            }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.backgroundColor = "#303030";
+                              e.currentTarget.style.borderColor = "#303030";
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.backgroundColor = "#202223";
+                              e.currentTarget.style.borderColor = "#202223";
+                            }}
+                          >
+                            View Plans
+                          </button>
+                        </Link>
+                      </div>
+                    </div>
                   </Banner>
                 </BlockStack>
               </Card>
