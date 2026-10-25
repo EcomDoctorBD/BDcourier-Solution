@@ -749,15 +749,12 @@ export default function PricingAndBillingPage() {
 
   const comparisonHeadings = [
     "Feature / Capability",
-    ...tiers.map(
-      (t) =>
-        `${t.name} ($${t.pricing[interval].monthlyRate.toFixed(2)}/mo)`
-    ),
+    ...tiers.map((t) => t.id),
   ];
 
   const comparisonMatrixRows = [
     [
-      "Monthly Rate",
+      "Monthly Price",
       ...tiers.map(
         (t) => `$${t.pricing[interval].monthlyRate.toFixed(2)} / mo`
       ),
