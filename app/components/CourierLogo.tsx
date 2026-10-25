@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 
 export interface CourierLogoProps {
-  courier: "pathao" | "steadfast" | "redx";
+  courier: "pathao" | "steadfast" | "redx" | "carrybee" | "bahok" | string;
   size?: number;
   className?: string;
   style?: React.CSSProperties;
@@ -15,7 +15,12 @@ export function CourierLogo({
 }: CourierLogoProps) {
   const [imgError, setImgError] = useState(false);
 
-  const config = {
+  const normalizedCourier = (courier || "").toLowerCase().trim();
+
+  const configMap: Record<
+    string,
+    { name: string; src: string; bgColor: string; padding: string }
+  > = {
     pathao: {
       name: "Pathao Courier",
       src: "/logos/pathao.png",
@@ -34,7 +39,31 @@ export function CourierLogo({
       bgColor: "#FFFFFF",
       padding: "5px",
     },
-  }[courier];
+    carrybee: {
+      name: "CarryBee",
+      src: "/logos/carrybee.png",
+      bgColor: "#000000",
+      padding: "0px",
+    },
+    bahok: {
+      name: "Bahok Courier",
+      src: "/logos/bahok.png",
+      bgColor: "#FFFFFF",
+      padding: "0px",
+    },
+  };
+
+  const config = configMap[normalizedCourier] || {
+    name: "Courier Partner",
+    src: "/logos/steadfast.png",
+    bgColor: "#FFFFFF",
+    padding: "2px",
+  };
+
+  const isCover =
+    normalizedCourier === "steadfast" ||
+    normalizedCourier === "carrybee" ||
+    normalizedCourier === "bahok";
 
   return (
     <div
@@ -68,35 +97,75 @@ export function CourierLogo({
           style={{
             width: "100%",
             height: "100%",
-            objectFit: courier === "steadfast" ? "cover" : "contain",
+            objectFit: isCover ? "cover" : "contain",
             display: "block",
           }}
           loading="lazy"
         />
+      ) : normalizedCourier === "pathao" ? (
+        <svg viewBox="0 0 100 100" width="100%" height="100%">
+          <circle cx="50" cy="50" r="45" fill="#E82A2A" />
+          <path
+            d="M38 72V30c0-2 2-4 4-4h18a16 16 0 1 1 0 32H48v14a2 2 0 0 1-2 2h-6a2 2 0 0 1-2-2zm10-24h12a8 8 0 1 0 0-16H48v16z"
+            fill="#FFFFFF"
+          />
+        </svg>
+      ) : normalizedCourier === "steadfast" ? (
+        <svg viewBox="0 0 100 100" width="100%" height="100%">
+          <rect width="100" height="100" rx="8" fill="#E8FCE8" />
+          <path d="M50 18 L76 34 L52 50 Z" fill="#1E293B" />
+          <path d="M46 22 L24 44 C24 64 42 76 66 76 L50 56 Z" fill="#00B14F" />
+          <path d="M22 68 L16 82 L30 76 Z" fill="#00B14F" />
+        </svg>
+      ) : normalizedCourier === "carrybee" ? (
+        <svg viewBox="0 0 100 100" width="100%" height="100%">
+          <rect width="100" height="100" fill="#000000" />
+          <circle cx="50" cy="50" r="32" fill="#F5B400" />
+          <text
+            x="50"
+            y="58"
+            fontFamily="Arial, sans-serif"
+            fontWeight="900"
+            fontSize="22"
+            fill="#000000"
+            textAnchor="middle"
+          >
+            CB
+          </text>
+        </svg>
+      ) : normalizedCourier === "bahok" ? (
+        <svg viewBox="0 0 100 100" width="100%" height="100%">
+          <rect width="100" height="100" fill="#FFFFFF" />
+          <circle cx="50" cy="50" r="36" fill="#D8232A" />
+          <text
+            x="50"
+            y="57"
+            fontFamily="Arial, sans-serif"
+            fontWeight="900"
+            fontSize="18"
+            fill="#FFFFFF"
+            textAnchor="middle"
+          >
+            বাহক
+          </text>
+        </svg>
       ) : (
-        courier === "pathao" ? (
-          <svg viewBox="0 0 100 100" width="100%" height="100%">
-            <circle cx="50" cy="50" r="45" fill="#E82A2A" />
-            <path
-              d="M38 72V30c0-2 2-4 4-4h18a16 16 0 1 1 0 32H48v14a2 2 0 0 1-2 2h-6a2 2 0 0 1-2-2zm10-24h12a8 8 0 1 0 0-16H48v16z"
-              fill="#FFFFFF"
-            />
-          </svg>
-        ) : courier === "steadfast" ? (
-          <svg viewBox="0 0 100 100" width="100%" height="100%">
-            <rect width="100" height="100" rx="8" fill="#E8FCE8" />
-            <path d="M50 18 L76 34 L52 50 Z" fill="#1E293B" />
-            <path d="M46 22 L24 44 C24 64 42 76 66 76 L50 56 Z" fill="#00B14F" />
-            <path d="M22 68 L16 82 L30 76 Z" fill="#00B14F" />
-          </svg>
-        ) : (
-          <svg viewBox="0 0 120 40" width="100%" height="100%">
-            <text x="5" y="28" fontFamily="Arial, Helvetica, sans-serif" fontWeight="900" fontSize="26" fill="#111827">
-              RED
-            </text>
-            <path d="M72 10 L84 22 L72 34 L80 34 L88 25 L96 34 L104 34 L92 22 L104 10 L96 10 L88 19 L80 10 Z" fill="#ED1C24" />
-          </svg>
-        )
+        <svg viewBox="0 0 120 40" width="100%" height="100%">
+          <text
+            x="5"
+            y="28"
+            fontFamily="Arial, Helvetica, sans-serif"
+            fontWeight="900"
+            fontSize="26"
+            fill="#111827"
+          >
+            RED
+          </text>
+          <path
+            d="M72 10 L84 22 L72 34 L80 34 L88 25 L96 34 L104 34 L92 22 L104 10 L96 10 L88 19 L80 10 Z"
+            fill="#ED1C24"
+          />
+        </svg>
       )}
     </div>
   );

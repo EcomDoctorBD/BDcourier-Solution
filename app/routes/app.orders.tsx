@@ -140,6 +140,8 @@ export const COURIER_OPTIONS = [
   { label: "Pathao Courier", value: "pathao" },
   { label: "Steadfast Courier", value: "steadfast" },
   { label: "RedX Delivery", value: "redx" },
+  { label: "CarryBee", value: "carrybee" },
+  { label: "Bahok Courier", value: "bahok" },
 ];
 
 export interface CustomRouteRule {
@@ -1506,6 +1508,139 @@ async function dispatchSingleOrderToCourier(params: {
         err?.message || "Unknown"
       }`);
     }
+  } else if (activeCourier === "carrybee" || activeCourier.toLowerCase() === "carrybee") {
+    courierDisplayName = "CarryBee";
+    const clientId = storeConfig?.carrybeeClientId?.trim();
+    const clientSecret = storeConfig?.carrybeeClientSecret?.trim();
+    const clientContext = storeConfig?.carrybeeClientContext?.trim();
+    const storeId = storeConfig?.carrybeeStoreId?.trim();
+
+    if (!clientId || !clientSecret || !clientContext) {
+      return rollbackBooking(
+        `CarryBee credentials missing for ${orderName}. Please configure Client ID, Client Secret, and Client Context in Courier Settings.`
+      );
+    }
+
+    try {
+      const baseUrl = storeConfig?.carrybeeSandbox
+        ? "https://stage-sandbox.carrybee.com"
+        : "https://api.carrybee.com";
+
+      const payload: Record<string, any> = {
+        store_id: storeId || undefined,
+        merchant_order_id: String(orderName || orderId).replace("#", ""),
+        recipient_name: customerName,
+        recipient_phone: cleanPhone,
+        recipient_address: cleanAddress,
+        collectable_amount: amountToCollect,
+        notes: warehouseNote || `Shopify Order ${orderName}`,
+      };
+
+      const cbResponse = await fetch(`${baseUrl}/api/v1/orders`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+          "Client-ID": clientId,
+          "Client-Secret": clientSecret,
+          "Client-Context": clientContext,
+        },
+        body: JSON.stringify(payload),
+        signal: AbortSignal.timeout(10000),
+      });
+
+      const cbData: any = await cbResponse.json().catch(() => null);
+      const trackingCode =
+        cbData?.consignment_id ||
+        cbData?.data?.consignment_id ||
+        cbData?.tracking_id ||
+        cbData?.data?.tracking_id ||
+        cbData?.tracking_code ||
+        cbData?.data?.tracking_code ||
+        cbData?.order_id ||
+        cbData?.data?.order_id;
+
+      if (!cbResponse.ok || !trackingCode) {
+        const errorDetail =
+          cbData?.message ||
+          cbData?.error ||
+          (cbData?.errors ? Object.values(cbData.errors).flat().join(" | ") : "") ||
+          `HTTP ${cbResponse.status}`;
+        return rollbackBooking(
+          `CarryBee Order Creation Failed (${orderName}): ${errorDetail}`
+        );
+      }
+
+      finalTracking = String(trackingCode);
+    } catch (err: any) {
+      return rollbackBooking(
+        `CarryBee network error on ${orderName}: ${err?.message || "Unknown"}`
+      );
+    }
+  } else if (activeCourier === "bahok" || activeCourier.toLowerCase() === "bahok") {
+    courierDisplayName = "Bahok Courier";
+    const apiKey = storeConfig?.bahokApiKey?.trim();
+    const apiToken = storeConfig?.bahokApiToken?.trim();
+    const merchantId = storeConfig?.bahokMerchantId?.trim();
+
+    if (!apiKey || !apiToken) {
+      return rollbackBooking(
+        `Bahok Courier credentials missing for ${orderName}. Please configure API Key and API Secret / Bearer Token in Courier Settings.`
+      );
+    }
+
+    try {
+      const baseUrl = "https://api.bahok.com.bd";
+
+      const payload: Record<string, any> = {
+        merchant_id: merchantId || undefined,
+        merchant_order_id: String(orderName || orderId).replace("#", ""),
+        recipient_name: customerName,
+        recipient_phone: cleanPhone,
+        recipient_address: cleanAddress,
+        cod_amount: amountToCollect,
+        instructions: warehouseNote || `Shopify Order ${orderName}`,
+      };
+
+      const bahokResponse = await fetch(`${baseUrl}/api/v1/orders/create`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+          Authorization: `Bearer ${apiToken}`,
+          "x-api-key": apiKey,
+        },
+        body: JSON.stringify(payload),
+        signal: AbortSignal.timeout(10000),
+      });
+
+      const bahokData: any = await bahokResponse.json().catch(() => null);
+      const trackingCode =
+        bahokData?.tracking_id ||
+        bahokData?.data?.tracking_id ||
+        bahokData?.consignment_id ||
+        bahokData?.data?.consignment_id ||
+        bahokData?.tracking_code ||
+        bahokData?.data?.tracking_code ||
+        bahokData?.invoice;
+
+      if (!bahokResponse.ok || !trackingCode) {
+        const errorDetail =
+          bahokData?.message ||
+          bahokData?.error ||
+          (bahokData?.errors ? Object.values(bahokData.errors).flat().join(" | ") : "") ||
+          `HTTP ${bahokResponse.status}`;
+        return rollbackBooking(
+          `Bahok Order Creation Failed (${orderName}): ${errorDetail}`
+        );
+      }
+
+      finalTracking = String(trackingCode);
+    } catch (err: any) {
+      return rollbackBooking(
+        `Bahok network error on ${orderName}: ${err?.message || "Unknown"}`
+      );
+    }
   } else {
     return rollbackBooking(`Invalid courier selected for ${orderName}.`);
   }
@@ -1513,13 +1648,18 @@ async function dispatchSingleOrderToCourier(params: {
   const bookedAtIso = new Date().toISOString();
   const trackingUrl = getCourierTrackingUrl(activeCourier, finalTracking, cleanPhone);
 
+  const normalizedActive = String(activeCourier || "").toLowerCase();
   const partnerName =
-    activeCourier === "pathao"
+    normalizedActive === "pathao"
       ? "Pathao"
-      : activeCourier === "steadfast"
+      : normalizedActive === "steadfast"
       ? "Steadfast"
-      : activeCourier === "redx"
+      : normalizedActive === "redx"
       ? "RedX"
+      : normalizedActive === "carrybee"
+      ? "CarryBee"
+      : normalizedActive === "bahok"
+      ? "Bahok"
       : courierDisplayName;
 
   await ShipmentBooking.findOneAndUpdate(
@@ -1731,6 +1871,15 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         (storeConfig?.redxProfileId?.trim() &&
           storeConfig?.redxLocationId?.trim())
     ),
+    carrybee: Boolean(
+      storeConfig?.carrybeeClientId?.trim() &&
+        storeConfig?.carrybeeClientSecret?.trim() &&
+        storeConfig?.carrybeeClientContext?.trim()
+    ),
+    bahok: Boolean(
+      storeConfig?.bahokApiKey?.trim() &&
+        storeConfig?.bahokApiToken?.trim()
+    ),
   };
 
   const defaultCourierFallback = activeCouriers.pathao
@@ -1739,6 +1888,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     ? "steadfast"
     : activeCouriers.redx
     ? "redx"
+    : activeCouriers.carrybee
+    ? "carrybee"
+    : activeCouriers.bahok
+    ? "bahok"
     : "pathao";
 
   // Pull existing booked tracking records from MongoDB for Task 4 Status & COD Sync
@@ -2641,12 +2794,26 @@ export default function OrdersFulfillmentPage() {
         : "RedX Delivery (Not Configured)",
       value: "redx",
     },
+    {
+      label: activeCouriers.carrybee
+        ? "CarryBee (Connected)"
+        : "CarryBee (Not Configured)",
+      value: "carrybee",
+    },
+    {
+      label: activeCouriers.bahok
+        ? "Bahok Courier (Connected)"
+        : "Bahok Courier (Not Configured)",
+      value: "bahok",
+    },
   ];
 
   const fallbackCourierOptions = [
     { label: "Pathao Courier", value: "pathao" },
     { label: "Steadfast Courier", value: "steadfast" },
     { label: "RedX Delivery", value: "redx" },
+    { label: "CarryBee", value: "carrybee" },
+    { label: "Bahok Courier", value: "bahok" },
   ];
 
   const templateSelectorOptions = [
@@ -2766,13 +2933,18 @@ export default function OrdersFulfillmentPage() {
       const updated = { ...prev };
       for (const order of selectedOrdersList) {
         if (!updated[order.id]) {
-          const chosenCourier =
-            selectedCouriersByOrder[order.id] || order.assignedCourier;
+          const chosenCourier = String(
+            selectedCouriersByOrder[order.id] || order.assignedCourier || ""
+          ).toLowerCase();
           const courierName =
             chosenCourier === "pathao"
               ? "Pathao Courier"
               : chosenCourier === "steadfast"
               ? "Steadfast Courier"
+              : chosenCourier === "carrybee"
+              ? "CarryBee"
+              : chosenCourier === "bahok"
+              ? "Bahok Courier"
               : "RedX Delivery";
           updated[order.id] = {
             orderId: order.id,
@@ -2846,6 +3018,10 @@ export default function OrdersFulfillmentPage() {
         ? "Steadfast"
         : courierNameLower.includes("redx")
         ? "RedX"
+        : courierNameLower.includes("carrybee")
+        ? "CarryBee"
+        : courierNameLower.includes("bahok")
+        ? "Bahok"
         : "Courier";
     }
     const sentBadgeText = dispatchedInfo
@@ -4320,6 +4496,12 @@ export default function OrdersFulfillmentPage() {
                   </Badge>
                   <Badge tone={activeCouriers.redx ? "success" : undefined}>
                     {`RedX: ${activeCouriers.redx ? "Ready" : "Off"}`}
+                  </Badge>
+                  <Badge tone={activeCouriers.carrybee ? "success" : undefined}>
+                    {`CarryBee: ${activeCouriers.carrybee ? "Ready" : "Off"}`}
+                  </Badge>
+                  <Badge tone={activeCouriers.bahok ? "success" : undefined}>
+                    {`Bahok: ${activeCouriers.bahok ? "Ready" : "Off"}`}
                   </Badge>
                 </InlineStack>
               </InlineStack>

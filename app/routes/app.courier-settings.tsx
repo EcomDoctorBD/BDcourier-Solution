@@ -88,6 +88,21 @@ export interface CourierCredentials {
   redxPickupStoreName: string;
   redxProfileId: string;
   redxLocationId: string;
+  carrybeeClientId: string;
+  carrybeeClientSecret: string;
+  hasCarrybeeSecret?: boolean;
+  carrybeeClientContext: string;
+  hasCarrybeeContext?: boolean;
+  carrybeeStoreId: string;
+  carrybeeSandbox: boolean;
+  carrybeeWebhookSecret: string;
+  hasCarrybeeWebhookSecret?: boolean;
+  bahokMerchantId: string;
+  bahokApiKey: string;
+  bahokApiToken: string;
+  hasBahokApiToken?: boolean;
+  bahokWebhookSecret: string;
+  hasBahokWebhookSecret?: boolean;
   webhookSecret: string;
 }
 
@@ -178,6 +193,8 @@ export const COURIER_OPTIONS = [
   { label: "Pathao Courier", value: "pathao" },
   { label: "Steadfast Courier", value: "steadfast" },
   { label: "RedX Delivery", value: "redx" },
+  { label: "CarryBee", value: "carrybee" },
+  { label: "Bahok Courier", value: "bahok" },
 ];
 
 function CourierTruckIcon(props: SVGProps<SVGSVGElement>) {
@@ -314,6 +331,21 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     redxPickupStoreName: storeConfig?.redxPickupStoreName || "",
     redxProfileId: storeConfig?.redxProfileId || "",
     redxLocationId: storeConfig?.redxLocationId || storeConfig?.redxPickupStoreId || "",
+    carrybeeClientId: storeConfig?.carrybeeClientId || "",
+    carrybeeClientSecret: storeConfig?.carrybeeClientSecret ? MASKED_SECRET : "",
+    hasCarrybeeSecret: Boolean(storeConfig?.carrybeeClientSecret),
+    carrybeeClientContext: storeConfig?.carrybeeClientContext ? MASKED_SECRET : "",
+    hasCarrybeeContext: Boolean(storeConfig?.carrybeeClientContext),
+    carrybeeStoreId: storeConfig?.carrybeeStoreId || "",
+    carrybeeSandbox: Boolean(storeConfig?.carrybeeSandbox),
+    carrybeeWebhookSecret: storeConfig?.carrybeeWebhookSecret ? MASKED_SECRET : "",
+    hasCarrybeeWebhookSecret: Boolean(storeConfig?.carrybeeWebhookSecret),
+    bahokMerchantId: storeConfig?.bahokMerchantId || "",
+    bahokApiKey: storeConfig?.bahokApiKey || "",
+    bahokApiToken: storeConfig?.bahokApiToken ? MASKED_SECRET : "",
+    hasBahokApiToken: Boolean(storeConfig?.bahokApiToken),
+    bahokWebhookSecret: storeConfig?.bahokWebhookSecret ? MASKED_SECRET : "",
+    hasBahokWebhookSecret: Boolean(storeConfig?.bahokWebhookSecret),
     webhookSecret,
   };
 
@@ -595,8 +627,108 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       success: true,
       actionType: "regenerateWebhookSecret",
       message:
-        "Webhook secret token regenerated successfully. Please update your webhook callback URLs in Pathao, Steadfast, and REDX merchant panels.",
+        "Webhook secret token regenerated successfully. Please update your webhook callback URLs in Pathao, Steadfast, REDX, CarryBee, and Bahok merchant panels.",
       newWebhookSecret: newSecret,
+    });
+  }
+
+  // ==================== 3D. SAVE CARRYBEE CREDENTIALS ====================
+  if (actionType === "saveCarrybee") {
+    const rawExisting: any = await CourierConfig.findOne({ shopDomain }).lean();
+    const carrybeeClientId = String(formData.get("carrybeeClientId") || "").trim();
+    const carrybeeClientSecret = String(formData.get("carrybeeClientSecret") || "").trim();
+    const carrybeeClientContext = String(formData.get("carrybeeClientContext") || "").trim();
+    const carrybeeStoreId = String(formData.get("carrybeeStoreId") || "").trim();
+    const carrybeeSandbox = String(formData.get("carrybeeSandbox")) === "true";
+    const carrybeeWebhookSecret = String(formData.get("carrybeeWebhookSecret") || "").trim();
+
+    const updateSet: Record<string, any> = {
+      shopDomain,
+      carrybeeClientId,
+      carrybeeStoreId,
+      carrybeeSandbox,
+    };
+
+    if (!isMaskedOrEmpty(carrybeeClientSecret)) {
+      updateSet.carrybeeClientSecret = encryptSecret(carrybeeClientSecret);
+    } else if (rawExisting?.carrybeeClientSecret) {
+      updateSet.carrybeeClientSecret = rawExisting.carrybeeClientSecret;
+    }
+
+    if (!isMaskedOrEmpty(carrybeeClientContext)) {
+      updateSet.carrybeeClientContext = encryptSecret(carrybeeClientContext);
+    } else if (rawExisting?.carrybeeClientContext) {
+      updateSet.carrybeeClientContext = rawExisting.carrybeeClientContext;
+    }
+
+    if (!isMaskedOrEmpty(carrybeeWebhookSecret)) {
+      updateSet.carrybeeWebhookSecret = encryptSecret(carrybeeWebhookSecret);
+    } else if (rawExisting?.carrybeeWebhookSecret) {
+      updateSet.carrybeeWebhookSecret = rawExisting.carrybeeWebhookSecret;
+    }
+
+    await CourierConfig.findOneAndUpdate(
+      { shopDomain },
+      { $set: updateSet },
+      { upsert: true, new: true, setDefaultsOnInsert: true }
+    );
+
+    const effectiveSecret = updateSet.carrybeeClientSecret || rawExisting?.carrybeeClientSecret;
+    const effectiveContext = updateSet.carrybeeClientContext || rawExisting?.carrybeeClientContext;
+    const isFullyConnected = Boolean(
+      carrybeeClientId && effectiveSecret && effectiveContext
+    );
+
+    return json({
+      success: true,
+      actionType: "saveCarrybee",
+      message: isFullyConnected
+        ? "CarryBee credentials saved and connected successfully."
+        : "CarryBee configuration saved (some fields were left blank).",
+    });
+  }
+
+  // ==================== 3E. SAVE BAHOK CREDENTIALS ====================
+  if (actionType === "saveBahok") {
+    const rawExisting: any = await CourierConfig.findOne({ shopDomain }).lean();
+    const bahokMerchantId = String(formData.get("bahokMerchantId") || "").trim();
+    const bahokApiKey = String(formData.get("bahokApiKey") || "").trim();
+    const bahokApiToken = String(formData.get("bahokApiToken") || "").trim();
+    const bahokWebhookSecret = String(formData.get("bahokWebhookSecret") || "").trim();
+
+    const updateSet: Record<string, any> = {
+      shopDomain,
+      bahokMerchantId,
+      bahokApiKey,
+    };
+
+    if (!isMaskedOrEmpty(bahokApiToken)) {
+      updateSet.bahokApiToken = encryptSecret(bahokApiToken);
+    } else if (rawExisting?.bahokApiToken) {
+      updateSet.bahokApiToken = rawExisting.bahokApiToken;
+    }
+
+    if (!isMaskedOrEmpty(bahokWebhookSecret)) {
+      updateSet.bahokWebhookSecret = encryptSecret(bahokWebhookSecret);
+    } else if (rawExisting?.bahokWebhookSecret) {
+      updateSet.bahokWebhookSecret = rawExisting.bahokWebhookSecret;
+    }
+
+    await CourierConfig.findOneAndUpdate(
+      { shopDomain },
+      { $set: updateSet },
+      { upsert: true, new: true, setDefaultsOnInsert: true }
+    );
+
+    const effectiveToken = updateSet.bahokApiToken || rawExisting?.bahokApiToken;
+    const isFullyConnected = Boolean(bahokApiKey && effectiveToken);
+
+    return json({
+      success: true,
+      actionType: "saveBahok",
+      message: isFullyConnected
+        ? "Bahok Courier credentials saved and connected successfully."
+        : "Bahok configuration saved (some fields were left blank).",
     });
   }
 
@@ -609,17 +741,24 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const defaultCourierRaw = String(
       formData.get("defaultCourier") || "steadfast"
     ).trim();
-    const validCouriers = ["pathao", "steadfast", "redx"];
+    const validCouriers = ["pathao", "steadfast", "redx", "carrybee", "bahok"];
     const defaultCourier = validCouriers.includes(defaultCourierRaw)
       ? defaultCourierRaw
       : "steadfast";
 
-    const insideDhakaCourier = String(
+    const insideDhakaCourierRaw = String(
       formData.get("insideDhakaCourier") || "pathao"
     ).trim();
-    const outsideDhakaCourier = String(
+    const insideDhakaCourier = validCouriers.includes(insideDhakaCourierRaw)
+      ? insideDhakaCourierRaw
+      : "pathao";
+
+    const outsideDhakaCourierRaw = String(
       formData.get("outsideDhakaCourier") || "steadfast"
     ).trim();
+    const outsideDhakaCourier = validCouriers.includes(outsideDhakaCourierRaw)
+      ? outsideDhakaCourierRaw
+      : "steadfast";
 
     const minSuccessRateRaw = Number(
       formData.get("minSuccessRate") ?? formData.get("minSafetySuccessRate") ?? 70
@@ -768,11 +907,15 @@ export default function CourierSettingsPage() {
   const pathaoWebhookUrl = `${appUrl}/api/webhooks/pathao?shop=${encodeURIComponent(shopDomain)}${tokenParam}`;
   const steadfastWebhookUrl = `${appUrl}/api/webhooks/steadfast?shop=${encodeURIComponent(shopDomain)}${tokenParam}`;
   const redxWebhookUrl = `${appUrl}/api/webhooks/redx?shop=${encodeURIComponent(shopDomain)}${tokenParam}`;
+  const carrybeeWebhookUrl = `${appUrl}/api/webhooks/carrybee?shop=${encodeURIComponent(shopDomain)}${tokenParam}`;
+  const bahokWebhookUrl = `${appUrl}/api/webhooks/bahok?shop=${encodeURIComponent(shopDomain)}${tokenParam}`;
 
   // Collapsible gateway form states (compact summary by default)
   const [showPathaoForm, setShowPathaoForm] = useState(false);
   const [showSteadfastForm, setShowSteadfastForm] = useState(false);
   const [showRedxForm, setShowRedxForm] = useState(false);
+  const [showCarrybeeForm, setShowCarrybeeForm] = useState(false);
+  const [showBahokForm, setShowBahokForm] = useState(false);
 
   // ==================== 1. PATHAO GATEWAY STATE ====================
   const [pathaoEnvironment, setPathaoEnvironment] = useState(
@@ -916,6 +1059,66 @@ export default function CourierSettingsPage() {
     submit(formData, { method: "post" });
   };
 
+  // ==================== 4. CARRYBEE GATEWAY STATE ====================
+  const [carrybeeClientId, setCarrybeeClientId] = useState(courierConfig.carrybeeClientId || "");
+  const [carrybeeClientSecret, setCarrybeeClientSecret] = useState(courierConfig.carrybeeClientSecret || "");
+  const [carrybeeClientContext, setCarrybeeClientContext] = useState(courierConfig.carrybeeClientContext || "");
+  const [carrybeeStoreId, setCarrybeeStoreId] = useState(courierConfig.carrybeeStoreId || "");
+  const [carrybeeSandbox, setCarrybeeSandbox] = useState(courierConfig.carrybeeSandbox || false);
+  const [carrybeeWebhookSecret, setCarrybeeWebhookSecret] = useState(courierConfig.carrybeeWebhookSecret || "");
+  const [showCarrybeeSecret, setShowCarrybeeSecret] = useState(false);
+  const [showCarrybeeContext, setShowCarrybeeContext] = useState(false);
+  const [showCarrybeeWebhookSecret, setShowCarrybeeWebhookSecret] = useState(false);
+
+  const isCarrybeeConnected = Boolean(
+    carrybeeClientId.trim() &&
+      (courierConfig.hasCarrybeeSecret || carrybeeClientSecret.trim()) &&
+      (courierConfig.hasCarrybeeContext || carrybeeClientContext.trim())
+  );
+
+  const isSubmittingCarrybee =
+    navigation.state === "submitting" &&
+    navigation.formData?.get("actionType") === "saveCarrybee";
+
+  const handleSaveCarrybee = () => {
+    const formData = new FormData();
+    formData.append("actionType", "saveCarrybee");
+    formData.append("carrybeeClientId", carrybeeClientId);
+    formData.append("carrybeeClientSecret", carrybeeClientSecret);
+    formData.append("carrybeeClientContext", carrybeeClientContext);
+    formData.append("carrybeeStoreId", carrybeeStoreId);
+    formData.append("carrybeeSandbox", String(carrybeeSandbox));
+    formData.append("carrybeeWebhookSecret", carrybeeWebhookSecret);
+    submit(formData, { method: "post" });
+  };
+
+  // ==================== 5. BAHOK GATEWAY STATE ====================
+  const [bahokMerchantId, setBahokMerchantId] = useState(courierConfig.bahokMerchantId || "");
+  const [bahokApiKey, setBahokApiKey] = useState(courierConfig.bahokApiKey || "");
+  const [bahokApiToken, setBahokApiToken] = useState(courierConfig.bahokApiToken || "");
+  const [bahokWebhookSecret, setBahokWebhookSecret] = useState(courierConfig.bahokWebhookSecret || "");
+  const [showBahokToken, setShowBahokToken] = useState(false);
+  const [showBahokWebhookSecret, setShowBahokWebhookSecret] = useState(false);
+
+  const isBahokConnected = Boolean(
+    bahokApiKey.trim() &&
+      (courierConfig.hasBahokApiToken || bahokApiToken.trim())
+  );
+
+  const isSubmittingBahok =
+    navigation.state === "submitting" &&
+    navigation.formData?.get("actionType") === "saveBahok";
+
+  const handleSaveBahok = () => {
+    const formData = new FormData();
+    formData.append("actionType", "saveBahok");
+    formData.append("bahokMerchantId", bahokMerchantId);
+    formData.append("bahokApiKey", bahokApiKey);
+    formData.append("bahokApiToken", bahokApiToken);
+    formData.append("bahokWebhookSecret", bahokWebhookSecret);
+    submit(formData, { method: "post" });
+  };
+
   useEffect(() => {
     if (actionData) {
       setShowBanner(true);
@@ -927,6 +1130,12 @@ export default function CourierSettingsPage() {
       }
       if (actionData.actionType === "fetchRedxStores" || actionData.actionType === "saveRedX") {
         setShowRedxForm(true);
+      }
+      if (actionData.actionType === "saveCarrybee") {
+        setShowCarrybeeForm(true);
+      }
+      if (actionData.actionType === "saveBahok") {
+        setShowBahokForm(true);
       }
       if (actionData.actionType === "fetchPathaoStores" && (actionData as any).stores) {
         const fetched = (actionData as any).stores as PathaoStore[];
@@ -1692,6 +1901,349 @@ export default function CourierSettingsPage() {
                           onClick={handleSaveRedX}
                         >
                           Save REDX Settings
+                        </Button>
+                      </InlineStack>
+                    </BlockStack>
+                  )}
+                </BlockStack>
+              </Card>
+            </Grid.Cell>
+
+            {/* Card 4: CarryBee Settings */}
+            <Grid.Cell columnSpan={{ xs: 6, sm: 6, md: 2, lg: 4, xl: 4 }}>
+              <Card padding="500">
+                <BlockStack gap="400">
+                  <InlineStack align="space-between" blockAlign="center">
+                    <InlineStack gap="300" blockAlign="center">
+                      <CourierLogo courier="carrybee" size={44} />
+                      <Text as="h3" variant="headingMd">
+                        CarryBee
+                      </Text>
+                    </InlineStack>
+
+                    <Badge
+                      tone={isCarrybeeConnected ? "success" : "attention"}
+                      progress={isCarrybeeConnected ? "complete" : "incomplete"}
+                    >
+                      {isCarrybeeConnected ? "Connected" : "Not Configured"}
+                    </Badge>
+                  </InlineStack>
+
+                  <Text as="p" variant="bodySm" tone="subdued">
+                    Tech-first automated logistics network with rapid parcel dispatch and API status sync.
+                  </Text>
+
+                  <Text as="p" variant="bodyXs" tone="subdued">
+                    Required: Client ID, Client Secret, Client Context
+                  </Text>
+
+                  <InlineStack align="start">
+                    <Button
+                      onClick={() => setShowCarrybeeForm((prev) => !prev)}
+                    >
+                      {showCarrybeeForm
+                        ? "Hide Configuration"
+                        : isCarrybeeConnected
+                        ? "Update CarryBee"
+                        : "Configure CarryBee"}
+                    </Button>
+                  </InlineStack>
+
+                  {showCarrybeeForm && (
+                    <BlockStack gap="400">
+                      <Divider />
+
+                      <BlockStack gap="300">
+                        <Select
+                          label="API Environment"
+                          options={[
+                            { label: "Production Live API", value: "production" },
+                            { label: "Sandbox / Test API", value: "sandbox" },
+                          ]}
+                          value={carrybeeSandbox ? "sandbox" : "production"}
+                          onChange={(val) => setCarrybeeSandbox(val === "sandbox")}
+                        />
+
+                        <TextField
+                          label="Client ID"
+                          value={carrybeeClientId}
+                          onChange={(val) => setCarrybeeClientId(val)}
+                          placeholder="Enter CarryBee Client ID..."
+                          autoComplete="off"
+                        />
+
+                        <TextField
+                          label="Client Secret"
+                          type={showCarrybeeSecret ? "text" : "password"}
+                          value={carrybeeClientSecret}
+                          onChange={(val) => setCarrybeeClientSecret(val)}
+                          placeholder="••••••••••••••••"
+                          autoComplete="off"
+                          connectedRight={
+                            <Button
+                              variant="plain"
+                              onClick={() => setShowCarrybeeSecret((prev) => !prev)}
+                            >
+                              {showCarrybeeSecret ? "Hide" : "Show"}
+                            </Button>
+                          }
+                          helpText="Your CarryBee Client Secret (stored encrypted with AES-256-GCM)."
+                        />
+
+                        <TextField
+                          label="Client Context"
+                          type={showCarrybeeContext ? "text" : "password"}
+                          value={carrybeeClientContext}
+                          onChange={(val) => setCarrybeeClientContext(val)}
+                          placeholder="••••••••••••••••"
+                          autoComplete="off"
+                          connectedRight={
+                            <Button
+                              variant="plain"
+                              onClick={() => setShowCarrybeeContext((prev) => !prev)}
+                            >
+                              {showCarrybeeContext ? "Hide" : "Show"}
+                            </Button>
+                          }
+                          helpText="Your CarryBee Client Context (stored encrypted with AES-256-GCM)."
+                        />
+
+                        <TextField
+                          label="Default Pickup Store ID"
+                          value={carrybeeStoreId}
+                          onChange={(val) => setCarrybeeStoreId(val)}
+                          placeholder="e.g. STORE-001"
+                          autoComplete="off"
+                          helpText="Your registered pickup store ID in CarryBee portal."
+                        />
+
+                        <Divider />
+
+                        <BlockStack gap="200">
+                          <InlineStack align="space-between" blockAlign="center">
+                            <Text as="h4" variant="headingSm">
+                              Real-Time Webhook (Two-Way Status Sync)
+                            </Text>
+                            <Badge tone="info">Live Webhook</Badge>
+                          </InlineStack>
+                          <Text as="p" variant="bodyXs" tone="subdued">
+                            Paste in CarryBee Merchant Portal &rarr; Webhook Settings:
+                          </Text>
+                          <TextField
+                            label="Callback URL"
+                            value={carrybeeWebhookUrl}
+                            readOnly
+                            autoComplete="off"
+                            connectedRight={
+                              <Button
+                                onClick={() =>
+                                  copyToClipboard(carrybeeWebhookUrl, "carrybee_url")
+                                }
+                              >
+                                {copiedKey === "carrybee_url" ? "Copied!" : "Copy URL"}
+                              </Button>
+                            }
+                          />
+                          <TextField
+                            label="Webhook Secret (Optional Custom)"
+                            type={showCarrybeeWebhookSecret ? "text" : "password"}
+                            value={carrybeeWebhookSecret}
+                            onChange={(val) => setCarrybeeWebhookSecret(val)}
+                            placeholder="Optional custom secret"
+                            autoComplete="off"
+                            connectedRight={
+                              <Button
+                                variant="plain"
+                                onClick={() =>
+                                  setShowCarrybeeWebhookSecret((prev) => !prev)
+                                }
+                              >
+                                {showCarrybeeWebhookSecret ? "Hide" : "Show"}
+                              </Button>
+                            }
+                            helpText="Leave empty to use the store default webhook secret below."
+                          />
+                          <InlineStack align="end">
+                            <Button
+                              size="micro"
+                              variant="plain"
+                              tone="critical"
+                              onClick={handleRegenerateWebhookSecret}
+                              loading={isRegeneratingWebhookSecret}
+                            >
+                              Rotate / Regenerate Webhook Token
+                            </Button>
+                          </InlineStack>
+                        </BlockStack>
+                      </BlockStack>
+
+                      <InlineStack align="space-between" blockAlign="center">
+                        <Button onClick={() => setShowCarrybeeForm(false)}>
+                          Collapse
+                        </Button>
+                        <Button
+                          variant="primary"
+                          loading={isSubmittingCarrybee}
+                          onClick={handleSaveCarrybee}
+                        >
+                          Save CarryBee Settings
+                        </Button>
+                      </InlineStack>
+                    </BlockStack>
+                  )}
+                </BlockStack>
+              </Card>
+            </Grid.Cell>
+
+            {/* Card 5: Bahok Courier Settings */}
+            <Grid.Cell columnSpan={{ xs: 6, sm: 6, md: 2, lg: 4, xl: 4 }}>
+              <Card padding="500">
+                <BlockStack gap="400">
+                  <InlineStack align="space-between" blockAlign="center">
+                    <InlineStack gap="300" blockAlign="center">
+                      <CourierLogo courier="bahok" size={44} />
+                      <Text as="h3" variant="headingMd">
+                        Bahok Courier
+                      </Text>
+                    </InlineStack>
+
+                    <Badge
+                      tone={isBahokConnected ? "success" : "attention"}
+                      progress={isBahokConnected ? "complete" : "incomplete"}
+                    >
+                      {isBahokConnected ? "Connected" : "Not Configured"}
+                    </Badge>
+                  </InlineStack>
+
+                  <Text as="p" variant="bodySm" tone="subdued">
+                    Reliable nationwide e-commerce courier service with doorstep delivery across Bangladesh.
+                  </Text>
+
+                  <Text as="p" variant="bodyXs" tone="subdued">
+                    Required: Merchant ID, API Key, API Secret / Token
+                  </Text>
+
+                  <InlineStack align="start">
+                    <Button
+                      onClick={() => setShowBahokForm((prev) => !prev)}
+                    >
+                      {showBahokForm
+                        ? "Hide Configuration"
+                        : isBahokConnected
+                        ? "Update Bahok"
+                        : "Configure Bahok"}
+                    </Button>
+                  </InlineStack>
+
+                  {showBahokForm && (
+                    <BlockStack gap="400">
+                      <Divider />
+
+                      <BlockStack gap="300">
+                        <TextField
+                          label="Merchant ID"
+                          value={bahokMerchantId}
+                          onChange={(val) => setBahokMerchantId(val)}
+                          placeholder="Enter Bahok Merchant / Login ID..."
+                          autoComplete="off"
+                        />
+
+                        <TextField
+                          label="API Key"
+                          value={bahokApiKey}
+                          onChange={(val) => setBahokApiKey(val)}
+                          placeholder="Enter Bahok API Key..."
+                          autoComplete="off"
+                        />
+
+                        <TextField
+                          label="API Secret / Bearer Token"
+                          type={showBahokToken ? "text" : "password"}
+                          value={bahokApiToken}
+                          onChange={(val) => setBahokApiToken(val)}
+                          placeholder="••••••••••••••••"
+                          autoComplete="off"
+                          connectedRight={
+                            <Button
+                              variant="plain"
+                              onClick={() => setShowBahokToken((prev) => !prev)}
+                            >
+                              {showBahokToken ? "Hide" : "Show"}
+                            </Button>
+                          }
+                          helpText="Your Bahok API Secret / Token (stored encrypted with AES-256-GCM)."
+                        />
+
+                        <Divider />
+
+                        <BlockStack gap="200">
+                          <InlineStack align="space-between" blockAlign="center">
+                            <Text as="h4" variant="headingSm">
+                              Real-Time Webhook (Two-Way Status Sync)
+                            </Text>
+                            <Badge tone="info">Live Webhook</Badge>
+                          </InlineStack>
+                          <Text as="p" variant="bodyXs" tone="subdued">
+                            Paste in Bahok Merchant Portal &rarr; Webhook Settings:
+                          </Text>
+                          <TextField
+                            label="Callback URL"
+                            value={bahokWebhookUrl}
+                            readOnly
+                            autoComplete="off"
+                            connectedRight={
+                              <Button
+                                onClick={() =>
+                                  copyToClipboard(bahokWebhookUrl, "bahok_url")
+                                }
+                              >
+                                {copiedKey === "bahok_url" ? "Copied!" : "Copy URL"}
+                              </Button>
+                            }
+                          />
+                          <TextField
+                            label="Webhook Secret (Optional Custom)"
+                            type={showBahokWebhookSecret ? "text" : "password"}
+                            value={bahokWebhookSecret}
+                            onChange={(val) => setBahokWebhookSecret(val)}
+                            placeholder="Optional custom secret"
+                            autoComplete="off"
+                            connectedRight={
+                              <Button
+                                variant="plain"
+                                onClick={() =>
+                                  setShowBahokWebhookSecret((prev) => !prev)
+                                }
+                              >
+                                {showBahokWebhookSecret ? "Hide" : "Show"}
+                              </Button>
+                            }
+                            helpText="Leave empty to use the store default webhook secret below."
+                          />
+                          <InlineStack align="end">
+                            <Button
+                              size="micro"
+                              variant="plain"
+                              tone="critical"
+                              onClick={handleRegenerateWebhookSecret}
+                              loading={isRegeneratingWebhookSecret}
+                            >
+                              Rotate / Regenerate Webhook Token
+                            </Button>
+                          </InlineStack>
+                        </BlockStack>
+                      </BlockStack>
+
+                      <InlineStack align="space-between" blockAlign="center">
+                        <Button onClick={() => setShowBahokForm(false)}>
+                          Collapse
+                        </Button>
+                        <Button
+                          variant="primary"
+                          loading={isSubmittingBahok}
+                          onClick={handleSaveBahok}
+                        >
+                          Save Bahok Settings
                         </Button>
                       </InlineStack>
                     </BlockStack>

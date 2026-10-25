@@ -139,6 +139,17 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       (storeConfig?.redxLocationId?.trim() || storeConfig?.redxPickupStoreId?.trim()))
   );
 
+  const isCarrybeeConnected = Boolean(
+    storeConfig?.carrybeeClientId?.trim() &&
+      storeConfig?.carrybeeClientSecret?.trim() &&
+      storeConfig?.carrybeeClientContext?.trim()
+  );
+
+  const isBahokConnected = Boolean(
+    storeConfig?.bahokApiKey?.trim() &&
+      storeConfig?.bahokApiToken?.trim()
+  );
+
   return json({
     shopDomain,
     subscription: {
@@ -161,6 +172,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       isPathaoConnected,
       isSteadfastConnected,
       isRedxConnected,
+      isCarrybeeConnected,
+      isBahokConnected,
       // Pathao public fields
       pathaoEnvironment: storeConfig?.pathaoEnvironment || "production",
       pathaoClientId: storeConfig?.pathaoClientId || "",
@@ -183,6 +196,16 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       redxProfileId: storeConfig?.redxProfileId || "",
       redxLocationId: storeConfig?.redxLocationId || storeConfig?.redxPickupStoreId || "",
       hasRedxAccessToken: Boolean(storeConfig?.redxAccessToken),
+      // CarryBee public fields
+      carrybeeClientId: storeConfig?.carrybeeClientId || "",
+      carrybeeStoreId: storeConfig?.carrybeeStoreId || "",
+      carrybeeSandbox: Boolean(storeConfig?.carrybeeSandbox),
+      hasCarrybeeSecret: Boolean(storeConfig?.carrybeeClientSecret),
+      hasCarrybeeContext: Boolean(storeConfig?.carrybeeClientContext),
+      // Bahok public fields
+      bahokMerchantId: storeConfig?.bahokMerchantId || "",
+      bahokApiKey: storeConfig?.bahokApiKey || "",
+      hasBahokToken: Boolean(storeConfig?.bahokApiToken),
     },
   });
 };
@@ -538,10 +561,25 @@ export default function CourierDashboard() {
         (courierConfig.redxProfileId?.trim() && courierConfig.redxLocationId?.trim()))
   );
 
+  const isCarrybeeConnected = Boolean(
+    courierConfig.isCarrybeeConnected ??
+      (courierConfig.carrybeeClientId?.trim() &&
+        courierConfig.hasCarrybeeSecret &&
+        courierConfig.hasCarrybeeContext)
+  );
+
+  const isBahokConnected = Boolean(
+    courierConfig.isBahokConnected ??
+      (courierConfig.bahokApiKey?.trim() &&
+        courierConfig.hasBahokToken)
+  );
+
   const activeCount = [
     isPathaoConnected,
     isSteadfastConnected,
     isRedxConnected,
+    isCarrybeeConnected,
+    isBahokConnected,
   ].filter(Boolean).length;
 
   const pendingActionType = navigation.formData?.get("actionType");
@@ -780,12 +818,12 @@ export default function CourierDashboard() {
                             COURIER FLEET
                           </Text>
                           <Badge tone={activeCount > 0 ? "success" : "attention"}>
-                            {`${activeCount} / 3 Connected`}
+                            {`${activeCount} / 5 Connected`}
                           </Badge>
                         </InlineStack>
 
                         <Text as="p" variant="headingMd" fontWeight="semibold">
-                          Pathao • Steadfast • REDX
+                          5 Hub Partners
                         </Text>
 
                         <Text as="span" variant="bodySm" tone="subdued">
@@ -893,7 +931,7 @@ export default function CourierDashboard() {
                     tone={activeCount > 0 ? "success" : undefined}
                     progress={activeCount > 0 ? "complete" : "incomplete"}
                   >
-                    {`${activeCount} of 3 Couriers Connected`}
+                    {`${activeCount} of 5 Couriers Connected`}
                   </Badge>
                 </InlineStack>
 
@@ -1250,6 +1288,98 @@ export default function CourierDashboard() {
                         </Form>
                       </>
                     )}
+                  </BlockStack>
+                </Card>
+              </Grid.Cell>
+
+              {/* 4. CarryBee Card */}
+              <Grid.Cell columnSpan={{ xs: 6, sm: 6, md: 2, lg: 4, xl: 4 }}>
+                <Card padding="500">
+                  <BlockStack gap="400">
+                    <InlineStack align="space-between" blockAlign="center">
+                      <InlineStack gap="300" blockAlign="center">
+                        <CourierLogo courier="carrybee" size={44} />
+                        <Text as="h3" variant="headingMd">
+                          CarryBee
+                        </Text>
+                      </InlineStack>
+
+                      <Badge
+                        tone={isCarrybeeConnected ? "success" : undefined}
+                        progress={
+                          isCarrybeeConnected ? "complete" : "incomplete"
+                        }
+                      >
+                        {isCarrybeeConnected ? "Connected" : "Not Configured"}
+                      </Badge>
+                    </InlineStack>
+
+                    <Divider />
+
+                    <BlockStack gap="200">
+                      <Text as="p" variant="bodyMd" tone="subdued">
+                        Tech-first automated logistics network with rapid parcel dispatch and API status sync.
+                      </Text>
+
+                      <Text as="p" variant="bodySm" tone="subdued">
+                        Required: <strong>Client ID, Client Secret, Client Context</strong>
+                      </Text>
+                    </BlockStack>
+
+                    <InlineStack align="end">
+                      <Button
+                        url={`/app/courier-settings${searchStr}`}
+                        variant={isCarrybeeConnected ? "secondary" : "primary"}
+                      >
+                        {isCarrybeeConnected ? "Update CarryBee" : "Configure CarryBee"}
+                      </Button>
+                    </InlineStack>
+                  </BlockStack>
+                </Card>
+              </Grid.Cell>
+
+              {/* 5. Bahok Courier Card */}
+              <Grid.Cell columnSpan={{ xs: 6, sm: 6, md: 2, lg: 4, xl: 4 }}>
+                <Card padding="500">
+                  <BlockStack gap="400">
+                    <InlineStack align="space-between" blockAlign="center">
+                      <InlineStack gap="300" blockAlign="center">
+                        <CourierLogo courier="bahok" size={44} />
+                        <Text as="h3" variant="headingMd">
+                          Bahok Courier
+                        </Text>
+                      </InlineStack>
+
+                      <Badge
+                        tone={isBahokConnected ? "success" : undefined}
+                        progress={
+                          isBahokConnected ? "complete" : "incomplete"
+                        }
+                      >
+                        {isBahokConnected ? "Connected" : "Not Configured"}
+                      </Badge>
+                    </InlineStack>
+
+                    <Divider />
+
+                    <BlockStack gap="200">
+                      <Text as="p" variant="bodyMd" tone="subdued">
+                        Reliable nationwide e-commerce courier service with doorstep delivery across Bangladesh.
+                      </Text>
+
+                      <Text as="p" variant="bodySm" tone="subdued">
+                        Required: <strong>Merchant ID, API Key, API Secret / Token</strong>
+                      </Text>
+                    </BlockStack>
+
+                    <InlineStack align="end">
+                      <Button
+                        url={`/app/courier-settings${searchStr}`}
+                        variant={isBahokConnected ? "secondary" : "primary"}
+                      >
+                        {isBahokConnected ? "Update Bahok" : "Configure Bahok"}
+                      </Button>
+                    </InlineStack>
                   </BlockStack>
                 </Card>
               </Grid.Cell>

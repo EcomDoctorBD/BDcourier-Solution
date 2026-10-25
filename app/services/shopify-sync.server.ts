@@ -25,6 +25,12 @@ export function getCourierTrackingUrl(
   if (key.includes("redx")) {
     return `https://redx.com.bd/track/${encodeURIComponent(trk)}`;
   }
+  if (key.includes("carrybee")) {
+    return `https://carrybee.com/track/${encodeURIComponent(trk)}`;
+  }
+  if (key.includes("bahok")) {
+    return `https://bahok.com.bd/track/${encodeURIComponent(trk)}`;
+  }
   return "";
 }
 

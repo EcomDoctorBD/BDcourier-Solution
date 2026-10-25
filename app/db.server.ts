@@ -212,6 +212,57 @@ const courierConfigSchema = new mongoose.Schema(
       default: "",
       trim: true,
     },
+    // CarryBee Credentials & Webhook Secrets
+    carrybeeClientId: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+    carrybeeClientSecret: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+    carrybeeClientContext: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+    carrybeeStoreId: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+    carrybeeSandbox: {
+      type: Boolean,
+      default: false,
+    },
+    carrybeeWebhookSecret: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+    // Bahok Courier Credentials & Webhook Secrets
+    bahokMerchantId: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+    bahokApiKey: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+    bahokApiToken: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+    bahokWebhookSecret: {
+      type: String,
+      default: "",
+      trim: true,
+    },
     // Webhook Security Token (Unique 32-char hex secret per merchant)
     webhookSecret: {
       type: String,
@@ -257,19 +308,19 @@ const courierConfigSchema = new mongoose.Schema(
     },
     insideDhakaCourier: {
       type: String,
-      enum: ["pathao", "steadfast", "redx"],
+      enum: ["pathao", "steadfast", "redx", "carrybee", "bahok"],
       default: "pathao",
       trim: true,
     },
     outsideDhakaCourier: {
       type: String,
-      enum: ["pathao", "steadfast", "redx"],
+      enum: ["pathao", "steadfast", "redx", "carrybee", "bahok"],
       default: "steadfast",
       trim: true,
     },
     defaultCourier: {
       type: String,
-      enum: ["pathao", "steadfast", "redx"],
+      enum: ["pathao", "steadfast", "redx", "carrybee", "bahok"],
       default: "steadfast",
       trim: true,
     },
@@ -293,7 +344,7 @@ const courierConfigSchema = new mongoose.Schema(
             district: { type: String, required: true, trim: true },
             courier: {
               type: String,
-              enum: ["pathao", "steadfast", "redx"],
+              enum: ["pathao", "steadfast", "redx", "carrybee", "bahok"],
               required: true,
               trim: true,
             },
@@ -339,6 +390,11 @@ export function decryptCourierConfig(config) {
   if (doc.pathaoRefreshToken) doc.pathaoRefreshToken = decryptSecret(doc.pathaoRefreshToken);
   if (doc.steadfastSecretKey) doc.steadfastSecretKey = decryptSecret(doc.steadfastSecretKey);
   if (doc.redxAccessToken) doc.redxAccessToken = decryptSecret(doc.redxAccessToken);
+  if (doc.carrybeeClientSecret) doc.carrybeeClientSecret = decryptSecret(doc.carrybeeClientSecret);
+  if (doc.carrybeeClientContext) doc.carrybeeClientContext = decryptSecret(doc.carrybeeClientContext);
+  if (doc.carrybeeWebhookSecret) doc.carrybeeWebhookSecret = decryptSecret(doc.carrybeeWebhookSecret);
+  if (doc.bahokApiToken) doc.bahokApiToken = decryptSecret(doc.bahokApiToken);
+  if (doc.bahokWebhookSecret) doc.bahokWebhookSecret = decryptSecret(doc.bahokWebhookSecret);
   return doc;
 }
 
