@@ -1051,9 +1051,10 @@ export default function PricingAndBillingPage() {
 
             <Grid columns={{ xs: 1, sm: 2, md: 3, lg: 3, xl: 3 }}>
               {tiers.map((tier) => {
-                const isCurrentPlan =
-                  subscription.currentPlan.toLowerCase() ===
-                  tier.id.toLowerCase();
+                const isActive =
+                  tier.id === subscription.currentPlan ||
+                  tier.id.toLowerCase() ===
+                    (subscription.currentPlan || "Free").toLowerCase();
                 const isGrowthOrPopular = tier.id === "Growth";
                 const isSubmittingThisTier =
                   navigation.state === "submitting" &&
@@ -1100,10 +1101,8 @@ export default function PricingAndBillingPage() {
                       <Card
                         padding="500"
                         background={
-                          isCurrentPlan
+                          isActive
                             ? "bg-surface-secondary"
-                            : isGrowthOrPopular
-                            ? undefined
                             : undefined
                         }
                       >
@@ -1118,7 +1117,7 @@ export default function PricingAndBillingPage() {
                               <Text as="h3" variant="headingMd" fontWeight="bold">
                                 {tier.name}
                               </Text>
-                              {isCurrentPlan ? (
+                              {isActive ? (
                                 <span
                                   style={{
                                     backgroundColor: "#BDF5D6",
@@ -1272,25 +1271,28 @@ export default function PricingAndBillingPage() {
 
                         <Divider />
 
-                        {/* Upgrade / Subscribe / Active Action Button */}
+                        {/* Upgrade / Subscribe / Active Action Button (Uniform Visual Hierarchy) */}
                         <Box>
-                          {isCurrentPlan ? (
+                          {isActive ? (
                             <button
                               type="button"
                               disabled
+                              className="w-full py-2.5 px-4 rounded-lg text-sm font-medium bg-gray-100 text-gray-500 border border-gray-200 cursor-default flex items-center justify-center transition-none"
                               style={{
                                 width: "100%",
                                 padding: "10px 16px",
                                 borderRadius: "8px",
                                 fontSize: "14px",
                                 fontWeight: 600,
-                                border: "none",
-                                backgroundColor: "#E5E7EB",
-                                color: "#9CA3AF",
+                                border: "1px solid #E2E8F0",
+                                backgroundColor: "#F3F4F6",
+                                color: "#6B7280",
                                 cursor: "default",
                                 display: "flex",
                                 alignItems: "center",
                                 justifyContent: "center",
+                                boxShadow: "none",
+                                transition: "none",
                               }}
                             >
                               Current Active Plan
@@ -1300,6 +1302,7 @@ export default function PricingAndBillingPage() {
                               type="button"
                               disabled={isSubmittingThisTier}
                               onClick={() => handleSelectPlan(tier.id)}
+                              className="w-full py-2.5 px-4 rounded-lg text-sm font-semibold bg-black text-white hover:bg-neutral-800 transition-all duration-150 cursor-pointer shadow-sm flex items-center justify-center gap-2"
                               style={{
                                 width: "100%",
                                 padding: "10px 16px",
@@ -1312,18 +1315,20 @@ export default function PricingAndBillingPage() {
                                 alignItems: "center",
                                 justifyContent: "center",
                                 gap: "8px",
-                                border: isGrowthOrPopular
-                                  ? "none"
-                                  : "1px solid #D1D5DB",
-                                backgroundColor: isGrowthOrPopular
-                                  ? "#202223"
-                                  : "#FFFFFF",
-                                color: isGrowthOrPopular
-                                  ? "#FFFFFF"
-                                  : "#1F2937",
-                                boxShadow: isGrowthOrPopular
-                                  ? "0 1px 3px rgba(0,0,0,0.12)"
-                                  : "0 1px 2px rgba(0,0,0,0.05)",
+                                border: "none",
+                                backgroundColor: "#000000",
+                                color: "#FFFFFF",
+                                boxShadow: "0 1px 3px rgba(0, 0, 0, 0.2)",
+                              }}
+                              onMouseEnter={(e) => {
+                                if (!isSubmittingThisTier) {
+                                  e.currentTarget.style.backgroundColor = "#1F2937";
+                                }
+                              }}
+                              onMouseLeave={(e) => {
+                                if (!isSubmittingThisTier) {
+                                  e.currentTarget.style.backgroundColor = "#000000";
+                                }
                               }}
                             >
                               {isSubmittingThisTier ? (
