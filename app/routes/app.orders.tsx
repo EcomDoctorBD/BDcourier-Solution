@@ -3765,7 +3765,7 @@ export default function OrdersFulfillmentPage() {
         {/* Column 3: Customer Information */}
         <IndexTable.Cell>
           <Box minWidth="160px" maxWidth="220px">
-            <BlockStack gap="100">
+            <BlockStack gap="050">
               <Text variant="bodySm" fontWeight="semibold" as="span" truncate>
                 {order.customerName || "Customer"}
               </Text>
@@ -3788,18 +3788,6 @@ export default function OrdersFulfillmentPage() {
                 </InlineStack>
               ) : (
                 <Text variant="bodyXs" tone="subdued">No phone</Text>
-              )}
-              <div style={{ whiteSpace: "normal", wordBreak: "break-word" }}>
-                <Text variant="bodyXs" tone="subdued" as="span">
-                  {order.shippingAddress || "No address provided"}
-                </Text>
-              </div>
-              {order.isAiCleaned && (
-                <div>
-                  <Badge tone="success" size="small">
-                    ✅ AI Cleaned
-                  </Badge>
-                </div>
               )}
             </BlockStack>
           </Box>
