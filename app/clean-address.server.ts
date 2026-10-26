@@ -20,6 +20,7 @@ export const CANONICAL_BD_DISTRICTS: Record<string, string> = {
   // Dhaka Division (13)
   dhaka: "Dhaka",
   dacca: "Dhaka",
+  "ঢাকা": "Dhaka",
   gazipur: "Gazipur",
   narayanganj: "Narayanganj",
   tangail: "Tangail",
@@ -110,7 +111,7 @@ export const CANONICAL_BD_DISTRICTS: Record<string, string> = {
 /**
  * Prominent Bangladeshi urban neighborhoods mapped to their canonical district
  */
-const LOCAL_NEIGHBORHOOD_MAP: Record<string, { district: string; thana: string }> = {
+export const LOCAL_NEIGHBORHOOD_MAP: Record<string, { district: string; thana: string }> = {
   savar: { district: "Dhaka", thana: "Savar" },
   uttara: { district: "Dhaka", thana: "Uttara" },
   mirpur: { district: "Dhaka", thana: "Mirpur" },
@@ -122,6 +123,18 @@ const LOCAL_NEIGHBORHOOD_MAP: Record<string, { district: string; thana: string }
   motijheel: { district: "Dhaka", thana: "Motijheel" },
   keraniganj: { district: "Dhaka", thana: "Keraniganj" },
   tongi: { district: "Gazipur", thana: "Tongi" },
+  // Bengali aliases
+  "মিরপুর": { district: "Dhaka", thana: "Mirpur" },
+  "উত্তরা": { district: "Dhaka", thana: "Uttara" },
+  "গুলশান": { district: "Dhaka", thana: "Gulshan" },
+  "ধানমন্ডি": { district: "Dhaka", thana: "Dhanmondi" },
+  "বনানী": { district: "Dhaka", thana: "Banani" },
+  "মোহাম্মদপুর": { district: "Dhaka", thana: "Mohammadpur" },
+  "বাড্ডা": { district: "Dhaka", thana: "Badda" },
+  "মতিঝিল": { district: "Dhaka", thana: "Motijheel" },
+  "সাভার": { district: "Dhaka", thana: "Savar" },
+  "কেরানীগঞ্জ": { district: "Dhaka", thana: "Keraniganj" },
+  "ঢাকা": { district: "Dhaka", thana: "Dhaka" },
 };
 
 /**

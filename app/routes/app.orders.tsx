@@ -140,6 +140,59 @@ export const BANGLADESH_LOCATIONS: Record<string, string[]> = {
   Mymensingh: ["Mymensingh", "Jamalpur", "Netrokona", "Sherpur"],
 };
 
+/**
+ * Prominent Dhaka urban neighborhoods and aliases for zone classification
+ */
+export const DHAKA_NEIGHBORHOOD_KEYWORDS = [
+  "uttara",
+  "mirpur",
+  "gulshan",
+  "dhanmondi",
+  "banani",
+  "savar",
+  "badda",
+  "motijheel",
+  "mohammadpur",
+  "keraniganj",
+  "baridhara",
+  "bashundhara",
+  "khilkhet",
+  "rampura",
+  "malibagh",
+  "shantinagar",
+  "mogbazar",
+  "farmgate",
+  "tejgaon",
+  "lalbagh",
+  "paltan",
+  "old dhaka",
+  "puran dhaka",
+  "dacca",
+  // Bengali script aliases
+  "ঢাকা",
+  "মিরপুর",
+  "উত্তরা",
+  "গুলশান",
+  "ধানমন্ডি",
+  "বনানী",
+  "মোহাম্মদপুর",
+  "বাড্ডা",
+  "মতিঝিল",
+  "সাভার",
+  "কেরানীগঞ্জ",
+  "বারিধারা",
+  "বসুন্ধরা",
+  "খিলক্ষেত",
+  "রামপুরা",
+  "মালিবাগ",
+  "শান্তিনগর",
+  "মগবাজার",
+  "ফার্মগেট",
+  "তেজগাঁও",
+  "লালবাগ",
+  "পল্টন",
+];
+
 export const COURIER_OPTIONS = [
   { label: "Pathao Courier", value: "pathao" },
   { label: "Steadfast Courier", value: "steadfast" },
@@ -825,11 +878,27 @@ function applyRoutingAndSafetyLogic(
   defaultCourierFallback: string,
   reconciliation: CourierReconciliationInfo | null,
   isAiCleaned: boolean,
-  trackingNumber?: string | null
+  trackingNumber?: string | null,
+  cachedDistrict?: string | null
 ): NormalizedOrder {
   const locationString =
     `${order.city} ${order.province} ${order.shippingAddress}`.toLowerCase();
-  const isInsideDhaka = locationString.includes("dhaka");
+
+  // Zone Evaluation: AddressCache verified district check + Local Neighborhood Map + Substring matches
+  const isDistrictDhaka = Boolean(
+    cachedDistrict && cachedDistrict.trim().toLowerCase().includes("dhaka")
+  );
+
+  const matchesNeighborhood = DHAKA_NEIGHBORHOOD_KEYWORDS.some((keyword) =>
+    locationString.includes(keyword)
+  );
+
+  const isInsideDhaka =
+    isDistrictDhaka ||
+    locationString.includes("dhaka") ||
+    locationString.includes("dacca") ||
+    matchesNeighborhood;
+
   const isEnabled = Boolean(
     routingConfig.isAutoRoutingEnabled ?? routingConfig.autoRoutingEnabled
   );
@@ -860,7 +929,8 @@ function applyRoutingAndSafetyLogic(
     }
 
     const orderCity = (order.city || "").trim();
-    const normalizedCity = orderCity.toLowerCase();
+    const effectiveCity = orderCity || cachedDistrict || (isInsideDhaka ? "Dhaka" : "");
+    const normalizedCity = effectiveCity.toLowerCase();
     const customRoutes = routingConfig.customRoutes || [];
 
     const exactDistrictRule = customRoutes.find(
@@ -2363,6 +2433,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     confidence: { $in: ["HIGH", "MEDIUM"] },
   }).lean();
   const cleanedMap = new Set(cleanedAddresses.map((a: any) => a.rawInput));
+  const addressCacheByRaw = new Map<string, any>(
+    cleanedAddresses.map((a: any) => [a.rawInput, a])
+  );
 
   const cachedPathaoTokenRef = {
     token: null as string | null,
@@ -2409,9 +2482,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         reconciliation = null;
       }
 
-      const isAiCleaned = cleanedMap.has(
-        (order.shippingAddress || "").trim().toLowerCase()
-      );
+      const rawAddressKey = (order.shippingAddress || "").trim().toLowerCase();
+      const cachedRecord = addressCacheByRaw.get(rawAddressKey) || null;
+      const isAiCleaned = cleanedMap.has(rawAddressKey);
+      const cachedDistrict = cachedRecord?.district || null;
 
       return applyRoutingAndSafetyLogic(
         order,
@@ -2420,7 +2494,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         defaultCourierFallback,
         reconciliation,
         isAiCleaned,
-        trackingNumber
+        trackingNumber,
+        cachedDistrict
       );
     })
   );
