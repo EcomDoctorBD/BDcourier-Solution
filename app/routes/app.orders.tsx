@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, type SVGProps } from "react";
+import { useState, useEffect, useCallback, useMemo, type SVGProps } from "react";
 import {
   redirect,
   type HeadersFunction,
@@ -18,6 +18,7 @@ import {
   Layout,
   Card,
   IndexTable,
+  Tabs,
   Button,
   Select,
   Badge,
@@ -2727,7 +2728,224 @@ export default function OrdersFulfillmentPage() {
     }
   }, [actionData]);
 
-  const displayedOrders = orders;
+  // 1. Filter Controls & States
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedTabId, setSelectedTabId] = useState("new");
+  const [isDatePopoverActive, setIsDatePopoverActive] = useState(false);
+  const [dateRange, setDateRange] = useState<{ start: Date | null; end: Date | null } | null>(null);
+  const [dateRangeLabel, setDateRangeLabel] = useState("📅 All time");
+
+  const handleSelectDatePreset = useCallback((preset: string) => {
+    const now = new Date();
+    if (preset === "all") {
+      setDateRange(null);
+      setDateRangeLabel("📅 All time");
+    } else if (preset === "today") {
+      const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+      setDateRange({ start, end });
+      setDateRangeLabel("📅 Today");
+    } else if (preset === "yesterday") {
+      const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+      const start = new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate());
+      const end = new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate(), 23, 59, 59, 999);
+      setDateRange({ start, end });
+      setDateRangeLabel("📅 Yesterday");
+    } else if (preset === "last7") {
+      const start = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      setDateRange({ start, end: now });
+      setDateRangeLabel("📅 Last 7 Days");
+    } else if (preset === "last30") {
+      const start = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+      setDateRange({ start, end: now });
+      setDateRangeLabel("📅 Last 30 Days");
+    } else if (preset === "thisMonth") {
+      const start = new Date(now.getFullYear(), now.getMonth(), 1);
+      setDateRange({ start, end: now });
+      setDateRangeLabel("📅 This Month");
+    }
+    setIsDatePopoverActive(false);
+  }, []);
+
+  const checkIsLocked = useCallback(
+    (order: NormalizedOrder) => {
+      return (
+        Boolean(
+          order.fraudStats &&
+            order.fraudStats.totalOrders > 0 &&
+            order.fraudStats.successRate < (routingConfig.minSuccessRate || 70)
+        ) &&
+        (order.isRiskyLocked || Boolean(lockedRiskOrders[order.id])) &&
+        !manuallyUnlockedOrders[order.id]
+      );
+    },
+    [routingConfig.minSuccessRate, lockedRiskOrders, manuallyUnlockedOrders]
+  );
+
+  const matchesTab = useCallback(
+    (order: NormalizedOrder, tabId: string) => {
+      const dispatched = dispatchedOrders[order.id];
+      const courierStatus = (
+        dispatched?.courierStatus ||
+        order.reconciliation?.courierStatus ||
+        ""
+      ).toLowerCase();
+      const isLocked = checkIsLocked(order);
+
+      switch (tabId) {
+        case "all":
+          return true;
+        case "new":
+          return !dispatched;
+        case "accepted":
+          return (
+            Boolean(dispatched) &&
+            (courierStatus === "accepted" ||
+              courierStatus === "in_review" ||
+              courierStatus === "processing" ||
+              courierStatus === "pending")
+          );
+        case "pending":
+          return isLocked || courierStatus === "pending" || courierStatus === "hold";
+        case "shipping":
+          return (
+            Boolean(dispatched) &&
+            courierStatus !== "delivered" &&
+            courierStatus !== "returned" &&
+            courierStatus !== "cancelled"
+          );
+        case "delivered":
+          return (
+            Boolean(dispatched) &&
+            (courierStatus === "delivered" ||
+              Boolean(order.reconciliation?.autoSyncedPaidFulfilled))
+          );
+        case "cancelled":
+          return (
+            courierStatus === "cancelled" ||
+            order.fulfillmentStatus?.toUpperCase() === "CANCELLED"
+          );
+        case "returned":
+          return courierStatus === "returned";
+        case "partially_delivered":
+          return (
+            courierStatus === "partially_delivered" ||
+            courierStatus.includes("partial")
+          );
+        case "paid_returned":
+          return (
+            courierStatus === "paid_returned" ||
+            (courierStatus === "returned" &&
+              Boolean(order.reconciliation?.courierCashCollected) &&
+              order.reconciliation?.courierCashCollected !== "0.00")
+          );
+        case "old_orders":
+          return (
+            order.fulfillmentStatus?.toUpperCase() === "FULFILLED" ||
+            Boolean(order.reconciliation?.autoSyncedPaidFulfilled)
+          );
+        default:
+          return true;
+      }
+    },
+    [dispatchedOrders, checkIsLocked]
+  );
+
+  // Exact 11 Functional Tabs
+  const tabDefinitions = useMemo(
+    () => [
+      { id: "all", content: "All" },
+      { id: "new", content: "New" },
+      { id: "accepted", content: "Accepted" },
+      { id: "pending", content: "Pending" },
+      { id: "shipping", content: "Shipping" },
+      { id: "delivered", content: "Delivered" },
+      { id: "cancelled", content: "Cancelled" },
+      { id: "returned", content: "Returned" },
+      { id: "partially_delivered", content: "Partially Delivered" },
+      { id: "paid_returned", content: "Paid Returned" },
+      { id: "old_orders", content: "Old Orders" },
+    ],
+    []
+  );
+
+  const tabCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const tab of tabDefinitions) {
+      counts[tab.id] = orders.filter((o) => matchesTab(o, tab.id)).length;
+    }
+    return counts;
+  }, [orders, tabDefinitions, matchesTab]);
+
+  const tabsList = useMemo(
+    () =>
+      tabDefinitions.map((tab) => ({
+        id: tab.id,
+        content: tab.content,
+        badge: String(tabCounts[tab.id] ?? 0),
+      })),
+    [tabDefinitions, tabCounts]
+  );
+
+  const selectedTabIndex = useMemo(() => {
+    const idx = tabDefinitions.findIndex((t) => t.id === selectedTabId);
+    return idx >= 0 ? idx : 1; // Default to 'new' (index 1)
+  }, [tabDefinitions, selectedTabId]);
+
+  const handleTabSelect = useCallback(
+    (index: number) => {
+      setSelectedTabId(tabDefinitions[index]?.id || "new");
+    },
+    [tabDefinitions]
+  );
+
+  // 2. Tier 1 Non-Destructive Filter Pipeline
+  const displayedOrders = useMemo(() => {
+    return orders.filter((order) => {
+      // 1. Search Query Filter (Phone, Order Name, Customer Name, Address, Tracking)
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase().trim();
+        const qDigits = q.replace(/\D/g, "");
+        const dispatched = dispatchedOrders[order.id];
+        const matchesName = order.name.toLowerCase().includes(q);
+        const phoneDigits = (order.customerPhone || "").replace(/\D/g, "");
+        const matchesPhone = qDigits.length > 0 && phoneDigits.includes(qDigits);
+        const matchesCustomer = order.customerName.toLowerCase().includes(q);
+        const matchesAddress = order.shippingAddress.toLowerCase().includes(q);
+        const matchesTracking = Boolean(
+          dispatched?.trackingNumber?.toLowerCase().includes(q)
+        );
+
+        if (
+          !matchesName &&
+          !matchesPhone &&
+          !matchesCustomer &&
+          !matchesAddress &&
+          !matchesTracking
+        ) {
+          return false;
+        }
+      }
+
+      // 2. Active Tab Status Filter
+      if (!matchesTab(order, selectedTabId)) {
+        return false;
+      }
+
+      // 3. Date Range Selector Filter
+      if (dateRange && (dateRange.start || dateRange.end)) {
+        const orderTime = new Date(order.createdAt).getTime();
+        if (dateRange.start && orderTime < dateRange.start.getTime()) {
+          return false;
+        }
+        if (dateRange.end && orderTime > dateRange.end.getTime()) {
+          return false;
+        }
+      }
+
+      return true;
+    });
+  }, [orders, searchQuery, selectedTabId, dateRange, matchesTab, dispatchedOrders]);
 
   const riskyOrdersCount = displayedOrders.filter(
     (o) =>
@@ -2987,12 +3205,15 @@ export default function OrdersFulfillmentPage() {
     !usageSummary.isUnlimitedBulk &&
     selectedResources.length > usageSummary.bulkBatchLimit;
 
-  // Streamlined 5-Column Table Headings for zero horizontal scroll
+  // Reorganized 8-Column Table Headings for High-Converting Courier Fulfillment
   const tableHeadings = [
-    { title: "Order & Destination" },
-    { title: "Customer & Delivery History" },
-    { title: "Items & COD Amount" },
-    { title: "Courier & Status" },
+    { title: "Order" },
+    { title: "Products" },
+    { title: "Customer" },
+    { title: "Payment & COD" },
+    { title: "Fraud Check" },
+    { title: "Courier & Tracking" },
+    { title: "Warehouse Note" },
     { title: "Action" },
   ];
 
@@ -3049,168 +3270,249 @@ export default function OrdersFulfillmentPage() {
         selected={isRowSelected}
         position={index}
       >
-        {/* Column 1: Multi-Select Checkbox + Order ID & Routing Status */}
+        {/* Column 1: Order Info & Destination */}
         <IndexTable.Cell>
           <div onClick={(e) => e.stopPropagation()}>
             <BlockStack gap="100">
-              <InlineStack gap="200" blockAlign="center">
+              <InlineStack gap="150" blockAlign="center">
                 <Checkbox
-                  label={order.name}
+                  label=""
+                  labelHidden
                   checked={isRowSelected}
                   disabled={isRowProcessing || isLockedBySafetyNet}
                   onChange={(checked) =>
                     toggleSingleRowCheckbox(order.id, checked)
                   }
                 />
+                <Link
+                  url={`https://${shopDomain}/admin/orders/${order.id.replace(/\D/g, "")}`}
+                  target="_blank"
+                  monochrome
+                  removeUnderline
+                >
+                  <Text variant="bodyMd" fontWeight="bold" as="span">
+                    {order.name}
+                  </Text>
+                </Link>
               </InlineStack>
 
-              {/* Status Badge: Processing Spinner / Successfully Sent Badge / Risky Amber Lock / Default */}
-              {isRowProcessing ? (
-                <Badge tone="info" status="info">
-                  <InlineStack gap="100" blockAlign="center">
-                    <Spinner size="small" />
-                    <span>⚡ Dispatching...</span>
-                  </InlineStack>
-                </Badge>
-              ) : dispatchedInfo ? (
-                <InlineStack gap="100" wrap>
-                  {dispatchedInfo.trackingUrl ? (
-                    <Link
-                      url={dispatchedInfo.trackingUrl}
-                      target="_blank"
-                      removeUnderline
-                    >
-                      <Badge tone="success" status="success">
-                        {sentBadgeText} 🔗
-                      </Badge>
-                    </Link>
-                  ) : (
-                    <Badge tone="success" status="success">
-                      {sentBadgeText}
-                    </Badge>
-                  )}
-                  {order.isAiCleaned && (
-                    <Badge tone="success" progress="complete">
-                      ✅ AI Cleaned
-                    </Badge>
-                  )}
-                </InlineStack>
-              ) : isLockedBySafetyNet ? (
-                <Badge tone="warning" progress="partiallyComplete">
-                  ⚠️ Risky Order (Manual Review Required)
-                </Badge>
-              ) : (
-                <InlineStack gap="100" wrap>
-                  <Badge tone={routingConfig.autoRoutingEnabled ? "info" : undefined}>
-                    {order.status}
-                  </Badge>
-                  {order.isAiCleaned && (
-                    <Badge tone="success" progress="complete">
-                      ✅ AI Cleaned
-                    </Badge>
-                  )}
-                </InlineStack>
-              )}
+              <InlineStack gap="100" blockAlign="center">
+                <Link
+                  url={`https://${shopDomain}/admin/orders/${order.id.replace(/\D/g, "")}`}
+                  target="_blank"
+                  monochrome
+                  removeUnderline
+                >
+                  <span style={{ fontSize: "11px", color: "#2563EB", fontWeight: 500 }}>
+                    Admin ↗
+                  </span>
+                </Link>
+                <span style={{ color: "#D1D5DB" }}>•</span>
+                <Text variant="bodyXs" tone="subdued" as="span">
+                  {(() => {
+                    try {
+                      return new Date(order.createdAt).toLocaleDateString("en-US", {
+                        day: "numeric",
+                        month: "short",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      });
+                    } catch {
+                      return order.createdAt;
+                    }
+                  })()}
+                </Text>
+              </InlineStack>
 
-              <Text variant="bodySm" tone="subdued" as="span">
-                {order.isInsideDhaka ? "📍 Inside Dhaka" : "🚚 Outside Dhaka"}
-              </Text>
+              <div>
+                <Badge tone={order.isInsideDhaka ? "info" : "attention"} size="small">
+                  {order.isInsideDhaka ? "📍 Inside Dhaka" : "🚚 Outside Dhaka"}
+                </Badge>
+              </div>
             </BlockStack>
           </div>
         </IndexTable.Cell>
 
-        {/* Column 2: Customer + Real Fraud Stats + Warehouse Note */}
+        {/* Column 2: Products & Line Items */}
         <IndexTable.Cell>
-          <Box
-            background={isLockedBySafetyNet ? "bg-surface-warning-subdued" : undefined}
-            padding={isLockedBySafetyNet ? "200" : "0"}
-            borderRadius={isLockedBySafetyNet ? "200" : undefined}
-            maxWidth="280px"
-          >
-            <BlockStack gap="150">
-              <InlineStack gap="200" blockAlign="center" wrap>
-                <Text variant="bodyMd" fontWeight="semibold" as="span">
-                  {order.customerName || "Customer"}
-                </Text>
-                {isLockedBySafetyNet && (
-                  <Badge tone="warning" progress="partiallyComplete">
-                    ⚠️ Risky Order
-                  </Badge>
+          <Box minWidth="160px" maxWidth="230px">
+            <InlineStack gap="200" blockAlign="start" wrap={false}>
+              {/* Product Thumbnail Placeholder (Stacked overlay in Section 2) */}
+              <div
+                style={{
+                  width: "36px",
+                  height: "36px",
+                  borderRadius: "6px",
+                  backgroundColor: "#F3F4F6",
+                  border: "1px solid #E5E7EB",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  flexShrink: 0,
+                  fontSize: "16px",
+                }}
+              >
+                📦
+              </div>
+
+              <BlockStack gap="050">
+                {order.lineItems.length > 0 ? (
+                  order.lineItems.slice(0, 2).map((item, i) => (
+                    <BlockStack key={i} gap="025">
+                      <InlineStack gap="100" blockAlign="center">
+                        <Text variant="bodySm" fontWeight="medium" truncate>
+                          {item.title}
+                        </Text>
+                        <Badge tone="info" size="small">
+                          {`x${item.quantity}`}
+                        </Badge>
+                      </InlineStack>
+                      {(item.variantTitle || item.sku) && (
+                        <Text variant="bodyXs" tone="subdued" truncate>
+                          {[item.variantTitle, item.sku ? `SKU: ${item.sku}` : ""]
+                            .filter(Boolean)
+                            .join(" • ")}
+                        </Text>
+                      )}
+                    </BlockStack>
+                  ))
+                ) : (
+                  <Text variant="bodySm" tone="subdued">
+                    No line items
+                  </Text>
                 )}
-              </InlineStack>
+                {order.lineItems.length > 2 && (
+                  <Text variant="bodyXs" tone="subdued">
+                    +{order.lineItems.length - 2} more item{order.lineItems.length - 2 > 1 ? "s" : ""}
+                  </Text>
+                )}
+              </BlockStack>
+            </InlineStack>
+          </Box>
+        </IndexTable.Cell>
 
+        {/* Column 3: Customer Information */}
+        <IndexTable.Cell>
+          <Box minWidth="160px" maxWidth="220px">
+            <BlockStack gap="100">
+              <Text variant="bodySm" fontWeight="semibold" as="span" truncate>
+                {order.customerName || "Customer"}
+              </Text>
+              {order.customerPhone ? (
+                <InlineStack gap="150" blockAlign="center">
+                  <Text variant="bodySm" as="span">
+                    {order.customerPhone}
+                  </Text>
+                  <Link url={`tel:${order.customerPhone.replace(/\D/g, "")}`} removeUnderline>
+                    <span style={{ fontSize: "11px", color: "#2563EB", cursor: "pointer" }}>📞 Call</span>
+                  </Link>
+                  <span style={{ color: "#D1D5DB" }}>•</span>
+                  <Link
+                    url={`https://wa.me/${order.customerPhone.replace(/\D/g, "").replace(/^0/, "880")}`}
+                    target="_blank"
+                    removeUnderline
+                  >
+                    <span style={{ fontSize: "11px", color: "#16A34A", cursor: "pointer" }}>💬 WA</span>
+                  </Link>
+                </InlineStack>
+              ) : (
+                <Text variant="bodyXs" tone="subdued">No phone</Text>
+              )}
               <div style={{ whiteSpace: "normal", wordBreak: "break-word" }}>
-                <Text variant="bodySm" tone="subdued" as="span">
-                  {[order.customerPhone, order.shippingAddress].filter(Boolean).join(" • ") || "No address/phone provided"}
+                <Text variant="bodyXs" tone="subdued" as="span">
+                  {order.shippingAddress || "No address provided"}
                 </Text>
               </div>
-
-              {order.fraudStats && order.fraudStats.totalOrders > 0 && (
-                <InlineStack gap="150" blockAlign="center" wrap>
-                  <Badge tone="success">{`Delivered: ${order.fraudStats.totalDelivered}`}</Badge>
-                  <Badge tone="critical">{`Returned: ${order.fraudStats.totalReturned}`}</Badge>
-                  <Badge tone={rateBadgeTone}>{`Success Rate: ${order.fraudStats.successRate}%`}</Badge>
-                </InlineStack>
+              {order.isAiCleaned && (
+                <div>
+                  <Badge tone="success" size="small">
+                    ✅ AI Cleaned
+                  </Badge>
+                </div>
               )}
-
-              <div onClick={(e) => e.stopPropagation()}>
-                <TextField
-                  label="Warehouse Packaging Note"
-                  labelHidden
-                  value={currentNote}
-                  disabled={isRowProcessing || Boolean(dispatchedInfo)}
-                  onChange={(val) =>
-                    setWarehouseNotesByOrder((prev) => ({
-                      ...prev,
-                      [order.id]: val,
-                    }))
-                  }
-                  placeholder="Warehouse note (e.g., Fragile - Pack with bubble wrap)"
-                  autoComplete="off"
-                />
-              </div>
             </BlockStack>
           </Box>
         </IndexTable.Cell>
 
-        {/* Column 3: Items, Financial Status & COD Amount */}
+        {/* Column 4: Payment Status & Collectable COD */}
         <IndexTable.Cell>
-          <Box maxWidth="240px">
+          <Box minWidth="130px" maxWidth="170px">
             <BlockStack gap="100">
-              <InlineStack gap="150" blockAlign="center" wrap>
-                <Text variant="bodyMd" fontWeight="bold" as="span">
-                  {`${order.currencyCode} ${order.totalPrice}`}
-                </Text>
+              <Text variant="bodySm" fontWeight="bold" as="span">
+                {`${order.currencyCode} ${order.totalPrice}`}
+              </Text>
+              <InlineStack gap="100" wrap>
+                <Badge
+                  tone={order.displayFinancialStatus?.toUpperCase() === "PAID" ? "success" : "attention"}
+                  size="small"
+                >
+                  {order.displayFinancialStatus || "UNPAID"}
+                </Badge>
                 {order.codAmount === 0 ? (
-                  <Badge tone="success" progress="complete">
+                  <Badge tone="success" size="small">
                     PREPAID (৳0 COD)
                   </Badge>
                 ) : (
-                  <Badge tone="attention">
+                  <Badge tone="attention" size="small">
                     {`COD: ৳${order.codAmount}`}
                   </Badge>
                 )}
               </InlineStack>
-
-              <div style={{ whiteSpace: "normal", wordBreak: "break-word" }}>
-                <Text variant="bodySm" tone="subdued" as="span">
-                  {order.displayFinancialStatus ? `${order.displayFinancialStatus} • ` : ""}
-                  {order.lineItems.length > 0
-                    ? order.lineItems
-                        .map((item) =>
-                          [item.title, item.variantTitle, item.sku ? `(${item.sku})` : ""]
-                            .filter(Boolean)
-                            .join(" ")
-                        )
-                        .join(", ")
-                    : "No line items"}
-                </Text>
-              </div>
             </BlockStack>
           </Box>
         </IndexTable.Cell>
 
-        {/* Column 4: Courier Partner Select Dropdown + Live Status / Reconciliation */}
+        {/* Column 5: Delivery History & Fraud Risk Metrics */}
+        <IndexTable.Cell>
+          <Box minWidth="140px" maxWidth="180px">
+            <BlockStack gap="100">
+              {order.fraudStats && order.fraudStats.totalOrders > 0 ? (
+                <>
+                  <InlineStack gap="100" blockAlign="center">
+                    <Badge tone={rateBadgeTone} size="small">
+                      {`Trust: ${order.fraudStats.successRate}%`}
+                    </Badge>
+                  </InlineStack>
+                  <InlineStack gap="100">
+                    <span style={{ fontSize: "11px", color: "#16A34A", fontWeight: 600 }}>
+                      ✓ {order.fraudStats.totalDelivered}
+                    </span>
+                    <span style={{ fontSize: "11px", color: "#9CA3AF" }}>/</span>
+                    <span style={{ fontSize: "11px", color: "#DC2626", fontWeight: 600 }}>
+                      ✕ {order.fraudStats.totalReturned}
+                    </span>
+                  </InlineStack>
+                </>
+              ) : (
+                <Badge tone="subdued" size="small">New Customer</Badge>
+              )}
+
+              {isLockedBySafetyNet && (
+                <BlockStack gap="050">
+                  <Badge tone="warning" size="small">
+                    ⚠️ Risky: Locked
+                  </Badge>
+                  <div onClick={(e) => e.stopPropagation()}>
+                    <Button
+                      size="micro"
+                      variant="secondary"
+                      onClick={() =>
+                        setManuallyUnlockedOrders((prev) => ({
+                          ...prev,
+                          [order.id]: true,
+                        }))
+                      }
+                    >
+                      Approve &amp; Unlock
+                    </Button>
+                  </div>
+                </BlockStack>
+              )}
+            </BlockStack>
+          </Box>
+        </IndexTable.Cell>
+
+        {/* Column 6: Courier Selection & Tracking Consignment */}
         <IndexTable.Cell>
           <div onClick={(e) => e.stopPropagation()}>
             <Box minWidth="150px" maxWidth="190px">
@@ -3226,225 +3528,218 @@ export default function OrdersFulfillmentPage() {
                       [order.id]: val,
                     }))
                   }
-                  disabled={
-                    Boolean(dispatchedInfo) ||
-                    isRowProcessing ||
-                    isLockedBySafetyNet
-                  }
+                  disabled={Boolean(dispatchedInfo) || isRowProcessing || isLockedBySafetyNet}
                 />
 
-                {!dispatchedInfo && !isLockedBySafetyNet && (
-                  <>
-                    {selectedCourier === "pathao" && (
-                      <Box>
-                        {!showLocationOverride[order.id] ? (
-                          <Button
-                            variant="plain"
-                            size="slim"
-                            onClick={() =>
-                              setShowLocationOverride((prev) => ({
-                                ...prev,
-                                [order.id]: true,
-                              }))
-                            }
-                          >
-                            📍 Edit City/Zone (Auto: Resolved)
-                          </Button>
-                        ) : (
-                          <BlockStack gap="050">
-                            <InlineStack gap="100">
-                              <TextField
-                                label="City ID"
-                                labelHidden
-                                placeholder="City ID (e.g. 1)"
-                                size="slim"
-                                value={manualCityIds[order.id] || ""}
-                                onChange={(val) =>
-                                  setManualCityIds((prev) => ({
-                                    ...prev,
-                                    [order.id]: val,
-                                  }))
-                                }
-                                autoComplete="off"
-                              />
-                              <TextField
-                                label="Zone ID"
-                                labelHidden
-                                placeholder="Zone ID (e.g. 1)"
-                                size="slim"
-                                value={manualZoneIds[order.id] || ""}
-                                onChange={(val) =>
-                                  setManualZoneIds((prev) => ({
-                                    ...prev,
-                                    [order.id]: val,
-                                  }))
-                                }
-                                autoComplete="off"
-                              />
-                            </InlineStack>
-                            <Button
-                              variant="plain"
-                              size="slim"
-                              onClick={() =>
-                                setShowLocationOverride((prev) => ({
-                                  ...prev,
-                                  [order.id]: false,
-                                }))
-                              }
-                            >
-                              ✕ Close Override
-                            </Button>
-                          </BlockStack>
-                        )}
-                      </Box>
-                    )}
-
-                    {selectedCourier === "redx" && (
-                      <Box>
-                        {!showLocationOverride[order.id] ? (
-                          <Button
-                            variant="plain"
-                            size="slim"
-                            onClick={() =>
-                              setShowLocationOverride((prev) => ({
-                                ...prev,
-                                [order.id]: true,
-                              }))
-                            }
-                          >
-                            📍 Edit Area (Auto: Resolved)
-                          </Button>
-                        ) : (
-                          <BlockStack gap="050">
-                            <InlineStack gap="100">
-                              <TextField
-                                label="Area ID"
-                                labelHidden
-                                placeholder="Area ID (e.g. 1)"
-                                size="slim"
-                                value={manualAreaIds[order.id] || ""}
-                                onChange={(val) =>
-                                  setManualAreaIds((prev) => ({
-                                    ...prev,
-                                    [order.id]: val,
-                                  }))
-                                }
-                                autoComplete="off"
-                              />
-                              <TextField
-                                label="Area Name"
-                                labelHidden
-                                placeholder="Area Name"
-                                size="slim"
-                                value={manualAreaNames[order.id] || ""}
-                                onChange={(val) =>
-                                  setManualAreaNames((prev) => ({
-                                    ...prev,
-                                    [order.id]: val,
-                                  }))
-                                }
-                                autoComplete="off"
-                              />
-                            </InlineStack>
-                            <Button
-                              variant="plain"
-                              size="slim"
-                              onClick={() =>
-                                setShowLocationOverride((prev) => ({
-                                  ...prev,
-                                  [order.id]: false,
-                                }))
-                              }
-                            >
-                              ✕ Close Override
-                            </Button>
-                          </BlockStack>
-                        )}
-                      </Box>
-                    )}
-                  </>
-                )}
-
-                {/* Real Live Courier & Payment Status if booked */}
                 {dispatchedInfo ? (
                   <BlockStack gap="050">
-                    <Badge tone={order.reconciliation.autoSyncedPaidFulfilled ? "success" : "info"}>
-                      {order.reconciliation.autoSyncedPaidFulfilled
-                        ? `Courier: ${order.reconciliation.courierStatus.toUpperCase()} → Paid & Fulfilled`
-                        : `Courier: ${order.reconciliation.courierStatus.toUpperCase()}`}
+                    <Badge tone="success" size="small">
+                      {sentBadgeText}
                     </Badge>
-                    {order.reconciliation.hasCashDiscrepancy ? (
-                      <Text variant="bodySm" tone="critical" as="span">
-                        ⚠️ Mismatch: {order.currencyCode} {order.reconciliation.courierCashCollected} ({order.reconciliation.discrepancyDelta})
+                    {dispatchedInfo.trackingUrl && (
+                      <Link url={dispatchedInfo.trackingUrl} target="_blank" removeUnderline>
+                        <span style={{ fontSize: "11px", color: "#2563EB", fontWeight: 500 }}>
+                          Track Parcel ↗
+                        </span>
+                      </Link>
+                    )}
+                    {order.reconciliation?.courierStatus && (
+                      <Text variant="bodyXs" tone="subdued">
+                        {`Status: ${order.reconciliation.courierStatus.toUpperCase()}`}
                       </Text>
-                    ) : order.reconciliation.courierCashCollected !== "0.00" ? (
-                      <Text variant="bodySm" tone="subdued" as="span">
-                        ✓ COD: {order.currencyCode} {order.reconciliation.courierCashCollected}
-                      </Text>
-                    ) : null}
+                    )}
                   </BlockStack>
                 ) : (
-                  <Text variant="bodySm" tone="subdued" as="span">
-                    Unbooked
-                  </Text>
+                  !isLockedBySafetyNet && (
+                    <>
+                      {selectedCourier === "pathao" && (
+                        <Box>
+                          {!showLocationOverride[order.id] ? (
+                            <Button
+                              variant="plain"
+                              size="slim"
+                              onClick={() =>
+                                setShowLocationOverride((prev) => ({
+                                  ...prev,
+                                  [order.id]: true,
+                                }))
+                              }
+                            >
+                              📍 Edit City/Zone
+                            </Button>
+                          ) : (
+                            <BlockStack gap="050">
+                              <InlineStack gap="100">
+                                <TextField
+                                  label="City ID"
+                                  labelHidden
+                                  placeholder="City ID"
+                                  size="slim"
+                                  value={manualCityIds[order.id] || ""}
+                                  onChange={(val) =>
+                                    setManualCityIds((prev) => ({
+                                      ...prev,
+                                      [order.id]: val,
+                                    }))
+                                  }
+                                  autoComplete="off"
+                                />
+                                <TextField
+                                  label="Zone ID"
+                                  labelHidden
+                                  placeholder="Zone ID"
+                                  size="slim"
+                                  value={manualZoneIds[order.id] || ""}
+                                  onChange={(val) =>
+                                    setManualZoneIds((prev) => ({
+                                      ...prev,
+                                      [order.id]: val,
+                                    }))
+                                  }
+                                  autoComplete="off"
+                                />
+                              </InlineStack>
+                              <Button
+                                variant="plain"
+                                size="slim"
+                                onClick={() =>
+                                  setShowLocationOverride((prev) => ({
+                                    ...prev,
+                                    [order.id]: false,
+                                  }))
+                                }
+                              >
+                                ✕ Close
+                              </Button>
+                            </BlockStack>
+                          )}
+                        </Box>
+                      )}
+
+                      {selectedCourier === "redx" && (
+                        <Box>
+                          {!showLocationOverride[order.id] ? (
+                            <Button
+                              variant="plain"
+                              size="slim"
+                              onClick={() =>
+                                setShowLocationOverride((prev) => ({
+                                  ...prev,
+                                  [order.id]: true,
+                                }))
+                              }
+                            >
+                              📍 Edit Area
+                            </Button>
+                          ) : (
+                            <BlockStack gap="050">
+                              <InlineStack gap="100">
+                                <TextField
+                                  label="Area ID"
+                                  labelHidden
+                                  placeholder="Area ID"
+                                  size="slim"
+                                  value={manualAreaIds[order.id] || ""}
+                                  onChange={(val) =>
+                                    setManualAreaIds((prev) => ({
+                                      ...prev,
+                                      [order.id]: val,
+                                    }))
+                                  }
+                                  autoComplete="off"
+                                />
+                                <TextField
+                                  label="Area Name"
+                                  labelHidden
+                                  placeholder="Area Name"
+                                  size="slim"
+                                  value={manualAreaNames[order.id] || ""}
+                                  onChange={(val) =>
+                                    setManualAreaNames((prev) => ({
+                                      ...prev,
+                                      [order.id]: val,
+                                    }))
+                                  }
+                                  autoComplete="off"
+                                />
+                              </InlineStack>
+                              <Button
+                                variant="plain"
+                                size="slim"
+                                onClick={() =>
+                                  setShowLocationOverride((prev) => ({
+                                    ...prev,
+                                    [order.id]: false,
+                                  }))
+                                }
+                              >
+                                ✕ Close
+                              </Button>
+                            </BlockStack>
+                          )}
+                        </Box>
+                      )}
+                    </>
+                  )
                 )}
               </BlockStack>
             </Box>
           </div>
         </IndexTable.Cell>
 
-        {/* Column 5: Single Dispatch / Unlock / Consignment Badge */}
+        {/* Column 7: Warehouse Packaging Note */}
+        <IndexTable.Cell>
+          <div onClick={(e) => e.stopPropagation()}>
+            <Box minWidth="140px" maxWidth="180px">
+              <TextField
+                label="Warehouse Packaging Note"
+                labelHidden
+                value={currentNote}
+                disabled={isRowProcessing || Boolean(dispatchedInfo)}
+                onChange={(val) =>
+                  setWarehouseNotesByOrder((prev) => ({
+                    ...prev,
+                    [order.id]: val,
+                  }))
+                }
+                placeholder="Packaging note..."
+                autoComplete="off"
+              />
+            </Box>
+          </div>
+        </IndexTable.Cell>
+
+        {/* Column 8: Action Execution */}
         <IndexTable.Cell>
           <div onClick={(e) => e.stopPropagation()}>
             {isRowProcessing ? (
               <Badge tone="info" status="info">
                 <InlineStack gap="100" blockAlign="center">
                   <Spinner size="small" />
-                  <span>⚡ Dispatching...</span>
+                  <span>⚡ Sending...</span>
                 </InlineStack>
               </Badge>
             ) : dispatchedInfo ? (
-              <BlockStack gap="100">
-                {dispatchedInfo.trackingUrl ? (
-                  <Link
-                    url={dispatchedInfo.trackingUrl}
-                    target="_blank"
-                    removeUnderline
-                  >
-                    <Badge tone="success" status="success">
-                      {sentBadgeText} 🔗
-                    </Badge>
-                  </Link>
-                ) : (
-                  <Badge tone="success" status="success">
-                    {sentBadgeText}
-                  </Badge>
-                )}
-                <Text variant="bodySm" tone="subdued" as="span">
-                  Via {dispatchedInfo.courierName}
-                </Text>
-              </BlockStack>
+              <Badge tone="success" status="success">
+                ✓ Dispatched
+              </Badge>
             ) : isLockedBySafetyNet ? (
-              <BlockStack gap="150">
-                <Badge tone="warning" status="warning">
-                  ⚠️ Risky: Manual Review
-                </Badge>
-                <Button
-                  size="slim"
-                  variant="secondary"
-                  onClick={() =>
-                    setManuallyUnlockedOrders((prev) => ({
-                      ...prev,
-                      [order.id]: true,
-                    }))
-                  }
-                >
-                  Approve &amp; Unlock
-                </Button>
-              </BlockStack>
+              <Button
+                size="slim"
+                variant="secondary"
+                onClick={() =>
+                  setManuallyUnlockedOrders((prev) => ({
+                    ...prev,
+                    [order.id]: true,
+                  }))
+                }
+              >
+                Unlock Review
+              </Button>
             ) : (
               <Button
                 variant="primary"
+                size="slim"
                 loading={isRowSubmitting}
                 onClick={() => handleSendSingleOrder(order)}
               >
@@ -4511,16 +4806,75 @@ export default function OrdersFulfillmentPage() {
 
           {/* ==================== MULTI-SELECT ORDERS INDEXTABLE ==================== */}
           <Layout.Section>
-            <Card padding={displayedOrders.length === 0 ? "600" : "0"}>
+            <Card padding="0">
+              {/* 1. Exactly 11 Functional Tabs */}
+              <Tabs
+                tabs={tabsList}
+                selected={selectedTabIndex}
+                onSelect={handleTabSelect}
+              />
+
+              {/* 2. Wide Search Box & Date Picker Popover */}
+              <Box padding="300" borderBlockEndWidth="025" borderColor="border">
+                <InlineStack align="space-between" blockAlign="center" gap="300">
+                  <div style={{ flex: 1 }}>
+                    <TextField
+                      label="Search orders"
+                      labelHidden
+                      value={searchQuery}
+                      onChange={setSearchQuery}
+                      placeholder="Search orders by phone, ID, customer, parcel..."
+                      clearButton
+                      onClearButtonClick={() => setSearchQuery("")}
+                      autoComplete="off"
+                      prefix={<span style={{ color: "#9CA3AF" }}>🔍</span>}
+                    />
+                  </div>
+                  <Popover
+                    active={isDatePopoverActive}
+                    activator={
+                      <Button disclosure onClick={() => setIsDatePopoverActive((prev) => !prev)}>
+                        {dateRangeLabel}
+                      </Button>
+                    }
+                    onClose={() => setIsDatePopoverActive(false)}
+                  >
+                    <ActionList
+                      actionRole="menuitem"
+                      items={[
+                        { content: "📅 All time", onAction: () => handleSelectDatePreset("all") },
+                        { content: "Today", onAction: () => handleSelectDatePreset("today") },
+                        { content: "Yesterday", onAction: () => handleSelectDatePreset("yesterday") },
+                        { content: "Last 7 Days", onAction: () => handleSelectDatePreset("last7") },
+                        { content: "Last 30 Days", onAction: () => handleSelectDatePreset("last30") },
+                        { content: "This Month", onAction: () => handleSelectDatePreset("thisMonth") },
+                      ]}
+                    />
+                  </Popover>
+                </InlineStack>
+              </Box>
+
               {displayedOrders.length === 0 ? (
                 <Box paddingBlock="600" paddingInline="500">
                   <BlockStack gap="200" inlineAlign="center">
                     <Text as="h3" variant="headingMd" alignment="center">
-                      No Unfulfilled Orders Found
+                      No Orders Found
                     </Text>
                     <Text as="p" variant="bodyMd" tone="subdued" alignment="center">
-                      All orders have been fulfilled, or no unfulfilled orders currently exist in your Shopify store.
+                      No orders match the selected filter, status tab, or date range.
                     </Text>
+                    {(searchQuery || selectedTabId !== "all" || dateRange) && (
+                      <Button
+                        variant="plain"
+                        onClick={() => {
+                          setSearchQuery("");
+                          setSelectedTabId("all");
+                          handleSelectDatePreset("all");
+                        }}
+                      >
+                        Clear All Filters
+                      </Button>
+                    )}
                   </BlockStack>
                 </Box>
               ) : (
