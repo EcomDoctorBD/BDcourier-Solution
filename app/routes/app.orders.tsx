@@ -3991,7 +3991,11 @@ export default function OrdersFulfillmentPage() {
       >
         {/* Column 1: Order Info & Destination */}
         <IndexTable.Cell>
-          <div onClick={(e) => e.stopPropagation()}>
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="flex items-center"
+            style={{ display: "flex", alignItems: "center" }}
+          >
             <BlockStack gap="100">
               <Link
                 url={`https://${shopDomain}/admin/orders/${order.id.replace(/\D/g, "")}`}
@@ -4043,248 +4047,268 @@ export default function OrdersFulfillmentPage() {
 
         {/* Column 2: Products & Line Items with Stacked Images */}
         <IndexTable.Cell>
-          <Box minWidth="190px" maxWidth="250px">
-            <BlockStack gap="150">
-              {order.lineItems.length > 0 ? (
-                <>
-                  {/* Stacked Thumbnails Container */}
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      position: "relative",
-                      minHeight: "40px",
-                    }}
-                  >
-                    {order.lineItems.slice(0, 3).map((item, idx) => (
-                      <div
-                        key={idx}
-                        style={{
-                          width: "38px",
-                          height: "38px",
-                          borderRadius: "8px",
-                          border: "2px solid #FFFFFF",
-                          boxShadow: "0 1px 3px rgba(0, 0, 0, 0.12)",
-                          backgroundColor: "#F3F4F6",
-                          overflow: "hidden",
-                          marginLeft: idx === 0 ? "0" : "-12px",
-                          zIndex: 10 - idx,
-                          position: "relative",
-                          flexShrink: 0,
-                          transition: "transform 0.15s ease",
-                        }}
-                        title={`${item.title} (x${item.quantity})`}
-                      >
-                        <img
-                          src={item.imageUrl || DEFAULT_PRODUCT_PLACEHOLDER}
-                          alt={item.title}
+          <div
+            className="flex items-center"
+            style={{ display: "flex", alignItems: "center" }}
+          >
+            <Box minWidth="190px" maxWidth="250px">
+              <BlockStack gap="150">
+                {order.lineItems.length > 0 ? (
+                  <>
+                    {/* Stacked Thumbnails Container */}
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        position: "relative",
+                        minHeight: "40px",
+                      }}
+                    >
+                      {order.lineItems.slice(0, 3).map((item, idx) => (
+                        <div
+                          key={idx}
                           style={{
-                            width: "100%",
-                            height: "100%",
-                            objectFit: "cover",
-                            display: "block",
+                            width: "38px",
+                            height: "38px",
+                            borderRadius: "8px",
+                            border: "2px solid #FFFFFF",
+                            boxShadow: "0 1px 3px rgba(0, 0, 0, 0.12)",
+                            backgroundColor: "#F3F4F6",
+                            overflow: "hidden",
+                            marginLeft: idx === 0 ? "0" : "-12px",
+                            zIndex: 10 - idx,
+                            position: "relative",
+                            flexShrink: 0,
+                            transition: "transform 0.15s ease",
                           }}
-                          onError={(e) => {
-                            (e.target as HTMLImageElement).src =
-                              DEFAULT_PRODUCT_PLACEHOLDER;
+                          title={`${item.title} (x${item.quantity})`}
+                        >
+                          <img
+                            src={item.imageUrl || DEFAULT_PRODUCT_PLACEHOLDER}
+                            alt={item.title}
+                            style={{
+                              width: "100%",
+                              height: "100%",
+                              objectFit: "cover",
+                              display: "block",
+                            }}
+                            onError={(e) => {
+                              (e.target as HTMLImageElement).src =
+                                DEFAULT_PRODUCT_PLACEHOLDER;
+                            }}
+                          />
+                        </div>
+                      ))}
+                      {order.lineItems.length > 3 && (
+                        <div
+                          className="rounded-md"
+                          style={{
+                            height: "22px",
+                            padding: "0 8px",
+                            borderRadius: "6px",
+                            backgroundColor: "#F3F4F6",
+                            border: "1px solid #D1D5DB",
+                            fontSize: "11px",
+                            fontWeight: 600,
+                            color: "#374151",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            marginLeft: "6px",
+                            whiteSpace: "nowrap",
                           }}
-                        />
-                      </div>
-                    ))}
-                    {order.lineItems.length > 3 && (
-                      <div
-                        style={{
-                          height: "22px",
-                          padding: "0 8px",
-                          borderRadius: "11px",
-                          backgroundColor: "#F3F4F6",
-                          border: "1px solid #D1D5DB",
-                          fontSize: "11px",
-                          fontWeight: 600,
-                          color: "#374151",
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          marginLeft: "6px",
-                          whiteSpace: "nowrap",
-                        }}
-                      >
-                        +{order.lineItems.length - 3} items
-                      </div>
-                    )}
-                  </div>
+                        >
+                          +{order.lineItems.length - 3} items
+                        </div>
+                      )}
+                    </div>
 
-                  {/* Product Metadata Details */}
-                  <BlockStack gap="050">
-                    <InlineStack gap="100" blockAlign="center" wrap={false}>
-                      <Text variant="bodySm" fontWeight="semibold" truncate>
-                        {order.lineItems[0].title}
-                      </Text>
-                      <Badge tone="info" size="small">
-                        {`x${order.lineItems[0].quantity}`}
-                      </Badge>
-                    </InlineStack>
-
-                    {order.lineItems[0].variantTitle && (
-                      <div>
-                        <Badge tone="subdued" size="small">
-                          {order.lineItems[0].variantTitle}
+                    {/* Product Metadata Details */}
+                    <BlockStack gap="050">
+                      <InlineStack gap="100" blockAlign="center" wrap={false}>
+                        <Text variant="bodySm" fontWeight="semibold" truncate>
+                          {order.lineItems[0].title}
+                        </Text>
+                        <Badge tone="info" size="small">
+                          {`x${order.lineItems[0].quantity}`}
                         </Badge>
-                      </div>
-                    )}
+                      </InlineStack>
 
-                    <InlineStack gap="100" blockAlign="center" wrap>
-                      {order.lineItems[0].sku && (
-                        <Text variant="bodyXs" tone="subdued" as="span">
-                          SKU: {order.lineItems[0].sku}
-                        </Text>
+                      {order.lineItems[0].variantTitle && (
+                        <div>
+                          <Badge tone="subdued" size="small">
+                            {order.lineItems[0].variantTitle}
+                          </Badge>
+                        </div>
                       )}
-                      {order.lineItems.length > 1 && (
-                        <Text variant="bodyXs" tone="subdued" as="span">
-                          {order.lineItems[0].sku ? "• " : ""}
-                          +{order.lineItems.length - 1} more item
-                          {order.lineItems.length - 1 > 1 ? "s" : ""}
-                        </Text>
-                      )}
-                    </InlineStack>
-                  </BlockStack>
-                </>
-              ) : (
-                <Text variant="bodySm" tone="subdued">
-                  No line items
-                </Text>
-              )}
-            </BlockStack>
-          </Box>
+
+                      <InlineStack gap="100" blockAlign="center" wrap>
+                        {order.lineItems[0].sku && (
+                          <Text variant="bodyXs" tone="subdued" as="span">
+                            SKU: {order.lineItems[0].sku}
+                          </Text>
+                        )}
+                        {order.lineItems.length > 1 && (
+                          <Text variant="bodyXs" tone="subdued" as="span">
+                            {order.lineItems[0].sku ? "• " : ""}
+                            +{order.lineItems.length - 1} more item
+                            {order.lineItems.length - 1 > 1 ? "s" : ""}
+                          </Text>
+                        )}
+                      </InlineStack>
+                    </BlockStack>
+                  </>
+                ) : (
+                  <Text variant="bodySm" tone="subdued">
+                    No line items
+                  </Text>
+                )}
+              </BlockStack>
+            </Box>
+          </div>
         </IndexTable.Cell>
 
         {/* Column 3: Customer Information */}
         <IndexTable.Cell>
-          <Box minWidth="160px" maxWidth="240px">
-            <BlockStack gap="050">
-              <div style={{ display: "flex", alignItems: "center", gap: "8px", minWidth: 0 }}>
-                <div style={{ minWidth: 0, flex: "0 1 auto", overflow: "hidden" }}>
-                  <Text variant="bodySm" fontWeight="semibold" as="span" truncate>
-                    {order.customerName || "Customer"}
-                  </Text>
+          <div
+            className="flex items-center"
+            style={{ display: "flex", alignItems: "center" }}
+          >
+            <Box minWidth="160px" maxWidth="240px">
+              <BlockStack gap="050">
+                <div style={{ display: "flex", alignItems: "center", gap: "8px", minWidth: 0 }}>
+                  <div style={{ minWidth: 0, flex: "0 1 auto", overflow: "hidden" }}>
+                    <Text variant="bodySm" fontWeight="semibold" as="span" truncate>
+                      {order.customerName || "Customer"}
+                    </Text>
+                  </div>
+                  {order.customerPhone && (
+                    <div
+                      style={{ display: "flex", alignItems: "center", gap: "6px", flexShrink: 0 }}
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <Link
+                        url={`tel:${order.customerPhone.replace(/\D/g, "")}`}
+                        removeUnderline
+                      >
+                        <span
+                          title={`Call ${order.customerPhone}`}
+                          className="customer-action-icon-btn customer-action-call-btn"
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            width: "24px",
+                            height: "24px",
+                            borderRadius: "50%",
+                            backgroundColor: "#EFF6FF",
+                            color: "#2563EB",
+                            border: "1px solid #BFDBFE",
+                            cursor: "pointer",
+                            transition: "all 0.15s ease-in-out",
+                          }}
+                        >
+                          <PhoneCallIcon />
+                        </span>
+                      </Link>
+                      <Link
+                        url={`https://wa.me/${order.customerPhone.replace(/\D/g, "").replace(/^0/, "880")}`}
+                        target="_blank"
+                        removeUnderline
+                      >
+                        <span
+                          title={`WhatsApp ${order.customerPhone}`}
+                          className="customer-action-icon-btn customer-action-wa-btn"
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            width: "24px",
+                            height: "24px",
+                            borderRadius: "50%",
+                            backgroundColor: "#F0FDF4",
+                            color: "#16A34A",
+                            border: "1px solid #BBF7D0",
+                            cursor: "pointer",
+                            transition: "all 0.15s ease-in-out",
+                          }}
+                        >
+                          <WhatsAppIcon />
+                        </span>
+                      </Link>
+                    </div>
+                  )}
                 </div>
-                {order.customerPhone && (
+                {order.customerPhone ? (
                   <div
-                    style={{ display: "flex", alignItems: "center", gap: "6px", flexShrink: 0 }}
+                    style={{ display: "inline-block", width: "fit-content" }}
                     onClick={(e) => e.stopPropagation()}
                   >
-                    <Link
-                      url={`tel:${order.customerPhone.replace(/\D/g, "")}`}
-                      removeUnderline
-                    >
+                    <Tooltip content="Copy phone number">
                       <span
-                        title={`Call ${order.customerPhone}`}
-                        className="customer-action-icon-btn customer-action-call-btn"
+                        onClick={(e) => handleCopyPhone(order.customerPhone, e)}
                         style={{
+                          cursor: "pointer",
                           display: "inline-flex",
                           alignItems: "center",
-                          justifyContent: "center",
-                          width: "24px",
-                          height: "24px",
-                          borderRadius: "50%",
-                          backgroundColor: "#EFF6FF",
-                          color: "#2563EB",
-                          border: "1px solid #BFDBFE",
-                          cursor: "pointer",
-                          transition: "all 0.15s ease-in-out",
                         }}
                       >
-                        <PhoneCallIcon />
+                        <Text variant="bodySm" tone="subdued" as="span">
+                          {order.customerPhone}
+                        </Text>
                       </span>
-                    </Link>
-                    <Link
-                      url={`https://wa.me/${order.customerPhone.replace(/\D/g, "").replace(/^0/, "880")}`}
-                      target="_blank"
-                      removeUnderline
-                    >
-                      <span
-                        title={`WhatsApp ${order.customerPhone}`}
-                        className="customer-action-icon-btn customer-action-wa-btn"
-                        style={{
-                          display: "inline-flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          width: "24px",
-                          height: "24px",
-                          borderRadius: "50%",
-                          backgroundColor: "#F0FDF4",
-                          color: "#16A34A",
-                          border: "1px solid #BBF7D0",
-                          cursor: "pointer",
-                          transition: "all 0.15s ease-in-out",
-                        }}
-                      >
-                        <WhatsAppIcon />
-                      </span>
-                    </Link>
+                    </Tooltip>
                   </div>
+                ) : (
+                  <Text variant="bodyXs" tone="subdued">
+                    No phone
+                  </Text>
                 )}
-              </div>
-              {order.customerPhone ? (
-                <div
-                  style={{ display: "inline-block", width: "fit-content" }}
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <Tooltip content="Copy phone number">
-                    <span
-                      onClick={(e) => handleCopyPhone(order.customerPhone, e)}
-                      style={{
-                        cursor: "pointer",
-                        display: "inline-flex",
-                        alignItems: "center",
-                      }}
-                    >
-                      <Text variant="bodySm" tone="subdued" as="span">
-                        {order.customerPhone}
-                      </Text>
-                    </span>
-                  </Tooltip>
-                </div>
-              ) : (
-                <Text variant="bodyXs" tone="subdued">
-                  No phone
-                </Text>
-              )}
-            </BlockStack>
-          </Box>
+              </BlockStack>
+            </Box>
+          </div>
         </IndexTable.Cell>
 
         {/* Column 4: Payment Status & Collectable COD */}
         <IndexTable.Cell>
-          <Box minWidth="130px" maxWidth="170px">
-            <BlockStack gap="100">
-              <Text variant="bodySm" fontWeight="bold" as="span">
-                {`${order.currencyCode} ${order.totalPrice}`}
-              </Text>
-              <InlineStack gap="100" wrap>
-                <Badge
-                  tone={order.displayFinancialStatus?.toUpperCase() === "PAID" ? "success" : "attention"}
-                  size="small"
-                >
-                  {order.displayFinancialStatus || "UNPAID"}
-                </Badge>
-                {order.codAmount === 0 ? (
-                  <Badge tone="success" size="small">
-                    PREPAID (৳0 COD)
+          <div
+            className="flex items-center"
+            style={{ display: "flex", alignItems: "center" }}
+          >
+            <Box minWidth="130px" maxWidth="170px">
+              <BlockStack gap="100">
+                <Text variant="bodySm" fontWeight="bold" as="span">
+                  {`${order.currencyCode} ${order.totalPrice}`}
+                </Text>
+                <InlineStack gap="100" wrap>
+                  <Badge
+                    tone={order.displayFinancialStatus?.toUpperCase() === "PAID" ? "success" : "attention"}
+                    size="small"
+                  >
+                    {order.displayFinancialStatus || "UNPAID"}
                   </Badge>
-                ) : (
-                  <Badge tone="attention" size="small">
-                    {`COD: ৳${order.codAmount}`}
-                  </Badge>
-                )}
-              </InlineStack>
-            </BlockStack>
-          </Box>
+                  {order.codAmount === 0 ? (
+                    <Badge tone="success" size="small">
+                      PREPAID (৳0 COD)
+                    </Badge>
+                  ) : (
+                    <Badge tone="attention" size="small">
+                      {`COD: ৳${order.codAmount}`}
+                    </Badge>
+                  )}
+                </InlineStack>
+              </BlockStack>
+            </Box>
+          </div>
         </IndexTable.Cell>
 
         {/* Column 5: Delivery History & Fraud Risk Metrics */}
         <IndexTable.Cell>
-          <Box minWidth="130px" maxWidth="170px">
+          <div
+            className="flex items-center"
+            style={{ display: "flex", alignItems: "center" }}
+          >
+            <Box minWidth="130px" maxWidth="170px">
             <BlockStack gap="100" inlineAlign="start">
               {order.fraudStats && order.fraudStats.totalOrders > 0 ? (
                 <BlockStack gap="050" inlineAlign="start">
@@ -4413,11 +4437,16 @@ export default function OrdersFulfillmentPage() {
               )}
             </BlockStack>
           </Box>
-        </IndexTable.Cell>
+        </div>
+      </IndexTable.Cell>
 
         {/* Column 6: Courier Selection & Tracking Consignment */}
         <IndexTable.Cell>
-          <div onClick={(e) => e.stopPropagation()}>
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="flex items-center"
+            style={{ display: "flex", alignItems: "center" }}
+          >
             <Box minWidth="120px" maxWidth="150px">
               <div
                 className="compact-courier-select-box"
@@ -4640,7 +4669,11 @@ export default function OrdersFulfillmentPage() {
 
         {/* Column 7: Warehouse Packaging Note */}
         <IndexTable.Cell>
-          <div onClick={(e) => e.stopPropagation()}>
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="flex items-center"
+            style={{ display: "flex", alignItems: "center", width: "100%" }}
+          >
             <Box minWidth="140px" maxWidth="180px">
               <TextField
                 label="Warehouse Packaging Note"
@@ -4662,7 +4695,11 @@ export default function OrdersFulfillmentPage() {
 
         {/* Column 8: Action Execution */}
         <IndexTable.Cell>
-          <div onClick={(e) => e.stopPropagation()}>
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="flex items-center"
+            style={{ display: "flex", alignItems: "center", width: "100%" }}
+          >
             {isRowProcessing ? (
               <Badge tone="info" status="info">
                 <InlineStack gap="100" blockAlign="center">
@@ -4824,6 +4861,18 @@ export default function OrdersFulfillmentPage() {
           box-sizing: border-box !important;
         }
         .compact-courier-select-box .Polaris-Select__Backdrop {
+          border-radius: 6px !important;
+        }
+        /* Table Cell Vertical Spacing (py-4) and Alignment */
+        .Polaris-IndexTable__TableRow .Polaris-IndexTable__TableCell {
+          padding-top: 16px !important;
+          padding-bottom: 16px !important;
+          vertical-align: middle !important;
+        }
+        /* Badge Unification (rounded-md: 6px border-radius) */
+        .Polaris-Badge,
+        .Polaris-Badge::before,
+        .Polaris-Badge::after {
           border-radius: 6px !important;
         }
       `}</style>
@@ -5816,10 +5865,34 @@ export default function OrdersFulfillmentPage() {
 
           {/* ==================== BULK COURIER FULFILLMENT QUEUE OVERVIEW ==================== */}
           <Layout.Section>
-            <Card padding="500">
-              <InlineStack align="space-between" blockAlign="center" wrap>
-                <BlockStack gap="100">
-                  <InlineStack gap="200" blockAlign="center">
+            <div
+              className="bg-slate-50 rounded-xl p-4"
+              style={{
+                backgroundColor: "#f8fafc",
+                borderRadius: "12px",
+                padding: "16px",
+                border: "none",
+                boxShadow: "none",
+              }}
+            >
+              <BlockStack gap="150">
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    flexWrap: "wrap",
+                    gap: "12px",
+                  }}
+                >
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "8px",
+                      flexWrap: "wrap",
+                    }}
+                  >
                     <Text as="h2" variant="headingMd">
                       Bulk Order Booking
                     </Text>
@@ -5833,46 +5906,85 @@ export default function OrdersFulfillmentPage() {
                         Live Status Sync &amp; Cash Verification: Active
                       </Badge>
                     )}
-                  </InlineStack>
-                  <Text as="p" variant="bodySm" tone="subdued">
-                    Tick row checkboxes to select orders. Once selected, book parcels with one click and print thermal shipping labels or invoices.
-                  </Text>
-                </BlockStack>
+                  </div>
 
-                <InlineStack gap="200">
-                  <Badge tone={activeCouriers.pathao ? "success" : undefined}>
-                    {`Pathao: ${activeCouriers.pathao ? "Ready" : "Off"}`}
-                  </Badge>
-                  <Badge tone={activeCouriers.steadfast ? "success" : undefined}>
-                    {`Steadfast: ${activeCouriers.steadfast ? "Ready" : "Off"}`}
-                  </Badge>
-                  <Badge tone={activeCouriers.redx ? "success" : undefined}>
-                    {`RedX: ${activeCouriers.redx ? "Ready" : "Off"}`}
-                  </Badge>
-                  <Badge tone={activeCouriers.carrybee ? "success" : undefined}>
-                    {`CarryBee: ${activeCouriers.carrybee ? "Ready" : "Off"}`}
-                  </Badge>
-                  <Badge tone={activeCouriers.bahok ? "success" : undefined}>
-                    {`Bahok: ${activeCouriers.bahok ? "Ready" : "Off"}`}
-                  </Badge>
-                </InlineStack>
-              </InlineStack>
-            </Card>
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "8px",
+                      flexWrap: "wrap",
+                      marginLeft: "auto",
+                    }}
+                  >
+                    <Badge tone={activeCouriers.pathao ? "success" : undefined}>
+                      {`Pathao: ${activeCouriers.pathao ? "Ready" : "Off"}`}
+                    </Badge>
+                    <Badge tone={activeCouriers.steadfast ? "success" : undefined}>
+                      {`Steadfast: ${activeCouriers.steadfast ? "Ready" : "Off"}`}
+                    </Badge>
+                    <Badge tone={activeCouriers.redx ? "success" : undefined}>
+                      {`RedX: ${activeCouriers.redx ? "Ready" : "Off"}`}
+                    </Badge>
+                    <Badge tone={activeCouriers.carrybee ? "success" : undefined}>
+                      {`CarryBee: ${activeCouriers.carrybee ? "Ready" : "Off"}`}
+                    </Badge>
+                    <Badge tone={activeCouriers.bahok ? "success" : undefined}>
+                      {`Bahok: ${activeCouriers.bahok ? "Ready" : "Off"}`}
+                    </Badge>
+                  </div>
+                </div>
+
+                <Text as="p" variant="bodySm" tone="subdued">
+                  Tick row checkboxes to select orders. Once selected, book parcels with one click and print thermal shipping labels or invoices.
+                </Text>
+              </BlockStack>
+            </div>
           </Layout.Section>
 
           {/* ==================== SMART AI ADDRESS SETTINGS BANNER ==================== */}
           <Layout.Section>
-            <Banner
-              tone="info"
-              action={{
-                content: "Courier Settings ↗",
-                url: "/app/courier-settings",
+            <div
+              className="bg-blue-50/50 rounded-lg"
+              style={{
+                backgroundColor: "rgba(239, 246, 255, 0.5)",
+                border: "1px solid rgba(191, 219, 254, 0.5)",
+                borderRadius: "8px",
+                padding: "8px 14px",
               }}
             >
-              <p>
-                To clean, verify, and correct customer addresses automatically using Smart Gemini AI, please make sure the feature is turned on in your app settings.
-              </p>
-            </Banner>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  flexWrap: "wrap",
+                  gap: "8px",
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <span style={{ fontSize: "14px", lineHeight: 1 }}>✨</span>
+                  <span style={{ fontSize: "12px", color: "#1e40af", fontWeight: 500 }}>
+                    To clean, verify, and correct customer addresses automatically using Smart Gemini AI, please make sure the feature is turned on in your app settings.
+                  </span>
+                </div>
+                <Link url="/app/courier-settings" removeUnderline>
+                  <span
+                    style={{
+                      fontSize: "12px",
+                      color: "#2563eb",
+                      fontWeight: 600,
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "2px",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    Courier Settings ↗
+                  </span>
+                </Link>
+              </div>
+            </div>
           </Layout.Section>
 
           {/* ==================== MULTI-SELECT ORDERS INDEXTABLE ==================== */}
