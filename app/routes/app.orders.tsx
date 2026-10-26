@@ -3489,32 +3489,22 @@ export default function OrdersFulfillmentPage() {
         key={order.id}
         selected={isRowSelected}
         position={index}
+        disabled={isRowProcessing || isLockedBySafetyNet}
       >
         {/* Column 1: Order Info & Destination */}
         <IndexTable.Cell>
           <div onClick={(e) => e.stopPropagation()}>
             <BlockStack gap="100">
-              <InlineStack gap="150" blockAlign="center">
-                <Checkbox
-                  label=""
-                  labelHidden
-                  checked={isRowSelected}
-                  disabled={isRowProcessing || isLockedBySafetyNet}
-                  onChange={(checked) =>
-                    toggleSingleRowCheckbox(order.id, checked)
-                  }
-                />
-                <Link
-                  url={`https://${shopDomain}/admin/orders/${order.id.replace(/\D/g, "")}`}
-                  target="_blank"
-                  monochrome
-                  removeUnderline
-                >
-                  <Text variant="bodyMd" fontWeight="bold" as="span">
-                    {order.name}
-                  </Text>
-                </Link>
-              </InlineStack>
+              <Link
+                url={`https://${shopDomain}/admin/orders/${order.id.replace(/\D/g, "")}`}
+                target="_blank"
+                monochrome
+                removeUnderline
+              >
+                <Text variant="bodyMd" fontWeight="bold" as="span">
+                  {order.name}
+                </Text>
+              </Link>
 
               <InlineStack gap="100" blockAlign="center">
                 <Link
