@@ -4875,32 +4875,27 @@ export default function OrdersFulfillmentPage() {
         .Polaris-Badge::after {
           border-radius: 6px !important;
         }
+        /* Top Layout Alignment Adjustment */
+        .Polaris-Page-Header {
+          display: none !important;
+          margin: 0 !important;
+          padding: 0 !important;
+        }
+        .Polaris-Page--fullWidth {
+          padding-top: 12px !important;
+        }
+        .Polaris-Page__Content {
+          padding-top: 0 !important;
+        }
+        .Polaris-Page__Content > .Polaris-Layout {
+          margin-top: 0 !important;
+        }
+        .Polaris-Page__Content > .Polaris-Layout > .Polaris-Layout__Section:first-child {
+          margin-top: 0 !important;
+        }
       `}</style>
 
-      <Page
-        fullWidth
-        title="Orders"
-        subtitle={`Store: ${shopDomain} • Active Plan: ${
-          usageSummary.currentPlan
-        } (${
-          usageSummary.isUnlimited
-            ? `${usageSummary.monthlyOrderCount} / Unlimited`
-            : `${usageSummary.monthlyOrderCount} / ${usageSummary.planLimit}`
-        } monthly orders)`}
-        backAction={{ content: "Dashboard", url: "/app" }}
-        secondaryActions={
-          bookedSlipsList.length > 0
-            ? [
-                {
-                  content: showPackingSlipView
-                    ? "Hide Documents Preview"
-                    : `View Printable Documents (${bookedSlipsList.length})`,
-                  onAction: () => setShowPackingSlipView((prev) => !prev),
-                },
-              ]
-            : []
-        }
-      >
+      <Page fullWidth>
         <TitleBar title="Orders" />
 
         <Layout>
