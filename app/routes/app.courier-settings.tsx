@@ -258,8 +258,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   const rawConfig: any = await CourierConfig.findOne({ shopDomain }).lean();
   const storeConfig = decryptCourierConfig(rawConfig);
-  // Simulation bypass: Force active plan to Enterprise
-  const currentPlan = "Enterprise";
+  const currentPlan = storeConfig?.currentPlan || "Free";
   const planLower = String(currentPlan).trim().toLowerCase();
   const isProOrEnterprise =
     planLower.startsWith("pro") || planLower.startsWith("enterprise");

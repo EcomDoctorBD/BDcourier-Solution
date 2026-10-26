@@ -67,8 +67,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     getSystemConfig(),
   ]);
 
-  // Simulation bypass: Force active plan to Enterprise for layout audit
-  const currentPlan = "Enterprise";
+  const currentPlan = String(storeConfig?.currentPlan || "Free");
   const supportEmail = String(systemConfig?.supportEmail || "ecomdoctorbd@gmail.com");
   const whatsappHelpline = String(systemConfig?.whatsappHelpline || "01346851322");
   const whatsappNumber = String(systemConfig?.whatsappNumber || "+8801346851322");
@@ -87,7 +86,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 export default function HelpAndSupportRoute() {
   const {
     shopDomain,
-    currentPlan: _loaderPlan,
+    currentPlan,
     supportEmail,
     whatsappHelpline,
     whatsappNumber,
@@ -97,10 +96,12 @@ export default function HelpAndSupportRoute() {
 
   const searchStr = searchParams.toString() ? `?${searchParams.toString()}` : "";
 
-  // DIRECT FRONTEND OVERRIDE: Force active subscription tier strictly to "Enterprise"
-  const currentPlan = "Enterprise";
-  const normalizedPlan = "enterprise";
-  const isUnlimitedTier = true;
+  const normalizedPlan = currentPlan.trim().toLowerCase();
+  const isUnlimitedTier =
+    normalizedPlan.includes("unlimited") ||
+    normalizedPlan.includes("enterprise") ||
+    normalizedPlan.includes("advanced") ||
+    normalizedPlan.includes("pro");
 
   const digitsOnly = (whatsappNumber || whatsappHelpline).replace(/[^0-9]/g, "");
   const normalizedWhatsAppDigits = digitsOnly.startsWith("0")

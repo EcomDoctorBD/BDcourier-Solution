@@ -272,8 +272,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   return json({
     shopDomain,
-    // Simulation bypass: Force active plan to Enterprise
-    currentPlan: "Enterprise",
+    currentPlan: storeConfig?.currentPlan || "Free",
     isAutoRoutingEnabled: Boolean(
       storeConfig?.isAutoRoutingEnabled ?? storeConfig?.autoRoutingEnabled
     ),

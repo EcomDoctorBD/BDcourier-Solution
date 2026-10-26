@@ -347,8 +347,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     }
   }
 
-  // Simulation bypass: Force active plan to Enterprise
-  const activePlanKey = "Enterprise";
+  const activePlanKey = String(storeConfig.currentPlan || "Free");
   const monthlyOrderCount = Number(storeConfig.monthlyOrderCount ?? 0);
   const billingCycleStart = storeConfig.billingCycleStart
     ? new Date(storeConfig.billingCycleStart).toISOString()
