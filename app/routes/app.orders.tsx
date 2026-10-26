@@ -4141,14 +4141,40 @@ export default function OrdersFulfillmentPage() {
           flex-wrap: nowrap !important;
           white-space: nowrap !important;
         }
+        /* Force-unlock Polaris Popover width constraints for DatePicker */
+        .date-picker-popover-viewport {
+          min-width: 750px !important;
+          max-width: 800px !important;
+        }
+        .Polaris-Popover__PopoverOverlay:has(.date-picker-popover-viewport),
+        .Polaris-Popover__ContentContainer:has(.date-picker-popover-viewport),
+        .Polaris-Popover__Content:has(.date-picker-popover-viewport),
+        .Polaris-Popover__Pane:has(.date-picker-popover-viewport),
+        div[class*="Polaris-Popover"]:has(.date-picker-popover-viewport),
+        div[class*="Polaris-PositionedOverlay"]:has(.date-picker-popover-viewport) {
+          max-width: none !important;
+          max-height: none !important;
+          width: auto !important;
+          overflow-x: visible !important;
+        }
+        .date-picker-dual-pane .Polaris-DatePicker {
+          width: 100% !important;
+          overflow-x: visible !important;
+        }
         .date-picker-dual-pane .Polaris-DatePicker__MonthContainer {
           display: flex !important;
           flex-direction: row !important;
           flex-wrap: nowrap !important;
+          gap: 16px !important;
+          width: 100% !important;
+          overflow-x: visible !important;
+          justify-content: space-between !important;
         }
         .date-picker-dual-pane .Polaris-DatePicker__Month {
-          flex: 1 !important;
+          flex: 1 1 240px !important;
           min-width: 230px !important;
+          max-width: 260px !important;
+          margin: 0 !important;
         }
       `}</style>
 
@@ -5257,133 +5283,150 @@ export default function OrdersFulfillmentPage() {
                     }
                     onClose={() => setIsDatePopoverActive(false)}
                     preferredAlignment="right"
+                    fluidContent
                   >
                     <div
-                      className="date-picker-dual-pane"
+                      className="date-picker-popover-viewport"
                       style={{
+                        minWidth: "750px",
+                        maxWidth: "800px",
                         display: "flex",
-                        flexDirection: "row",
-                        width: "750px",
-                        minHeight: "340px",
-                        overflow: "hidden",
+                        flexDirection: "column",
                       }}
                     >
-                      {/* Left Pane (Presets Sidebar) */}
+                      {/* Main Body Container: Strict Inline Row Presentation */}
                       <div
+                        className="date-picker-dual-pane"
                         style={{
-                          width: "160px",
-                          borderRight: "1px solid #e1e3e5",
-                          padding: "12px",
                           display: "flex",
-                          flexDirection: "column",
-                          gap: "8px",
+                          flexDirection: "row",
+                          width: "100%",
+                          overflow: "hidden",
                         }}
                       >
-                        <Text variant="headingXs" as="h6" tone="subdued">
-                          PRESETS
-                        </Text>
-                        {DATE_PRESET_ITEMS.map((p) => {
-                          const isSelected = selectedPresetId === p.id;
-                          return (
-                            <button
-                              key={p.id}
-                              type="button"
-                              onClick={() => handlePresetClick(p.id)}
-                              style={{
-                                textAlign: "left",
-                                padding: "8px 10px",
-                                borderRadius: "6px",
-                                fontSize: "13px",
-                                fontWeight: isSelected ? 600 : 400,
-                                color: isSelected ? "#2563EB" : "#374151",
-                                backgroundColor: isSelected ? "#EFF6FF" : "transparent",
-                                border: "none",
-                                cursor: "pointer",
-                                transition: "background-color 0.15s ease",
-                              }}
-                            >
-                              {p.title}
-                            </button>
-                          );
-                        })}
-                      </div>
-
-                      {/* Right Pane (Calendar Engine Wrapper) */}
-                      <div
-                        style={{
-                          flex: 1,
-                          padding: "16px",
-                          display: "flex",
-                          flexDirection: "column",
-                          gap: "12px",
-                        }}
-                      >
-                        {/* Inputs Top Bar: [2026-10-26] ➔ [2026-10-26] */}
-                        <InlineStack gap="200" blockAlign="center">
-                          <div style={{ flex: 1 }}>
-                            <TextField
-                              label="Start Date"
-                              labelHidden
-                              value={startDateInput}
-                              onChange={handleStartDateInputChange}
-                              placeholder="YYYY-MM-DD"
-                              autoComplete="off"
-                              prefix={<span style={{ color: "#9CA3AF" }}>📅</span>}
-                            />
-                          </div>
-                          <Text as="span" variant="bodyMd" tone="subdued">
-                            ➔
-                          </Text>
-                          <div style={{ flex: 1 }}>
-                            <TextField
-                              label="End Date"
-                              labelHidden
-                              value={endDateInput}
-                              onChange={handleEndDateInputChange}
-                              placeholder="YYYY-MM-DD"
-                              autoComplete="off"
-                              prefix={<span style={{ color: "#9CA3AF" }}>📅</span>}
-                            />
-                          </div>
-                        </InlineStack>
-
-                        {/* Dual Month Calendar */}
-                        <Box border="border" borderRadius="200" padding="200">
-                          <DatePicker
-                            month={pickerMonth}
-                            year={pickerYear}
-                            onChange={handleDatePickerChange}
-                            onMonthChange={handleMonthChange}
-                            selected={
-                              tempRange && tempRange.start && tempRange.end
-                                ? { start: tempRange.start, end: tempRange.end }
-                                : tempRange && tempRange.start
-                                ? { start: tempRange.start, end: tempRange.start }
-                                : undefined
-                            }
-                            multiMonth
-                            allowRange
-                          />
-                        </Box>
-
-                        {/* Footer Absolute Action Row */}
+                        {/* Left Sidebar (Presets Column) */}
                         <div
                           style={{
+                            width: "180px",
+                            minWidth: "180px",
+                            borderRight: "1px solid #e1e3e5",
+                            padding: "12px",
                             display: "flex",
-                            justifyContent: "flex-end",
+                            flexDirection: "column",
                             gap: "8px",
-                            borderTop: "1px solid #e1e3e5",
-                            padding: "12px 16px",
-                            marginTop: "auto",
-                            marginLeft: "-16px",
-                            marginRight: "-16px",
-                            marginBottom: "-16px",
                           }}
                         >
-                          <Button onClick={handleCancelDatePopover}>Cancel</Button>
-                          <Button variant="primary" onClick={handleApplyDatePopover}>
-                            Apply
-                          </Button>
+                          <Text variant="headingXs" as="h6" tone="subdued">
+                            PRESETS
+                          </Text>
+                          {DATE_PRESET_ITEMS.map((p) => {
+                            const isSelected = selectedPresetId === p.id;
+                            return (
+                              <button
+                                key={p.id}
+                                type="button"
+                                onClick={() => handlePresetClick(p.id)}
+                                style={{
+                                  textAlign: "left",
+                                  width: "100%",
+                                  padding: "8px 10px",
+                                  borderRadius: "6px",
+                                  fontSize: "13px",
+                                  fontWeight: isSelected ? 600 : 400,
+                                  color: isSelected ? "#2563EB" : "#374151",
+                                  backgroundColor: isSelected ? "#EFF6FF" : "transparent",
+                                  border: "none",
+                                  cursor: "pointer",
+                                  transition: "background-color 0.15s ease",
+                                }}
+                              >
+                                {p.title}
+                              </button>
+                            );
+                          })}
+                        </div>
+
+                        {/* Right Sidebar (Dual Month Panel) */}
+                        <div
+                          style={{
+                            width: "540px",
+                            minWidth: "540px",
+                            padding: "16px",
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: "12px",
+                            flex: 1,
+                          }}
+                        >
+                          {/* Inputs Top Bar: [ YYYY-MM-DD ] ➔ [ YYYY-MM-DD ] */}
+                          <InlineStack gap="200" blockAlign="center">
+                            <div style={{ flex: 1 }}>
+                              <TextField
+                                label="Start Date"
+                                labelHidden
+                                value={startDateInput}
+                                onChange={handleStartDateInputChange}
+                                placeholder="YYYY-MM-DD"
+                                autoComplete="off"
+                                prefix={<span style={{ color: "#9CA3AF" }}>📅</span>}
+                              />
+                            </div>
+                            <Text as="span" variant="bodyMd" tone="subdued">
+                              ➔
+                            </Text>
+                            <div style={{ flex: 1 }}>
+                              <TextField
+                                label="End Date"
+                                labelHidden
+                                value={endDateInput}
+                                onChange={handleEndDateInputChange}
+                                placeholder="YYYY-MM-DD"
+                                autoComplete="off"
+                                prefix={<span style={{ color: "#9CA3AF" }}>📅</span>}
+                              />
+                            </div>
+                          </InlineStack>
+
+                          {/* Dual Month Calendar */}
+                          <div style={{ overflowX: "visible", width: "100%" }}>
+                            <Box border="border" borderRadius="200" padding="200">
+                              <DatePicker
+                                month={pickerMonth}
+                                year={pickerYear}
+                                onChange={handleDatePickerChange}
+                                onMonthChange={handleMonthChange}
+                                selected={
+                                  tempRange && tempRange.start && tempRange.end
+                                    ? { start: tempRange.start, end: tempRange.end }
+                                    : tempRange && tempRange.start
+                                    ? { start: tempRange.start, end: tempRange.start }
+                                    : undefined
+                                }
+                                multiMonth
+                                allowRange
+                              />
+                            </Box>
+                          </div>
+
+                          {/* Anchor the Competitor Action Footer */}
+                          <div
+                            style={{
+                              display: "flex",
+                              justifyContent: "flex-end",
+                              gap: "8px",
+                              borderTop: "1px solid #e1e3e5",
+                              padding: "12px 16px",
+                              marginTop: "auto",
+                              marginLeft: "-16px",
+                              marginRight: "-16px",
+                              marginBottom: "-16px",
+                            }}
+                          >
+                            <Button onClick={handleCancelDatePopover}>Cancel</Button>
+                            <Button variant="primary" onClick={handleApplyDatePopover}>
+                              Apply
+                            </Button>
+                          </div>
                         </div>
                       </div>
                     </div>
