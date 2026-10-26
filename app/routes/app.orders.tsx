@@ -191,12 +191,16 @@ export interface AutoRoutingConfig {
   customRoutes: CustomRouteRule[];
 }
 
+const DEFAULT_PRODUCT_PLACEHOLDER =
+  "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%239CA3AF'%3E%3Cpath d='M12.378 1.602a.75.75 0 0 0-.756 0L3 6.632l9 5.25 9-5.25-8.622-5.03ZM21.75 7.93l-9 5.25v9.248l8.622-5.03a.75.75 0 0 0 .378-.648V7.93ZM10.5 22.428v-9.248L1.5 7.93v8.82a.75.75 0 0 0 .378.648l8.622 5.03Z'/%3E%3C/svg%3E";
+
 export interface OrderLineItem {
   title: string;
   variantTitle: string;
   sku: string;
   quantity: number;
   unitPrice: string;
+  imageUrl?: string;
 }
 
 export interface CourierReconciliationInfo {
@@ -1984,6 +1988,18 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
                       amount
                     }
                   }
+                  variant {
+                    image {
+                      url
+                      altText
+                    }
+                  }
+                  product {
+                    featuredImage {
+                      url
+                      altText
+                    }
+                  }
                 }
               }
             }
@@ -2026,6 +2042,18 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
                   originalUnitPriceSet {
                     shopMoney {
                       amount
+                    }
+                  }
+                  variant {
+                    image {
+                      url
+                      altText
+                    }
+                  }
+                  product {
+                    featuredImage {
+                      url
+                      altText
                     }
                   }
                 }
@@ -2100,16 +2128,23 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       });
 
       const itemEdges = node.lineItems?.edges || [];
-      const lineItems: OrderLineItem[] = itemEdges.map(({ node: item }: any) => ({
-        title: item.title || "",
-        variantTitle: item.variantTitle || "",
-        sku: item.sku || "",
-        quantity: Number(item.quantity || 1),
-        unitPrice:
-          item.originalUnitPriceSet?.shopMoney?.amount ||
-          node.totalPriceSet?.shopMoney?.amount ||
-          "0.00",
-      }));
+      const lineItems: OrderLineItem[] = itemEdges.map(({ node: item }: any) => {
+        const imageUrl =
+          item.variant?.image?.url ||
+          item.product?.featuredImage?.url ||
+          "";
+        return {
+          title: item.title || "",
+          variantTitle: item.variantTitle || "",
+          sku: item.sku || "",
+          quantity: Number(item.quantity || 1),
+          unitPrice:
+            item.originalUnitPriceSet?.shopMoney?.amount ||
+            node.totalPriceSet?.shopMoney?.amount ||
+            "0.00",
+          imageUrl,
+        };
+      });
 
       return {
         id: node.id,
@@ -2165,16 +2200,23 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         });
 
         const itemEdges = node.lineItems?.edges || [];
-        const lineItems: OrderLineItem[] = itemEdges.map(({ node: item }: any) => ({
-          title: item.title || "",
-          variantTitle: item.variantTitle || "",
-          sku: item.sku || "",
-          quantity: Number(item.quantity || 1),
-          unitPrice:
-            item.originalUnitPriceSet?.shopMoney?.amount ||
-            node.totalPriceSet?.shopMoney?.amount ||
-            "0.00",
-        }));
+        const lineItems: OrderLineItem[] = itemEdges.map(({ node: item }: any) => {
+          const imageUrl =
+            item.variant?.image?.url ||
+            item.product?.featuredImage?.url ||
+            "";
+          return {
+            title: item.title || "",
+            variantTitle: item.variantTitle || "",
+            sku: item.sku || "",
+            quantity: Number(item.quantity || 1),
+            unitPrice:
+              item.originalUnitPriceSet?.shopMoney?.amount ||
+              node.totalPriceSet?.shopMoney?.amount ||
+              "0.00",
+            imageUrl,
+          };
+        });
 
         return {
           id: node.id,
@@ -3333,61 +3375,120 @@ export default function OrdersFulfillmentPage() {
           </div>
         </IndexTable.Cell>
 
-        {/* Column 2: Products & Line Items */}
+        {/* Column 2: Products & Line Items with Stacked Images */}
         <IndexTable.Cell>
-          <Box minWidth="160px" maxWidth="230px">
-            <InlineStack gap="200" blockAlign="start" wrap={false}>
-              {/* Product Thumbnail Placeholder (Stacked overlay in Section 2) */}
-              <div
-                style={{
-                  width: "36px",
-                  height: "36px",
-                  borderRadius: "6px",
-                  backgroundColor: "#F3F4F6",
-                  border: "1px solid #E5E7EB",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  flexShrink: 0,
-                  fontSize: "16px",
-                }}
-              >
-                📦
-              </div>
+          <Box minWidth="190px" maxWidth="250px">
+            <BlockStack gap="150">
+              {order.lineItems.length > 0 ? (
+                <>
+                  {/* Stacked Thumbnails Container */}
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      position: "relative",
+                      minHeight: "40px",
+                    }}
+                  >
+                    {order.lineItems.slice(0, 3).map((item, idx) => (
+                      <div
+                        key={idx}
+                        style={{
+                          width: "38px",
+                          height: "38px",
+                          borderRadius: "8px",
+                          border: "2px solid #FFFFFF",
+                          boxShadow: "0 1px 3px rgba(0, 0, 0, 0.12)",
+                          backgroundColor: "#F3F4F6",
+                          overflow: "hidden",
+                          marginLeft: idx === 0 ? "0" : "-12px",
+                          zIndex: 10 - idx,
+                          position: "relative",
+                          flexShrink: 0,
+                          transition: "transform 0.15s ease",
+                        }}
+                        title={`${item.title} (x${item.quantity})`}
+                      >
+                        <img
+                          src={item.imageUrl || DEFAULT_PRODUCT_PLACEHOLDER}
+                          alt={item.title}
+                          style={{
+                            width: "100%",
+                            height: "100%",
+                            objectFit: "cover",
+                            display: "block",
+                          }}
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).src =
+                              DEFAULT_PRODUCT_PLACEHOLDER;
+                          }}
+                        />
+                      </div>
+                    ))}
+                    {order.lineItems.length > 3 && (
+                      <div
+                        style={{
+                          height: "22px",
+                          padding: "0 8px",
+                          borderRadius: "11px",
+                          backgroundColor: "#F3F4F6",
+                          border: "1px solid #D1D5DB",
+                          fontSize: "11px",
+                          fontWeight: 600,
+                          color: "#374151",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          marginLeft: "6px",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        +{order.lineItems.length - 3} items
+                      </div>
+                    )}
+                  </div>
 
-              <BlockStack gap="050">
-                {order.lineItems.length > 0 ? (
-                  order.lineItems.slice(0, 2).map((item, i) => (
-                    <BlockStack key={i} gap="025">
-                      <InlineStack gap="100" blockAlign="center">
-                        <Text variant="bodySm" fontWeight="medium" truncate>
-                          {item.title}
-                        </Text>
-                        <Badge tone="info" size="small">
-                          {`x${item.quantity}`}
+                  {/* Product Metadata Details */}
+                  <BlockStack gap="050">
+                    <InlineStack gap="100" blockAlign="center" wrap={false}>
+                      <Text variant="bodySm" fontWeight="semibold" truncate>
+                        {order.lineItems[0].title}
+                      </Text>
+                      <Badge tone="info" size="small">
+                        {`x${order.lineItems[0].quantity}`}
+                      </Badge>
+                    </InlineStack>
+
+                    {order.lineItems[0].variantTitle && (
+                      <div>
+                        <Badge tone="subdued" size="small">
+                          {order.lineItems[0].variantTitle}
                         </Badge>
-                      </InlineStack>
-                      {(item.variantTitle || item.sku) && (
-                        <Text variant="bodyXs" tone="subdued" truncate>
-                          {[item.variantTitle, item.sku ? `SKU: ${item.sku}` : ""]
-                            .filter(Boolean)
-                            .join(" • ")}
+                      </div>
+                    )}
+
+                    <InlineStack gap="100" blockAlign="center" wrap>
+                      {order.lineItems[0].sku && (
+                        <Text variant="bodyXs" tone="subdued" as="span">
+                          SKU: {order.lineItems[0].sku}
                         </Text>
                       )}
-                    </BlockStack>
-                  ))
-                ) : (
-                  <Text variant="bodySm" tone="subdued">
-                    No line items
-                  </Text>
-                )}
-                {order.lineItems.length > 2 && (
-                  <Text variant="bodyXs" tone="subdued">
-                    +{order.lineItems.length - 2} more item{order.lineItems.length - 2 > 1 ? "s" : ""}
-                  </Text>
-                )}
-              </BlockStack>
-            </InlineStack>
+                      {order.lineItems.length > 1 && (
+                        <Text variant="bodyXs" tone="subdued" as="span">
+                          {order.lineItems[0].sku ? "• " : ""}
+                          +{order.lineItems.length - 1} more item
+                          {order.lineItems.length - 1 > 1 ? "s" : ""}
+                        </Text>
+                      )}
+                    </InlineStack>
+                  </BlockStack>
+                </>
+              ) : (
+                <Text variant="bodySm" tone="subdued">
+                  No line items
+                </Text>
+              )}
+            </BlockStack>
           </Box>
         </IndexTable.Cell>
 
