@@ -4141,6 +4141,15 @@ export default function OrdersFulfillmentPage() {
           flex-wrap: nowrap !important;
           white-space: nowrap !important;
         }
+        .date-picker-dual-pane .Polaris-DatePicker__MonthContainer {
+          display: flex !important;
+          flex-direction: row !important;
+          flex-wrap: nowrap !important;
+        }
+        .date-picker-dual-pane .Polaris-DatePicker__Month {
+          flex: 1 !important;
+          min-width: 230px !important;
+        }
       `}</style>
 
       <Page
@@ -5249,127 +5258,135 @@ export default function OrdersFulfillmentPage() {
                     onClose={() => setIsDatePopoverActive(false)}
                     preferredAlignment="right"
                   >
-                    <Box minWidth="640px" maxWidth="720px">
+                    <div
+                      className="date-picker-dual-pane"
+                      style={{
+                        display: "flex",
+                        flexDirection: "row",
+                        width: "750px",
+                        minHeight: "340px",
+                        overflow: "hidden",
+                      }}
+                    >
+                      {/* Left Pane (Presets Sidebar) */}
                       <div
                         style={{
+                          width: "160px",
+                          borderRight: "1px solid #e1e3e5",
+                          padding: "12px",
                           display: "flex",
-                          flexDirection: "row",
-                          gap: "16px",
-                          padding: "16px",
+                          flexDirection: "column",
+                          gap: "8px",
                         }}
                       >
-                        {/* Left Column: Quick Presets Sidebar */}
-                        <div
-                          style={{
-                            width: "140px",
-                            flexShrink: 0,
-                            borderRight: "1px solid #E5E7EB",
-                            paddingRight: "12px",
-                            display: "flex",
-                            flexDirection: "column",
-                            gap: "4px",
-                          }}
-                        >
-                          <Text variant="headingXs" as="h6" tone="subdued">
-                            PRESETS
-                          </Text>
-                          {DATE_PRESET_ITEMS.map((p) => {
-                            const isSelected = selectedPresetId === p.id;
-                            return (
-                              <button
-                                key={p.id}
-                                type="button"
-                                onClick={() => handlePresetClick(p.id)}
-                                style={{
-                                  textAlign: "left",
-                                  padding: "7px 10px",
-                                  borderRadius: "6px",
-                                  fontSize: "13px",
-                                  fontWeight: isSelected ? 600 : 400,
-                                  color: isSelected ? "#2563EB" : "#374151",
-                                  backgroundColor: isSelected ? "#EFF6FF" : "transparent",
-                                  border: "none",
-                                  cursor: "pointer",
-                                  transition: "background-color 0.15s ease",
-                                }}
-                              >
-                                {p.title}
-                              </button>
-                            );
-                          })}
-                        </div>
-
-                        {/* Right Column: Inputs Top Bar + Dual Month Calendar */}
-                        <div
-                          style={{
-                            flex: 1,
-                            display: "flex",
-                            flexDirection: "column",
-                            gap: "12px",
-                            minWidth: "460px",
-                          }}
-                        >
-                          {/* Inputs Top Bar: [2026-10-26] ➔ [2026-10-26] */}
-                          <InlineStack gap="200" blockAlign="center">
-                            <div style={{ flex: 1 }}>
-                              <TextField
-                                label="Start Date"
-                                labelHidden
-                                value={startDateInput}
-                                onChange={handleStartDateInputChange}
-                                placeholder="YYYY-MM-DD"
-                                autoComplete="off"
-                                prefix={<span style={{ color: "#9CA3AF" }}>📅</span>}
-                              />
-                            </div>
-                            <Text as="span" variant="bodyMd" tone="subdued">
-                              ➔
-                            </Text>
-                            <div style={{ flex: 1 }}>
-                              <TextField
-                                label="End Date"
-                                labelHidden
-                                value={endDateInput}
-                                onChange={handleEndDateInputChange}
-                                placeholder="YYYY-MM-DD"
-                                autoComplete="off"
-                                prefix={<span style={{ color: "#9CA3AF" }}>📅</span>}
-                              />
-                            </div>
-                          </InlineStack>
-
-                          {/* Dual Month Calendar */}
-                          <Box border="border" borderRadius="200" padding="200">
-                            <DatePicker
-                              month={pickerMonth}
-                              year={pickerYear}
-                              onChange={handleDatePickerChange}
-                              onMonthChange={handleMonthChange}
-                              selected={
-                                tempRange && tempRange.start && tempRange.end
-                                  ? { start: tempRange.start, end: tempRange.end }
-                                  : tempRange && tempRange.start
-                                  ? { start: tempRange.start, end: tempRange.start }
-                                  : undefined
-                              }
-                              multiMonth
-                              allowRange
-                            />
-                          </Box>
-                        </div>
+                        <Text variant="headingXs" as="h6" tone="subdued">
+                          PRESETS
+                        </Text>
+                        {DATE_PRESET_ITEMS.map((p) => {
+                          const isSelected = selectedPresetId === p.id;
+                          return (
+                            <button
+                              key={p.id}
+                              type="button"
+                              onClick={() => handlePresetClick(p.id)}
+                              style={{
+                                textAlign: "left",
+                                padding: "8px 10px",
+                                borderRadius: "6px",
+                                fontSize: "13px",
+                                fontWeight: isSelected ? 600 : 400,
+                                color: isSelected ? "#2563EB" : "#374151",
+                                backgroundColor: isSelected ? "#EFF6FF" : "transparent",
+                                border: "none",
+                                cursor: "pointer",
+                                transition: "background-color 0.15s ease",
+                              }}
+                            >
+                              {p.title}
+                            </button>
+                          );
+                        })}
                       </div>
 
-                      {/* Footer Actions */}
-                      <Divider />
-                      <Box padding="300">
-                        <InlineStack align="end" gap="200">
+                      {/* Right Pane (Calendar Engine Wrapper) */}
+                      <div
+                        style={{
+                          flex: 1,
+                          padding: "16px",
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: "12px",
+                        }}
+                      >
+                        {/* Inputs Top Bar: [2026-10-26] ➔ [2026-10-26] */}
+                        <InlineStack gap="200" blockAlign="center">
+                          <div style={{ flex: 1 }}>
+                            <TextField
+                              label="Start Date"
+                              labelHidden
+                              value={startDateInput}
+                              onChange={handleStartDateInputChange}
+                              placeholder="YYYY-MM-DD"
+                              autoComplete="off"
+                              prefix={<span style={{ color: "#9CA3AF" }}>📅</span>}
+                            />
+                          </div>
+                          <Text as="span" variant="bodyMd" tone="subdued">
+                            ➔
+                          </Text>
+                          <div style={{ flex: 1 }}>
+                            <TextField
+                              label="End Date"
+                              labelHidden
+                              value={endDateInput}
+                              onChange={handleEndDateInputChange}
+                              placeholder="YYYY-MM-DD"
+                              autoComplete="off"
+                              prefix={<span style={{ color: "#9CA3AF" }}>📅</span>}
+                            />
+                          </div>
+                        </InlineStack>
+
+                        {/* Dual Month Calendar */}
+                        <Box border="border" borderRadius="200" padding="200">
+                          <DatePicker
+                            month={pickerMonth}
+                            year={pickerYear}
+                            onChange={handleDatePickerChange}
+                            onMonthChange={handleMonthChange}
+                            selected={
+                              tempRange && tempRange.start && tempRange.end
+                                ? { start: tempRange.start, end: tempRange.end }
+                                : tempRange && tempRange.start
+                                ? { start: tempRange.start, end: tempRange.start }
+                                : undefined
+                            }
+                            multiMonth
+                            allowRange
+                          />
+                        </Box>
+
+                        {/* Footer Absolute Action Row */}
+                        <div
+                          style={{
+                            display: "flex",
+                            justifyContent: "flex-end",
+                            gap: "8px",
+                            borderTop: "1px solid #e1e3e5",
+                            padding: "12px 16px",
+                            marginTop: "auto",
+                            marginLeft: "-16px",
+                            marginRight: "-16px",
+                            marginBottom: "-16px",
+                          }}
+                        >
                           <Button onClick={handleCancelDatePopover}>Cancel</Button>
                           <Button variant="primary" onClick={handleApplyDatePopover}>
                             Apply
                           </Button>
-                        </InlineStack>
-                      </Box>
-                    </Box>
+                        </div>
+                      </div>
+                    </div>
                   </Popover>
                 </InlineStack>
               </Box>
