@@ -16,6 +16,18 @@ api_version = "2027-01"
   uri = "/webhooks/app/uninstalled"
 
   [[webhooks.subscriptions]]
+  topics = [ "orders/cancelled" ]
+  uri = "/webhooks"
+
+  [[webhooks.subscriptions]]
+  topics = [ "orders/fulfilled" ]
+  uri = "/webhooks"
+
+  [[webhooks.subscriptions]]
+  topics = [ "orders/edited" ]
+  uri = "/webhooks"
+
+  [[webhooks.subscriptions]]
   compliance_topics = [ "customers/data_request" ]
   uri = "/webhooks/customers/data_request"
 
