@@ -42,6 +42,17 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     );
   }
 
-  const authUrl = getGoogleAuthUrl(shop);
+  const explicitClientId =
+    url.searchParams.get("client_id") ||
+    process.env.GOOGLE_CLIENT_ID?.trim() ||
+    process.env.GOOGLE_SHEETS_CLIENT_ID?.trim() ||
+    "";
+
+  let authUrl = getGoogleAuthUrl(shop);
+  if (explicitClientId && !authUrl.includes("client_id=")) {
+    const sep = authUrl.includes("?") ? "&" : "?";
+    authUrl = `${authUrl}${sep}client_id=${encodeURIComponent(explicitClientId)}`;
+  }
+
   return redirect(authUrl);
 };

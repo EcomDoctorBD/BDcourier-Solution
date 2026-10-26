@@ -72,7 +72,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         googleUserEmail: rawGoogleIntegration.googleUserEmail || "",
         googleUserName: rawGoogleIntegration.googleUserName || "",
         spreadsheetId: rawGoogleIntegration.spreadsheetId || "",
-        spreadsheetName: rawGoogleIntegration.spreadsheetName || "Delivery1 Orders",
+        spreadsheetName: rawGoogleIntegration.spreadsheetName || "SafeParcel BD Orders",
         sheetName: rawGoogleIntegration.sheetName || "Orders",
         spreadsheetUrl: rawGoogleIntegration.spreadsheetUrl || "",
         autoSyncEnabled: rawGoogleIntegration.autoSyncEnabled ?? true,
@@ -83,12 +83,22 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       }
     : null;
 
-  const googleAuthUrl = getGoogleAuthUrl(shopDomain);
+  const googleClientId =
+    process.env.GOOGLE_CLIENT_ID?.trim() ||
+    process.env.GOOGLE_SHEETS_CLIENT_ID?.trim() ||
+    "";
+
+  let googleAuthUrl = getGoogleAuthUrl(shopDomain);
+  if (googleClientId && !googleAuthUrl.includes("client_id=")) {
+    const sep = googleAuthUrl.includes("?") ? "&" : "?";
+    googleAuthUrl = `${googleAuthUrl}${sep}client_id=${encodeURIComponent(googleClientId)}`;
+  }
 
   return json({
     shopDomain,
     googleIntegration,
     googleAuthUrl,
+    googleClientId,
     supportEmail: String(systemConfig?.supportEmail || "ecomdoctorbd@gmail.com"),
     whatsappHelpline: String(systemConfig?.whatsappHelpline || "01346851322"),
     whatsappNumber: String(systemConfig?.whatsappNumber || "+8801346851322"),
@@ -127,7 +137,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return json({
       success: true,
       actionType: "disconnectGoogle",
-      message: "Google Account disconnected from Delivery1.",
+      message: "Google Account disconnected from SafeParcel BD.",
     });
   }
 
@@ -172,6 +182,7 @@ export default function IntegrationsPage() {
     shopDomain,
     googleIntegration,
     googleAuthUrl,
+    googleClientId,
     supportEmail,
     whatsappHelpline,
     whatsappNumber,
@@ -247,7 +258,15 @@ export default function IntegrationsPage() {
 
   const handleLaunchOAuthPopup = () => {
     if (typeof window !== "undefined") {
-      const authUrl = googleAuthUrl || `/api/google/auth?shop=${encodeURIComponent(shopDomain)}`;
+      let authUrl = googleAuthUrl;
+      if (!authUrl || !authUrl.includes("accounts.google.com")) {
+        authUrl = `/api/google/auth?shop=${encodeURIComponent(shopDomain)}${
+          googleClientId ? `&client_id=${encodeURIComponent(googleClientId)}` : ""
+        }`;
+      } else if (googleClientId && !authUrl.includes("client_id=")) {
+        const sep = authUrl.includes("?") ? "&" : "?";
+        authUrl = `${authUrl}${sep}client_id=${encodeURIComponent(googleClientId)}`;
+      }
       const width = 600;
       const height = 700;
       const left = window.screen.width / 2 - width / 2;
@@ -439,7 +458,7 @@ export default function IntegrationsPage() {
                             </Text>
                             <Text variant="bodyMd" fontWeight="semibold">
                               {googleIntegration?.spreadsheetName ||
-                                "Delivery1 Orders"}
+                                "SafeParcel BD Orders"}
                             </Text>
                             <Text variant="bodyXs" tone="subdued">
                               Tab: {googleSheetName} • Total Synced:{" "}
@@ -467,7 +486,7 @@ export default function IntegrationsPage() {
                         value={googleSheetName}
                         onChange={setGoogleSheetName}
                         autoComplete="off"
-                        helpText="Default is 'Orders'. If the tab does not exist, Delivery1 will auto-create it."
+                        helpText="Default is 'Orders'. If the tab does not exist, SafeParcel BD will auto-create it."
                       />
                       <Checkbox
                         label="Enable Real-Time Auto-Sync on Order Dispatch"
@@ -546,13 +565,13 @@ export default function IntegrationsPage() {
                 </BlockStack>
                 <InlineStack gap="200" blockAlign="center">
                   <Button
-                    url={`mailto:${supportEmail}?subject=Delivery1%20Integration%20Assistance%20-${encodeURIComponent(shopDomain)}`}
+                    url={`mailto:${supportEmail}?subject=SafeParcel%20BD%20Integration%20Assistance%20-${encodeURIComponent(shopDomain)}`}
                   >
                     Contact Email Support
                   </Button>
                   <Button
                     variant="primary"
-                    url={`https://api.whatsapp.com/send?phone=${normalizedWhatsAppDigits}&text=${encodeURIComponent(`Hello Delivery1 Support! I need technical assistance with Google Sheets Integrations for ${shopDomain}.`)}`}
+                    url={`https://api.whatsapp.com/send?phone=${normalizedWhatsAppDigits}&text=${encodeURIComponent(`Hello SafeParcel BD Support! I need technical assistance with Google Sheets Integrations for ${shopDomain}.`)}`}
                     target="_blank"
                   >
                     WhatsApp Helpline
@@ -595,7 +614,7 @@ export default function IntegrationsPage() {
                     Connect Your Spreadsheet in 3 Simple Steps
                   </Text>
                   <Text variant="bodySm" tone="subdued">
-                    Delivery1 securely connects via Google OAuth 2.0 to stream booked courier parcels in real time.
+                    SafeParcel BD securely connects via Google OAuth 2.0 to stream booked courier parcels in real time.
                   </Text>
                 </BlockStack>
               </InlineStack>
@@ -665,7 +684,7 @@ export default function IntegrationsPage() {
 
             <Banner tone="info">
               <p>
-                <strong>Zero Password Storage:</strong> Delivery1 uses official Google OAuth refresh tokens. You can disconnect or revoke access at any time.
+                <strong>Zero Password Storage:</strong> SafeParcel BD uses official Google OAuth refresh tokens. You can disconnect or revoke access at any time.
               </p>
             </Banner>
           </BlockStack>
