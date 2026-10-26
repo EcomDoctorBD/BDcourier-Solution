@@ -10,6 +10,7 @@ import {
   useActionData,
   useSubmit,
   useNavigation,
+  useSearchParams,
 } from "@remix-run/react";
 import { TitleBar } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-remix/server";
@@ -272,7 +273,8 @@ interface NormalizedOrder extends RawShopifyOrder {
   isInsideDhaka: boolean;
   assignedCourier: string;
   routingReason: string;
-  reconciliation: CourierReconciliationInfo;
+  reconciliation: CourierReconciliationInfo | null;
+  trackingNumber: string | null;
   isAiCleaned: boolean;
 }
 
@@ -786,8 +788,9 @@ function applyRoutingAndSafetyLogic(
   fraudStats: FraudStatsProfile | null,
   routingConfig: AutoRoutingConfig,
   defaultCourierFallback: string,
-  reconciliation: CourierReconciliationInfo,
-  isAiCleaned: boolean
+  reconciliation: CourierReconciliationInfo | null,
+  isAiCleaned: boolean,
+  trackingNumber?: string | null
 ): NormalizedOrder {
   const locationString =
     `${order.city} ${order.province} ${order.shippingAddress}`.toLowerCase();
@@ -811,6 +814,7 @@ function applyRoutingAndSafetyLogic(
         customerPhone: order.customerPhone,
         fraudStats,
         reconciliation,
+        trackingNumber: trackingNumber || null,
         status: "Risky - Locked for Manual Review",
         isRiskyLocked: true,
         isInsideDhaka,
@@ -857,7 +861,8 @@ function applyRoutingAndSafetyLogic(
       customerPhone: order.customerPhone,
       fraudStats,
       reconciliation,
-      status: reconciliation.autoSyncedPaidFulfilled
+      trackingNumber: trackingNumber || null,
+      status: reconciliation?.autoSyncedPaidFulfilled
         ? "Paid & Fulfilled (Auto-Synced)"
         : "Auto-Routed (Safe)",
       isRiskyLocked: false,
@@ -873,9 +878,10 @@ function applyRoutingAndSafetyLogic(
     customerPhone: order.customerPhone,
     fraudStats,
     reconciliation,
+    trackingNumber: trackingNumber || null,
     status: isBelowThreshold
       ? "Risky - Locked for Manual Review"
-      : reconciliation.autoSyncedPaidFulfilled
+      : reconciliation?.autoSyncedPaidFulfilled
       ? "Paid & Fulfilled (Auto-Synced)"
       : order.fulfillmentStatus,
     isRiskyLocked: isBelowThreshold,
@@ -1774,8 +1780,13 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       !(req.startsWith("read_") && grantedScopes.includes(req.replace("read_", "write_")))
   );
 
-  const urlObj = new URL(request.url);
-  if (isMissingCoreScopes && !urlObj.searchParams.has("reauth_attempted")) {
+  const url = new URL(request.url);
+  const tabParam = (url.searchParams.get("tab") || "").toLowerCase().trim();
+  const rawSearchQ = (url.searchParams.get("q") || "").trim();
+  const startDateParam = (url.searchParams.get("startDate") || "").trim();
+  const endDateParam = (url.searchParams.get("endDate") || "").trim();
+
+  if (isMissingCoreScopes && !url.searchParams.has("reauth_attempted")) {
     console.warn(
       `Session for ${shopDomain} is missing required scopes. Stored: [${session.scope}]. Triggering re-auth...`
     );
@@ -1935,12 +1946,52 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     }
   }
 
+  // Tier 2 Dynamic GraphQL Query Builder based on parsed search params
+  const queryParts: string[] = [];
+  let pageSize = 25;
+
+  if (tabParam === "old_orders") {
+    // Dynamic archived & historical order query
+    queryParts.push("(fulfillment_status:fulfilled OR status:closed OR status:cancelled)");
+    pageSize = 50;
+  } else if (tabParam === "pending") {
+    // Unfulfilled rows matching manual locking criteria
+    queryParts.push("fulfillment_status:unfulfilled");
+  } else if (tabParam === "all") {
+    queryParts.push("(status:open OR status:closed OR status:cancelled)");
+  } else {
+    // Default safe backward-compatible state (tab === "new" or parameter is omitted)
+    queryParts.push("fulfillment_status:unfulfilled");
+  }
+
+  // Raw search query filter token across order IDs, customer names
+  if (rawSearchQ) {
+    const cleanQ = rawSearchQ.replace(/["\\]/g, "");
+    if (cleanQ) {
+      const orderSearchPart = cleanQ.startsWith("#")
+        ? `name:${cleanQ}`
+        : `(name:*${cleanQ}* OR customer_name:*${cleanQ}*)`;
+      queryParts.push(orderSearchPart);
+    }
+  }
+
+  // Date range filter tokens (Shopify index criteria syntax)
+  if (startDateParam && endDateParam) {
+    queryParts.push(`created_at:>=${startDateParam} created_at:<=${endDateParam}`);
+  } else if (startDateParam) {
+    queryParts.push(`created_at:>=${startDateParam}`);
+  } else if (endDateParam) {
+    queryParts.push(`created_at:<=${endDateParam}`);
+  }
+
+  const shopifyQueryString = queryParts.join(" ");
+
   let rawOrders: RawShopifyOrder[] = [];
   let graphqlWarning: string | null = null;
 
   const FULL_ORDERS_QUERY = `#graphql
-    query GetUnfulfilledOrdersWithItems {
-      orders(first: 25, query: "fulfillment_status:unfulfilled", reverse: true) {
+    query GetOrdersWithItems($first: Int!, $query: String) {
+      orders(first: $first, query: $query, reverse: true) {
         edges {
           node {
             id
@@ -2010,8 +2061,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   `;
 
   const BASIC_ORDERS_QUERY = `#graphql
-    query GetBasicUnfulfilledOrdersWithItems {
-      orders(first: 25, query: "fulfillment_status:unfulfilled", reverse: true) {
+    query GetBasicOrdersWithItems($first: Int!, $query: String) {
+      orders(first: $first, query: $query, reverse: true) {
         edges {
           node {
             id
@@ -2066,7 +2117,12 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   `;
 
   try {
-    const response = await admin.graphql(FULL_ORDERS_QUERY);
+    const response = await admin.graphql(FULL_ORDERS_QUERY, {
+      variables: {
+        first: pageSize,
+        query: shopifyQueryString,
+      },
+    });
     const result: any = await response.json();
 
     // Check for GraphQL errors
@@ -2173,7 +2229,12 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     );
 
     try {
-      const fallbackResponse = await admin.graphql(BASIC_ORDERS_QUERY);
+      const fallbackResponse = await admin.graphql(BASIC_ORDERS_QUERY, {
+        variables: {
+          first: pageSize,
+          query: shopifyQueryString,
+        },
+      });
       const fallbackResult: any = await fallbackResponse.json();
 
       if (fallbackResult.errors && fallbackResult.errors.length > 0) {
@@ -2279,23 +2340,46 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   // Enrich orders with Task 1 Fraud + Task 2 Routing + Task 4 Status Sync & Discrepancy Check
   const orders: NormalizedOrder[] = await Promise.all(
     rawOrders.map(async (order) => {
-      const [fraudStats, reconciliation] = await Promise.all([
-        resolveCustomerFraudProfile(
-          order.customerPhone,
-          storeConfig,
-          cachedPathaoTokenRef
-        ),
-        evaluateOrderStatusAndCashDiscrepancy({
-          admin,
-          order,
-          bookingDoc: bookingsByOrderId[order.id],
-          storeConfig,
-          isProOrEnterprise,
-          cachedPathaoTokenRef,
-        }),
-      ]);
+      const bookingDoc = bookingsByOrderId[order.id] || null;
+      const trackingNumber: string | null = bookingDoc?.trackingNumber || null;
 
-      const isAiCleaned = cleanedMap.has((order.shippingAddress || "").trim().toLowerCase());
+      let fraudStats: FraudStatsProfile | null = null;
+      let reconciliation: CourierReconciliationInfo | null = null;
+
+      try {
+        const [resolvedFraud, resolvedRecon] = await Promise.all([
+          order.customerPhone
+            ? resolveCustomerFraudProfile(
+                order.customerPhone,
+                storeConfig,
+                cachedPathaoTokenRef
+              )
+            : Promise.resolve(null),
+          bookingDoc
+            ? evaluateOrderStatusAndCashDiscrepancy({
+                admin,
+                order,
+                bookingDoc,
+                storeConfig,
+                isProOrEnterprise,
+                cachedPathaoTokenRef,
+              })
+            : Promise.resolve(null),
+        ]);
+        fraudStats = resolvedFraud;
+        reconciliation = resolvedRecon;
+      } catch (enrichErr: any) {
+        console.warn(
+          `Data enrichment warning for order ${order.name || order.id}:`,
+          enrichErr?.message || enrichErr
+        );
+        fraudStats = null;
+        reconciliation = null;
+      }
+
+      const isAiCleaned = cleanedMap.has(
+        (order.shippingAddress || "").trim().toLowerCase()
+      );
 
       return applyRoutingAndSafetyLogic(
         order,
@@ -2303,7 +2387,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         routingConfig,
         defaultCourierFallback,
         reconciliation,
-        isAiCleaned
+        isAiCleaned,
+        trackingNumber
       );
     })
   );
@@ -2323,6 +2408,12 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       isUnlimited,
       bulkBatchLimit,
       isUnlimitedBulk,
+    },
+    activeFilters: {
+      tab: tabParam || "new",
+      q: rawSearchQ,
+      startDate: startDateParam,
+      endDate: endDateParam,
     },
   };
 };
@@ -2665,10 +2756,14 @@ export default function OrdersFulfillmentPage() {
     graphqlWarning,
     initialDispatchedOrders,
     usageSummary,
+    activeFilters,
   } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const submit = useSubmit();
   const navigation = useNavigation();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const urlTab = searchParams.get("tab") || "";
+  const initialTabId = urlTab || activeFilters?.tab || "new";
 
   const [manuallyUnlockedOrders, setManuallyUnlockedOrders] = useState<
     Record<string, boolean>
@@ -2771,43 +2866,111 @@ export default function OrdersFulfillmentPage() {
   }, [actionData]);
 
   // 1. Filter Controls & States
-  const [searchQuery, setSearchQuery] = useState("");
-  const [selectedTabId, setSelectedTabId] = useState("new");
+  const [searchQuery, setSearchQuery] = useState(
+    searchParams.get("q") || activeFilters?.q || ""
+  );
+  const [selectedTabId, setSelectedTabId] = useState(initialTabId);
   const [isDatePopoverActive, setIsDatePopoverActive] = useState(false);
-  const [dateRange, setDateRange] = useState<{ start: Date | null; end: Date | null } | null>(null);
-  const [dateRangeLabel, setDateRangeLabel] = useState("📅 All time");
-
-  const handleSelectDatePreset = useCallback((preset: string) => {
-    const now = new Date();
-    if (preset === "all") {
-      setDateRange(null);
-      setDateRangeLabel("📅 All time");
-    } else if (preset === "today") {
-      const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-      const end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
-      setDateRange({ start, end });
-      setDateRangeLabel("📅 Today");
-    } else if (preset === "yesterday") {
-      const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-      const start = new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate());
-      const end = new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate(), 23, 59, 59, 999);
-      setDateRange({ start, end });
-      setDateRangeLabel("📅 Yesterday");
-    } else if (preset === "last7") {
-      const start = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-      setDateRange({ start, end: now });
-      setDateRangeLabel("📅 Last 7 Days");
-    } else if (preset === "last30") {
-      const start = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-      setDateRange({ start, end: now });
-      setDateRangeLabel("📅 Last 30 Days");
-    } else if (preset === "thisMonth") {
-      const start = new Date(now.getFullYear(), now.getMonth(), 1);
-      setDateRange({ start, end: now });
-      setDateRangeLabel("📅 This Month");
+  const [dateRange, setDateRange] = useState<{ start: Date | null; end: Date | null } | null>(() => {
+    if (activeFilters?.startDate || activeFilters?.endDate) {
+      return {
+        start: activeFilters.startDate ? new Date(activeFilters.startDate) : null,
+        end: activeFilters.endDate ? new Date(activeFilters.endDate) : null,
+      };
     }
-    setIsDatePopoverActive(false);
-  }, []);
+    return null;
+  });
+  const [dateRangeLabel, setDateRangeLabel] = useState(() => {
+    if (activeFilters?.startDate || activeFilters?.endDate) {
+      return "📅 Custom Range";
+    }
+    return "📅 All time";
+  });
+
+  useEffect(() => {
+    if (urlTab && urlTab !== selectedTabId) {
+      setSelectedTabId(urlTab);
+    }
+  }, [urlTab]);
+
+  const handleSelectDatePreset = useCallback(
+    (preset: string) => {
+      const now = new Date();
+      let start: Date | null = null;
+      let end: Date | null = null;
+      let label = "📅 All time";
+
+      if (preset === "all") {
+        start = null;
+        end = null;
+        label = "📅 All time";
+      } else if (preset === "today") {
+        start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        end = new Date(
+          now.getFullYear(),
+          now.getMonth(),
+          now.getDate(),
+          23,
+          59,
+          59,
+          999
+        );
+        label = "📅 Today";
+      } else if (preset === "yesterday") {
+        const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+        start = new Date(
+          yesterday.getFullYear(),
+          yesterday.getMonth(),
+          yesterday.getDate()
+        );
+        end = new Date(
+          yesterday.getFullYear(),
+          yesterday.getMonth(),
+          yesterday.getDate(),
+          23,
+          59,
+          59,
+          999
+        );
+        label = "📅 Yesterday";
+      } else if (preset === "last7") {
+        start = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        end = now;
+        label = "📅 Last 7 Days";
+      } else if (preset === "last30") {
+        start = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+        end = now;
+        label = "📅 Last 30 Days";
+      } else if (preset === "thisMonth") {
+        start = new Date(now.getFullYear(), now.getMonth(), 1);
+        end = now;
+        label = "📅 This Month";
+      }
+
+      setDateRange(start ? { start, end } : null);
+      setDateRangeLabel(label);
+      setIsDatePopoverActive(false);
+
+      if (
+        searchParams.get("tab") === "old_orders" ||
+        searchParams.has("startDate")
+      ) {
+        const nextParams = new URLSearchParams(searchParams);
+        if (start) {
+          nextParams.set("startDate", start.toISOString().split("T")[0]);
+        } else {
+          nextParams.delete("startDate");
+        }
+        if (end) {
+          nextParams.set("endDate", end.toISOString().split("T")[0]);
+        } else {
+          nextParams.delete("endDate");
+        }
+        setSearchParams(nextParams, { replace: true });
+      }
+    },
+    [searchParams, setSearchParams]
+  );
 
   const checkIsLocked = useCallback(
     (order: NormalizedOrder) => {
@@ -2838,7 +3001,11 @@ export default function OrdersFulfillmentPage() {
         case "all":
           return true;
         case "new":
-          return !dispatched;
+          return (
+            !dispatched &&
+            (order.fulfillmentStatus?.toUpperCase() === "UNFULFILLED" ||
+              !order.fulfillmentStatus)
+          );
         case "accepted":
           return (
             Boolean(dispatched) &&
@@ -2884,6 +3051,8 @@ export default function OrdersFulfillmentPage() {
         case "old_orders":
           return (
             order.fulfillmentStatus?.toUpperCase() === "FULFILLED" ||
+            order.fulfillmentStatus?.toUpperCase() === "CLOSED" ||
+            order.fulfillmentStatus?.toUpperCase() === "CANCELLED" ||
             Boolean(order.reconciliation?.autoSyncedPaidFulfilled)
           );
         default:
@@ -2936,9 +3105,26 @@ export default function OrdersFulfillmentPage() {
 
   const handleTabSelect = useCallback(
     (index: number) => {
-      setSelectedTabId(tabDefinitions[index]?.id || "new");
+      const targetTab = tabDefinitions[index]?.id || "new";
+      setSelectedTabId(targetTab);
+
+      // Sync URL parameters when switching between active and historical orders
+      const currentParamTab = searchParams.get("tab") || "new";
+      if (
+        targetTab === "old_orders" ||
+        currentParamTab === "old_orders" ||
+        searchParams.has("tab")
+      ) {
+        const nextParams = new URLSearchParams(searchParams);
+        if (targetTab === "new") {
+          nextParams.delete("tab");
+        } else {
+          nextParams.set("tab", targetTab);
+        }
+        setSearchParams(nextParams, { replace: true });
+      }
     },
-    [tabDefinitions]
+    [tabDefinitions, searchParams, setSearchParams]
   );
 
   // 2. Tier 1 Non-Destructive Filter Pipeline
@@ -4926,7 +5112,25 @@ export default function OrdersFulfillmentPage() {
                       onChange={setSearchQuery}
                       placeholder="Search orders by phone, ID, customer, parcel..."
                       clearButton
-                      onClearButtonClick={() => setSearchQuery("")}
+                      onClearButtonClick={() => {
+                        setSearchQuery("");
+                        if (searchParams.has("q")) {
+                          const nextParams = new URLSearchParams(searchParams);
+                          nextParams.delete("q");
+                          setSearchParams(nextParams, { replace: true });
+                        }
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          const nextParams = new URLSearchParams(searchParams);
+                          if (searchQuery.trim()) {
+                            nextParams.set("q", searchQuery.trim());
+                          } else {
+                            nextParams.delete("q");
+                          }
+                          setSearchParams(nextParams, { replace: true });
+                        }
+                      }}
                       autoComplete="off"
                       prefix={<span style={{ color: "#9CA3AF" }}>🔍</span>}
                     />
@@ -4971,6 +5175,15 @@ export default function OrdersFulfillmentPage() {
                           setSearchQuery("");
                           setSelectedTabId("all");
                           handleSelectDatePreset("all");
+                          if (
+                            searchParams.has("q") ||
+                            searchParams.has("tab") ||
+                            searchParams.has("startDate") ||
+                            searchParams.has("endDate")
+                          ) {
+                            const nextParams = new URLSearchParams();
+                            setSearchParams(nextParams, { replace: true });
+                          }
                         }}
                       >
                         Clear All Filters
