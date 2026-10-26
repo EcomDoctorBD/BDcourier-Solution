@@ -4174,61 +4174,68 @@ export default function OrdersFulfillmentPage() {
         {/* Column 6: Courier Selection & Tracking Consignment */}
         <IndexTable.Cell>
           <div onClick={(e) => e.stopPropagation()}>
-            <div
-              className="compact-courier-select-box"
-              style={{
-                maxWidth: "160px",
-                width: "100%",
-              }}
-            >
-              <BlockStack gap="100">
-                {!hasActiveCouriers ? (
-                  <Tooltip content="কুরিয়ার অ্যাকাউন্ট কনফিগার করুন" preferredPosition="above">
+            <Box minWidth="120px" maxWidth="150px">
+              <div
+                className="compact-courier-select-box"
+                style={{
+                  maxWidth: "150px",
+                  width: "100%",
+                }}
+              >
+                <BlockStack gap="100">
+                  {!hasActiveCouriers ? (
+                    <Tooltip content="কুরিয়ার অ্যাকাউন্ট কনফিগার করুন" preferredPosition="above">
+                      <div
+                        style={{
+                          maxWidth: "150px",
+                          width: "100%",
+                          display: "inline-block",
+                          cursor: "not-allowed",
+                        }}
+                      >
+                        <div
+                          style={{
+                            pointerEvents: "none",
+                            maxWidth: "150px",
+                            width: "100%",
+                          }}
+                        >
+                          <Select
+                            label={`Select courier for ${order.name}`}
+                            labelHidden
+                            options={courierSelectOptions}
+                            value={selectedCourier}
+                            disabled={true}
+                          />
+                        </div>
+                      </div>
+                    </Tooltip>
+                  ) : (
                     <div
                       style={{
-                        maxWidth: "160px",
+                        maxWidth: "150px",
                         width: "100%",
-                        display: "inline-block",
-                        cursor: "not-allowed",
                       }}
                     >
-                      <div style={{ pointerEvents: "none" }}>
-                        <Select
-                          label={`Select courier for ${order.name}`}
-                          labelHidden
-                          options={courierSelectOptions}
-                          value={selectedCourier}
-                          disabled={true}
-                        />
-                      </div>
+                      <Select
+                        label={`Select courier for ${order.name}`}
+                        labelHidden
+                        options={courierSelectOptions}
+                        value={selectedCourier}
+                        onChange={(val) =>
+                          setSelectedCouriersByOrder((prev) => ({
+                            ...prev,
+                            [order.id]: val,
+                          }))
+                        }
+                        disabled={
+                          Boolean(dispatchedInfo) ||
+                          isRowProcessing ||
+                          isLockedBySafetyNet
+                        }
+                      />
                     </div>
-                  </Tooltip>
-                ) : (
-                  <div
-                    style={{
-                      maxWidth: "160px",
-                      width: "100%",
-                    }}
-                  >
-                    <Select
-                      label={`Select courier for ${order.name}`}
-                      labelHidden
-                      options={courierSelectOptions}
-                      value={selectedCourier}
-                      onChange={(val) =>
-                        setSelectedCouriersByOrder((prev) => ({
-                          ...prev,
-                          [order.id]: val,
-                        }))
-                      }
-                      disabled={
-                        Boolean(dispatchedInfo) ||
-                        isRowProcessing ||
-                        isLockedBySafetyNet
-                      }
-                    />
-                  </div>
-                )}
+                  )}
 
                 {dispatchedInfo ? (
                   <BlockStack gap="050">
@@ -4383,8 +4390,9 @@ export default function OrdersFulfillmentPage() {
                 )}
               </BlockStack>
             </div>
-          </div>
-        </IndexTable.Cell>
+          </Box>
+        </div>
+      </IndexTable.Cell>
 
         {/* Column 7: Warehouse Packaging Note */}
         <IndexTable.Cell>
@@ -4545,20 +4553,34 @@ export default function OrdersFulfillmentPage() {
           color: #15803d;
         }
         .compact-courier-select-box {
-          max-width: 160px !important;
+          max-width: 150px !important;
           width: 100% !important;
         }
         .compact-courier-select-box .Polaris-Select {
-          max-width: 160px !important;
+          max-width: 150px !important;
           width: 100% !important;
+          height: 32px !important;
+          min-height: 32px !important;
         }
         .compact-courier-select-box .Polaris-Select select {
-          max-width: 160px !important;
+          max-width: 150px !important;
           width: 100% !important;
           height: 32px !important;
           min-height: 32px !important;
           padding: 4px 8px !important;
+          border-radius: 6px !important;
           font-size: 12px !important;
+        }
+        .compact-courier-select-box .Polaris-Select__Content {
+          height: 32px !important;
+          min-height: 32px !important;
+          padding: 4px 8px !important;
+          border-radius: 6px !important;
+          font-size: 12px !important;
+          box-sizing: border-box !important;
+        }
+        .compact-courier-select-box .Polaris-Select__Backdrop {
+          border-radius: 6px !important;
         }
       `}</style>
 
