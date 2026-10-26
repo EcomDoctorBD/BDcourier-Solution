@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, type SVGProps } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef, type SVGProps } from "react";
 import {
   redirect,
   type HeadersFunction,
@@ -2951,6 +2951,29 @@ export default function OrdersFulfillmentPage() {
   const [showBanner, setShowBanner] = useState(false);
   const [clientBatchError, setClientBatchError] = useState<string | null>(null);
 
+  const [phoneCopiedToast, setPhoneCopiedToast] = useState(false);
+  const copyTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  const handleCopyPhone = useCallback((phone: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    if (!phone) return;
+    const cleanNumber = phone.trim();
+    if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(cleanNumber).catch(() => {});
+    }
+    setPhoneCopiedToast(true);
+    if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current);
+    copyTimeoutRef.current = setTimeout(() => {
+      setPhoneCopiedToast(false);
+    }, 3000);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current);
+    };
+  }, []);
+
   useEffect(() => {
     if (isFreePlan) {
       setSelectedSlipTemplate("standard");
@@ -3959,9 +3982,25 @@ export default function OrdersFulfillmentPage() {
                 )}
               </div>
               {order.customerPhone ? (
-                <Text variant="bodySm" tone="subdued" as="span">
-                  {order.customerPhone}
-                </Text>
+                <div
+                  style={{ display: "inline-block", width: "fit-content" }}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <Tooltip content="Copy phone number">
+                    <span
+                      onClick={(e) => handleCopyPhone(order.customerPhone, e)}
+                      style={{
+                        cursor: "pointer",
+                        display: "inline-flex",
+                        alignItems: "center",
+                      }}
+                    >
+                      <Text variant="bodySm" tone="subdued" as="span">
+                        {order.customerPhone}
+                      </Text>
+                    </span>
+                  </Tooltip>
+                </div>
               ) : (
                 <Text variant="bodyXs" tone="subdued">
                   No phone
@@ -5846,6 +5885,29 @@ export default function OrdersFulfillmentPage() {
           </Layout.Section>
         </Layout>
       </Page>
+      {phoneCopiedToast && (
+        <div
+          role="status"
+          aria-live="polite"
+          style={{
+            position: "fixed",
+            top: "16px",
+            left: "50%",
+            transform: "translateX(-50%)",
+            backgroundColor: "#303132",
+            color: "#ffffff",
+            padding: "6px 16px",
+            borderRadius: "100px",
+            fontSize: "13px",
+            fontWeight: "500",
+            zIndex: 9999,
+            boxShadow: "0px 4px 12px rgba(0, 0, 0, 0.15)",
+            pointerEvents: "none",
+          }}
+        >
+          Phone number copied
+        </div>
+      )}
     </>
   );
 }
