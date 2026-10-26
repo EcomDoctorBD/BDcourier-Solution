@@ -4039,6 +4039,11 @@ export default function OrdersFulfillmentPage() {
             width: 100%;
           }
         }
+        .orders-tabs-nowrap-container [role="tablist"],
+        .orders-tabs-nowrap-container ul {
+          flex-wrap: nowrap !important;
+          white-space: nowrap !important;
+        }
       `}</style>
 
       <Page
@@ -5077,11 +5082,21 @@ export default function OrdersFulfillmentPage() {
           <Layout.Section>
             <Card padding="0">
               {/* 1. Exactly 11 Functional Tabs */}
-              <Tabs
-                tabs={tabsList}
-                selected={selectedTabIndex}
-                onSelect={handleTabSelect}
-              />
+              <div
+                className="orders-tabs-nowrap-container"
+                style={{
+                  whiteSpace: "nowrap",
+                  overflowX: "auto",
+                  maxWidth: "100%",
+                  paddingBottom: "6px",
+                }}
+              >
+                <Tabs
+                  tabs={tabsList}
+                  selected={selectedTabIndex}
+                  onSelect={handleTabSelect}
+                />
+              </div>
 
               {/* 2. Wide Search Box & Date Picker Popover */}
               <Box padding="300" borderBlockEndWidth="025" borderColor="border">
