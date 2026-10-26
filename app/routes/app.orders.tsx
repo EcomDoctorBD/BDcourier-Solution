@@ -556,6 +556,129 @@ async function addShopifyOrderTags(
 }
 
 /**
+ * Task 3 Helper: Automatically creates a Shopify Fulfillment via fulfillmentCreateV2 GraphQL Mutation
+ * Maps live courier tracking number, tracking URL, courier company name, and triggers buyer email.
+ */
+async function createShopifyFulfillmentOnBooking(params: {
+  admin: any;
+  shopDomain: string;
+  orderId: string;
+  orderName: string;
+  trackingNumber: string;
+  trackingUrl: string;
+  courierName: string;
+}): Promise<boolean> {
+  const { admin, shopDomain, orderId, orderName, trackingNumber, trackingUrl, courierName } = params;
+  try {
+    let effectiveAdmin = admin;
+    if (!effectiveAdmin) {
+      try {
+        const offlineAuth = await unauthenticated.admin(shopDomain);
+        effectiveAdmin = offlineAuth?.admin;
+      } catch (authErr) {
+        console.warn(`[Shopify Fulfillment] Could not obtain offline admin for ${shopDomain}:`, authErr);
+      }
+    }
+
+    if (!effectiveAdmin) {
+      console.warn(`[Shopify Fulfillment] Admin client unavailable for ${shopDomain}, skipping fulfillment mutation`);
+      return false;
+    }
+
+    const formattedOrderId = orderId.startsWith("gid://shopify/Order/")
+      ? orderId
+      : `gid://shopify/Order/${orderId.replace(/\D/g, "")}`;
+
+    // 1. Query active FulfillmentOrders for the Shopify order
+    const FO_QUERY = `#graphql
+      query GetOrderFulfillmentOrdersForDispatch($id: ID!) {
+        order(id: $id) {
+          fulfillmentOrders(first: 5) {
+            edges {
+              node {
+                id
+                status
+              }
+            }
+          }
+        }
+      }
+    `;
+
+    const foRes = await effectiveAdmin.graphql(FO_QUERY, { variables: { id: formattedOrderId } });
+    const foJson: any = await foRes.json();
+    const foEdges = foJson?.data?.order?.fulfillmentOrders?.edges || [];
+    const openFo = foEdges.find(
+      ({ node }: any) => node.status === "OPEN" || node.status === "IN_PROGRESS"
+    );
+
+    if (!openFo?.node?.id) {
+      console.log(
+        `[Shopify Fulfillment] Order ${orderName} (${formattedOrderId}) has no OPEN or IN_PROGRESS fulfillment orders to fulfill`
+      );
+      return false;
+    }
+
+    // 2. Execute fulfillmentCreateV2 mutation with tracking information and buyer notification
+    const FULFILLMENT_CREATE_V2_MUTATION = `#graphql
+      mutation fulfillmentCreateV2($fulfillment: FulfillmentV2Input!) {
+        fulfillmentCreateV2(fulfillment: $fulfillment) {
+          fulfillment {
+            id
+            status
+          }
+          userErrors {
+            field
+            message
+          }
+        }
+      }
+    `;
+
+    const trackingInfo: { company: string; number: string; url?: string } = {
+      company: courierName,
+      number: trackingNumber,
+    };
+    if (trackingUrl && trackingUrl.trim()) {
+      trackingInfo.url = trackingUrl.trim();
+    }
+
+    const fulfillRes = await effectiveAdmin.graphql(FULFILLMENT_CREATE_V2_MUTATION, {
+      variables: {
+        fulfillment: {
+          notifyCustomer: true,
+          trackingInfo,
+          lineItemsByFulfillmentOrder: [
+            { fulfillmentOrderId: openFo.node.id },
+          ],
+        },
+      },
+    });
+
+    const fulfillJson: any = await fulfillRes.json();
+    const userErrors = fulfillJson?.data?.fulfillmentCreateV2?.userErrors || [];
+    if (userErrors.length > 0) {
+      console.warn(
+        `[Shopify Fulfillment Notice] userErrors for ${orderName}:`,
+        JSON.stringify(userErrors)
+      );
+      return false;
+    }
+
+    console.log(
+      `[Shopify Fulfillment Success] Order ${orderName} (${formattedOrderId}) marked FULFILLED on Shopify via ${courierName} tracking ${trackingNumber}`
+    );
+    return true;
+  } catch (err: any) {
+    console.warn(
+      `[Shopify Fulfillment Exception] Non-blocking fulfillment failure for order ${orderName}:`,
+      err?.message || err
+    );
+    return false;
+  }
+}
+
+/**
  * Task 4 Helper: Queries Courier API (Pathao / Steadfast) for live delivery & payment status,
  * triggers Shopify Paid/Fulfilled auto-sync if 'delivered' or 'disbursed',
  * and computes the Zero-Risk Cash Discrepancy Flag.
@@ -1811,6 +1934,26 @@ async function dispatchSingleOrderToCourier(params: {
       ? "Bahok"
       : courierDisplayName;
 
+  // 5. Automatic Shopify Fulfillment Mutation via fulfillmentCreateV2
+  // Synchronizes courier tracking number, tracking URL, and triggers customer email
+  let shopifyFulfilledSuccessfully = false;
+  try {
+    shopifyFulfilledSuccessfully = await createShopifyFulfillmentOnBooking({
+      admin,
+      shopDomain,
+      orderId,
+      orderName,
+      trackingNumber: finalTracking,
+      trackingUrl,
+      courierName: courierDisplayName || partnerName,
+    });
+  } catch (fulfillErr: any) {
+    console.warn(
+      `[Shopify Fulfillment Mutation Notice] Non-blocking fulfillment failure for order ${orderName}:`,
+      fulfillErr?.message || fulfillErr
+    );
+  }
+
   await ShipmentBooking.findOneAndUpdate(
     { shopDomain, orderId },
     {
@@ -1828,6 +1971,8 @@ async function dispatchSingleOrderToCourier(params: {
         codAmount,
         courierCashCollected: codAmount,
         courierStatus: "in_transit",
+        shopifySyncedPaidFulfilled: shopifyFulfilledSuccessfully,
+        shopifySyncedAt: shopifyFulfilledSuccessfully ? new Date() : undefined,
         currencyCode,
         warehouseNote,
         bookedAt: new Date(bookedAtIso),
