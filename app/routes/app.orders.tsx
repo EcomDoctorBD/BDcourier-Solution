@@ -5203,6 +5203,21 @@ export default function OrdersFulfillmentPage() {
             </Card>
           </Layout.Section>
 
+          {/* ==================== SMART AI ADDRESS SETTINGS BANNER ==================== */}
+          <Layout.Section>
+            <Banner
+              tone="info"
+              action={{
+                content: "Courier Settings ↗",
+                url: "/app/courier-settings",
+              }}
+            >
+              <p>
+                To clean, verify, and correct customer addresses automatically using Smart Gemini AI, please make sure the feature is turned on in your app settings.
+              </p>
+            </Banner>
+          </Layout.Section>
+
           {/* ==================== MULTI-SELECT ORDERS INDEXTABLE ==================== */}
           <Layout.Section>
             <Card padding="0">
