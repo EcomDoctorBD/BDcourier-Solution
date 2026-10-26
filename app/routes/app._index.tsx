@@ -102,7 +102,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     storeConfig = decryptCourierConfig(null);
   }
 
-  const currentPlan = String(storeConfig?.currentPlan || "Free");
+  // Simulation bypass: Force active plan to Enterprise
+  const currentPlan = "Enterprise";
   const monthlyOrderCount = Number(storeConfig?.monthlyOrderCount ?? 0);
   const rawBillingStatus = String(storeConfig?.billingStatus || "ACTIVE");
   const billingStatus =

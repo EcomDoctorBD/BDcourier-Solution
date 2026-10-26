@@ -236,7 +236,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   return json({
     shopDomain,
     savedZones,
-    currentPlan: storeConfig?.currentPlan || "Free",
+    // Simulation bypass: Force active plan to Enterprise
+    currentPlan: "Enterprise",
     isSynced,
   });
 };

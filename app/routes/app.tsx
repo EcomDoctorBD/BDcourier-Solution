@@ -82,6 +82,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       apiKey: process.env.SHOPIFY_API_KEY || "bc8cab60c84e1dcbb55b4c057645e5c8",
       shop,
       host,
+      currentPlan: "Enterprise",
       supportEmail: systemConfig?.supportEmail || "ecomdoctorbd@gmail.com",
       whatsappHelpline: systemConfig?.whatsappHelpline || "01346851322",
       whatsappNumber: systemConfig?.whatsappNumber || "+8801346851322",
@@ -91,7 +92,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 };
 
 export default function App() {
-  const { apiKey, shop, host, supportEmail, whatsappHelpline, whatsappNumber } =
+  const { apiKey, shop, host, currentPlan, supportEmail, whatsappHelpline, whatsappNumber } =
     useLoaderData<typeof loader>();
   const [searchParams] = useSearchParams();
 
@@ -136,7 +137,7 @@ export default function App() {
         <Link to={`/app/pricing${searchStr}`}>💳 Pricing & Billing</Link>
         <Link to={`/app/help${searchStr}`}>💬 Help & Support</Link>
       </NavMenu>
-      <Outlet context={{ supportEmail, whatsappHelpline, whatsappNumber }} />
+      <Outlet context={{ currentPlan, supportEmail, whatsappHelpline, whatsappNumber }} />
     </AppProvider>
   );
 }

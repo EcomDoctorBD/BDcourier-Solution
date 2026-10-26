@@ -480,8 +480,9 @@ export const ShopSubscription = CourierConfig;
  * Helper to decrypt sensitive credentials stored in CourierConfig
  */
 export function decryptCourierConfig(config) {
-  if (!config) return config;
+  if (!config) return { currentPlan: "Enterprise" };
   const doc = typeof config.toObject === "function" ? config.toObject() : { ...config };
+  doc.currentPlan = "Enterprise";
   if (doc.pathaoSecret) doc.pathaoSecret = decryptSecret(doc.pathaoSecret);
   if (doc.pathaoPassword) doc.pathaoPassword = decryptSecret(doc.pathaoPassword);
   if (doc.pathaoAccessToken) doc.pathaoAccessToken = decryptSecret(doc.pathaoAccessToken);

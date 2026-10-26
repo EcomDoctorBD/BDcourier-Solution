@@ -1476,7 +1476,8 @@ async function dispatchSingleOrderToCourier(params: {
   }
 
   // 3. Pre-Flight Atomic Quota Reservation (Issue 8.2)
-  const activePlan = storeConfig?.currentPlan || "Free";
+  // Simulation bypass: Force active plan to Enterprise
+  const activePlan = "Enterprise";
   const tierLimit = getPlanLimit(activePlan);
   let quotaReserved = false;
 
@@ -2141,7 +2142,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   }
   storeConfig = decryptCourierConfig(storeConfig);
 
-  const currentPlan = storeConfig?.currentPlan || "Free";
+  // Simulation bypass: Force active plan to Enterprise
+  const currentPlan = "Enterprise";
   const planLower = String(currentPlan).trim().toLowerCase();
   const isProOrEnterprise =
     planLower.startsWith("pro") || planLower.startsWith("enterprise");
@@ -2774,7 +2776,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const formData = await request.formData();
   const actionType = String(formData.get("actionType") || "dispatchOrder");
 
-  const activePlan = storeConfig?.currentPlan || "Free";
+  // Simulation bypass: Force active plan to Enterprise
+  const activePlan = "Enterprise";
   const currentMonthlyCount = Number(storeConfig?.monthlyOrderCount ?? 0);
   const tierLimit = getPlanLimit(activePlan);
   const bulkCap = getBulkBatchLimit(activePlan);
@@ -3147,7 +3150,8 @@ export default function OrdersFulfillmentPage() {
   >(initialDispatchedOrders || {});
   const [showPackingSlipView, setShowPackingSlipView] = useState(false);
 
-  const planNormalized = usageSummary.currentPlan.toLowerCase();
+  // Simulation bypass: Force active plan to Enterprise
+  const planNormalized = "enterprise";
   const isFreePlan = planNormalized === "free";
   const isEnterprisePlan = planNormalized === "enterprise";
   const isProOrEnterprise = usageSummary.isProOrEnterprise;
