@@ -4020,27 +4020,110 @@ export default function OrdersFulfillmentPage() {
 
         {/* Column 5: Delivery History & Fraud Risk Metrics */}
         <IndexTable.Cell>
-          <Box minWidth="140px" maxWidth="180px">
-            <BlockStack gap="100">
+          <Box minWidth="130px" maxWidth="170px">
+            <BlockStack gap="100" inlineAlign="start">
               {order.fraudStats && order.fraudStats.totalOrders > 0 ? (
-                <>
+                <BlockStack gap="050" inlineAlign="start">
+                  {/* SVG Circular Progress Ring */}
+                  <div
+                    style={{
+                      position: "relative",
+                      width: "42px",
+                      height: "42px",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
+                    <svg
+                      width="42"
+                      height="42"
+                      viewBox="0 0 42 42"
+                      style={{ display: "block" }}
+                    >
+                      {/* Background Track Circle */}
+                      <circle
+                        cx="21"
+                        cy="21"
+                        r="16"
+                        fill="none"
+                        stroke="#E5E7EB"
+                        strokeWidth="3.5"
+                      />
+                      {/* Progress Stroke Circle */}
+                      <circle
+                        cx="21"
+                        cy="21"
+                        r="16"
+                        fill="none"
+                        stroke={
+                          order.fraudStats.successRate >= 80
+                            ? "#16A344"
+                            : order.fraudStats.successRate >= 60
+                            ? "#D97706"
+                            : "#DC2626"
+                        }
+                        strokeWidth="3.5"
+                        strokeLinecap="round"
+                        strokeDasharray="100.53"
+                        strokeDashoffset={
+                          100.53 -
+                          (100.53 * order.fraudStats.successRate) / 100
+                        }
+                        transform="rotate(-90 21 21)"
+                      />
+                    </svg>
+                    {/* Centered Percentage */}
+                    <span
+                      style={{
+                        position: "absolute",
+                        top: "50%",
+                        left: "50%",
+                        transform: "translate(-50%, -50%)",
+                        fontSize: "10px",
+                        fontWeight: 700,
+                        color:
+                          order.fraudStats.successRate >= 80
+                            ? "#16A344"
+                            : order.fraudStats.successRate >= 60
+                            ? "#D97706"
+                            : "#DC2626",
+                        letterSpacing: "-0.5px",
+                        lineHeight: 1,
+                        pointerEvents: "none",
+                      }}
+                    >
+                      {`${order.fraudStats.successRate}%`}
+                    </span>
+                  </div>
+
+                  {/* Micro-Counters Stacked Underneath */}
                   <InlineStack gap="100" blockAlign="center">
-                    <Badge tone={rateBadgeTone} size="small">
-                      {`Trust: ${order.fraudStats.successRate}%`}
-                    </Badge>
-                  </InlineStack>
-                  <InlineStack gap="100">
-                    <span style={{ fontSize: "11px", color: "#16A34A", fontWeight: 600 }}>
+                    <span
+                      style={{
+                        fontSize: "11px",
+                        color: "#16A344",
+                        fontWeight: 600,
+                      }}
+                    >
                       ✓ {order.fraudStats.totalDelivered}
                     </span>
-                    <span style={{ fontSize: "11px", color: "#9CA3AF" }}>/</span>
-                    <span style={{ fontSize: "11px", color: "#DC2626", fontWeight: 600 }}>
+                    <span style={{ fontSize: "10px", color: "#9CA3AF" }}>/</span>
+                    <span
+                      style={{
+                        fontSize: "11px",
+                        color: "#DC2626",
+                        fontWeight: 600,
+                      }}
+                    >
                       ✕ {order.fraudStats.totalReturned}
                     </span>
                   </InlineStack>
-                </>
+                </BlockStack>
               ) : (
-                <Badge tone="subdued" size="small">New Customer</Badge>
+                <Badge tone="subdued" size="small">
+                  New Customer
+                </Badge>
               )}
 
               {isLockedBySafetyNet && (
