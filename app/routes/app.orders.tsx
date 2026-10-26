@@ -340,6 +340,10 @@ interface RawShopifyOrder {
   id: string;
   name: string;
   createdAt: string;
+  cancelledAt?: string | null;
+  closedAt?: string | null;
+  isCancelled: boolean;
+  isClosed: boolean;
   customerName: string;
   customerPhone: string;
   shippingAddress: string;
@@ -349,6 +353,7 @@ interface RawShopifyOrder {
   currencyCode: string;
   fulfillmentStatus: string;
   displayFinancialStatus: string;
+  financialStatus: string;
   totalOutstanding: string;
   codAmount: number;
   warehouseNote: string;
@@ -365,6 +370,10 @@ interface NormalizedOrder extends RawShopifyOrder {
   reconciliation: CourierReconciliationInfo | null;
   trackingNumber: string | null;
   isAiCleaned: boolean;
+  isCancelled: boolean;
+  isClosed: boolean;
+  financialStatus: string;
+  fulfillmentStatus: string;
 }
 
 export interface DispatchedSlipRecord {
@@ -912,10 +921,19 @@ function applyRoutingAndSafetyLogic(
   const hasRealFraudHistory = Boolean(fraudStats && fraudStats.totalOrders > 0);
   const isBelowThreshold = hasRealFraudHistory && fraudStats!.successRate < minRate;
 
+  const isCancelled = Boolean(order.isCancelled || (order as any).cancelledAt);
+  const isClosed = Boolean(order.isClosed || (order as any).closedAt);
+  const financialStatus = order.financialStatus || order.displayFinancialStatus || "UNPAID";
+  const fulfillmentStatus = order.fulfillmentStatus || "UNFULFILLED";
+
   if (isEnabled) {
     if (isBelowThreshold) {
       return {
         ...order,
+        isCancelled,
+        isClosed,
+        financialStatus,
+        fulfillmentStatus,
         customerPhone: order.customerPhone,
         fraudStats,
         reconciliation,
@@ -964,6 +982,10 @@ function applyRoutingAndSafetyLogic(
 
     return {
       ...order,
+      isCancelled,
+      isClosed,
+      financialStatus,
+      fulfillmentStatus,
       customerPhone: order.customerPhone,
       fraudStats,
       reconciliation,
@@ -981,6 +1003,10 @@ function applyRoutingAndSafetyLogic(
 
   return {
     ...order,
+    isCancelled,
+    isClosed,
+    financialStatus,
+    fulfillmentStatus,
     customerPhone: order.customerPhone,
     fraudStats,
     reconciliation,
@@ -2066,6 +2092,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     // Dynamic archived & historical order query
     queryParts.push("(fulfillment_status:fulfilled OR status:closed OR status:cancelled)");
     pageSize = 50;
+  } else if (tabParam === "cancelled") {
+    queryParts.push("(status:cancelled OR financial_status:voided)");
   } else if (tabParam === "pending") {
     // Unfulfilled rows matching manual locking criteria
     queryParts.push("fulfillment_status:unfulfilled");
@@ -2109,6 +2137,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
             id
             name
             createdAt
+            cancelledAt
+            closedAt
             note
             displayFulfillmentStatus
             displayFinancialStatus
@@ -2180,6 +2210,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
             id
             name
             createdAt
+            cancelledAt
+            closedAt
             note
             displayFulfillmentStatus
             displayFinancialStatus
@@ -2306,6 +2338,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         id: node.id,
         name: node.name,
         createdAt: node.createdAt,
+        cancelledAt: node.cancelledAt || null,
+        closedAt: node.closedAt || null,
+        isCancelled: Boolean(node.cancelledAt),
+        isClosed: Boolean(node.closedAt),
         customerName,
         customerPhone,
         shippingAddress,
@@ -2315,6 +2351,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         currencyCode: node.totalPriceSet?.shopMoney?.currencyCode || "BDT",
         fulfillmentStatus: node.displayFulfillmentStatus || "UNFULFILLED",
         displayFinancialStatus,
+        financialStatus: displayFinancialStatus,
         totalOutstanding,
         codAmount,
         warehouseNote: node.note || "",
@@ -2383,6 +2420,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
           id: node.id,
           name: node.name,
           createdAt: node.createdAt,
+          cancelledAt: node.cancelledAt || null,
+          closedAt: node.closedAt || null,
+          isCancelled: Boolean(node.cancelledAt),
+          isClosed: Boolean(node.closedAt),
           customerName: "",
           customerPhone: "",
           shippingAddress: "",
@@ -2392,6 +2433,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
           currencyCode: node.totalPriceSet?.shopMoney?.currencyCode || "BDT",
           fulfillmentStatus: node.displayFulfillmentStatus || "UNFULFILLED",
           displayFinancialStatus,
+          financialStatus: displayFinancialStatus,
           totalOutstanding,
           codAmount,
           warehouseNote: node.note || "",
@@ -3224,16 +3266,32 @@ export default function OrdersFulfillmentPage() {
       ).toLowerCase();
       const isLocked = checkIsLocked(order);
 
+      const isCancelledOrder =
+        Boolean(order.isCancelled) ||
+        order.financialStatus?.toUpperCase() === "VOIDED" ||
+        order.displayFinancialStatus?.toUpperCase() === "VOIDED" ||
+        order.fulfillmentStatus?.toUpperCase() === "CANCELLED" ||
+        courierStatus === "cancelled";
+
+      const isClosedOrder =
+        Boolean(order.isClosed) ||
+        order.fulfillmentStatus?.toUpperCase() === "CLOSED";
+
       switch (tabId) {
         case "all":
           return true;
         case "new":
           return (
             !dispatched &&
+            !order.isCancelled &&
+            !order.isClosed &&
+            !isCancelledOrder &&
+            !isClosedOrder &&
             (order.fulfillmentStatus?.toUpperCase() === "UNFULFILLED" ||
               !order.fulfillmentStatus)
           );
         case "accepted":
+          if (isCancelledOrder || isClosedOrder) return false;
           return (
             Boolean(dispatched) &&
             (courierStatus === "accepted" ||
@@ -3242,33 +3300,38 @@ export default function OrdersFulfillmentPage() {
               courierStatus === "pending")
           );
         case "pending":
+          if (isCancelledOrder || isClosedOrder) return false;
           return isLocked || courierStatus === "pending" || courierStatus === "hold";
         case "shipping":
+          if (isCancelledOrder || isClosedOrder) return false;
           return (
             Boolean(dispatched) &&
             courierStatus !== "delivered" &&
             courierStatus !== "returned" &&
-            courierStatus !== "cancelled"
+            courierStatus !== "cancelled" &&
+            order.fulfillmentStatus?.toUpperCase() !== "FULFILLED"
           );
         case "delivered":
+          if (isCancelledOrder) return false;
           return (
             Boolean(dispatched) &&
             (courierStatus === "delivered" ||
+              order.fulfillmentStatus?.toUpperCase() === "FULFILLED" ||
               Boolean(order.reconciliation?.autoSyncedPaidFulfilled))
           );
         case "cancelled":
-          return (
-            courierStatus === "cancelled" ||
-            order.fulfillmentStatus?.toUpperCase() === "CANCELLED"
-          );
+          return isCancelledOrder;
         case "returned":
+          if (isCancelledOrder) return false;
           return courierStatus === "returned";
         case "partially_delivered":
+          if (isCancelledOrder) return false;
           return (
             courierStatus === "partially_delivered" ||
             courierStatus.includes("partial")
           );
         case "paid_returned":
+          if (isCancelledOrder) return false;
           return (
             courierStatus === "paid_returned" ||
             (courierStatus === "returned" &&
@@ -3277,9 +3340,9 @@ export default function OrdersFulfillmentPage() {
           );
         case "old_orders":
           return (
+            Boolean(order.isClosed) ||
+            isClosedOrder ||
             order.fulfillmentStatus?.toUpperCase() === "FULFILLED" ||
-            order.fulfillmentStatus?.toUpperCase() === "CLOSED" ||
-            order.fulfillmentStatus?.toUpperCase() === "CANCELLED" ||
             Boolean(order.reconciliation?.autoSyncedPaidFulfilled)
           );
         default:
