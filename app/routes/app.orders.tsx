@@ -589,15 +589,18 @@ async function createShopifyFulfillmentOnBooking(params: {
       ? orderId
       : `gid://shopify/Order/${orderId.replace(/\D/g, "")}`;
 
-    // 1. Query active FulfillmentOrders for the Shopify order
+    // 1. Query primary active FulfillmentOrder and its dynamic Assigned Location
     const FO_QUERY = `#graphql
       query GetOrderFulfillmentOrdersForDispatch($id: ID!) {
         order(id: $id) {
-          fulfillmentOrders(first: 5) {
+          fulfillmentOrders(first: 1, assignmentStatus: FULFILLMENT_REQUESTED_OR_UNFULFILLED) {
             edges {
               node {
                 id
                 status
+                assignedLocation {
+                  id
+                }
               }
             }
           }
@@ -605,19 +608,52 @@ async function createShopifyFulfillmentOnBooking(params: {
       }
     `;
 
-    const foRes = await effectiveAdmin.graphql(FO_QUERY, { variables: { id: formattedOrderId } });
-    const foJson: any = await foRes.json();
-    const foEdges = foJson?.data?.order?.fulfillmentOrders?.edges || [];
-    const openFo = foEdges.find(
-      ({ node }: any) => node.status === "OPEN" || node.status === "IN_PROGRESS"
-    );
+    let foRes = await effectiveAdmin.graphql(FO_QUERY, { variables: { id: formattedOrderId } });
+    let foJson: any = await foRes.json();
+    let foEdges = foJson?.data?.order?.fulfillmentOrders?.edges || [];
 
-    if (!openFo?.node?.id) {
+    // Fault-Tolerant Fallback: If assignmentStatus returns empty, query open/in-progress fulfillment orders
+    if (foEdges.length === 0) {
+      const FO_FALLBACK_QUERY = `#graphql
+        query GetOrderFulfillmentOrdersFallback($id: ID!) {
+          order(id: $id) {
+            fulfillmentOrders(first: 5) {
+              edges {
+                node {
+                  id
+                  status
+                  assignedLocation {
+                    id
+                  }
+                }
+              }
+            }
+          }
+        }
+      `;
+      const fallbackRes = await effectiveAdmin.graphql(FO_FALLBACK_QUERY, { variables: { id: formattedOrderId } });
+      const fallbackJson: any = await fallbackRes.json();
+      foEdges = fallbackJson?.data?.order?.fulfillmentOrders?.edges || [];
+    }
+
+    const targetFoNode =
+      foEdges.find(
+        ({ node }: any) => node.status === "OPEN" || node.status === "IN_PROGRESS" || !node.status
+      )?.node || foEdges[0]?.node;
+
+    if (!targetFoNode?.id) {
       console.log(
         `[Shopify Fulfillment] Order ${orderName} (${formattedOrderId}) has no OPEN or IN_PROGRESS fulfillment orders to fulfill`
       );
       return false;
     }
+
+    const fulfillmentOrderId = targetFoNode.id;
+    const locationId = targetFoNode.assignedLocation?.id || null;
+
+    console.log(
+      `[Shopify Location Resolver] Order ${orderName}: dynamically resolved fulfillmentOrderId=${fulfillmentOrderId}, locationId=${locationId || "assigned"}`
+    );
 
     // 2. Execute fulfillmentCreateV2 mutation with tracking information and buyer notification
     const FULFILLMENT_CREATE_V2_MUTATION = `#graphql
@@ -649,7 +685,7 @@ async function createShopifyFulfillmentOnBooking(params: {
           notifyCustomer: true,
           trackingInfo,
           lineItemsByFulfillmentOrder: [
-            { fulfillmentOrderId: openFo.node.id },
+            { fulfillmentOrderId },
           ],
         },
       },
@@ -666,7 +702,7 @@ async function createShopifyFulfillmentOnBooking(params: {
     }
 
     console.log(
-      `[Shopify Fulfillment Success] Order ${orderName} (${formattedOrderId}) marked FULFILLED on Shopify via ${courierName} tracking ${trackingNumber}`
+      `[Shopify Fulfillment Success] Order ${orderName} (${formattedOrderId}) marked FULFILLED on Shopify via ${courierName} tracking ${trackingNumber} at location ${locationId || "assigned"}`
     );
     return true;
   } catch (err: any) {
