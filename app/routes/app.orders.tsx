@@ -1165,8 +1165,13 @@ async function dispatchSingleOrderToCourier(params: {
     }
   }
 
-  // 2. AI Address Correction & Caching Pipeline
-  const addressResolution = await cleanAndCacheAddress(shippingAddress);
+  // 2. AI Address Correction & Caching Pipeline (Respects Merchant Toggle)
+  const isAiCleaningEnabled = Boolean(
+    storeConfig?.aiAddressCleaningEnabled ?? true
+  );
+  const addressResolution = await cleanAndCacheAddress(shippingAddress, {
+    allowAi: isAiCleaningEnabled,
+  });
 
   if (addressResolution.confidence === "LOW" || !addressResolution.district) {
     return {
@@ -1176,7 +1181,7 @@ async function dispatchSingleOrderToCourier(params: {
       orderName,
       courierName: "",
       trackingNumber: "",
-      message: `Address Quality Alert for ${orderName}: AI Confidence is LOW or district unidentifiable. Automated dispatch aborted and order locked for manual review.`,
+      message: `Address Quality Alert for ${orderName}: Address Confidence is LOW or district unidentifiable. Automated dispatch aborted and order locked for manual review.`,
     };
   }
 

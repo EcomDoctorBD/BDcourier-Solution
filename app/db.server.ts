@@ -836,7 +836,7 @@ const addressCacheSchema = new mongoose.Schema(
     },
     district: {
       type: String,
-      required: true,
+      default: "",
       trim: true,
     },
     thana: {

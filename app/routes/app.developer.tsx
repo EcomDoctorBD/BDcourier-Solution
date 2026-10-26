@@ -184,7 +184,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const isGeminiConfigured = Boolean(rawGeminiKey);
   const maskedGeminiKey = maskSecret(rawGeminiKey, 6, 4);
   const configuredGeminiModel =
-    process.env.GEMINI_MODEL?.trim() || "gemini-1.5-flash";
+    process.env.GEMINI_MODEL?.trim() || "gemini-2.5-flash-lite";
 
   // 3. COURIER HANDSHAKES & CREDENTIALS
   const rawStoreConfig: any = await CourierConfig.findOne({ shopDomain }).lean();

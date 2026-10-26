@@ -358,7 +358,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   const aiConfig: AiConfig = {
     isGeminiConfigured: Boolean(process.env.GEMINI_API_KEY?.trim()),
-    geminiModel: process.env.GEMINI_MODEL?.trim() || "gemini-1.5-flash",
+    geminiModel: process.env.GEMINI_MODEL?.trim() || "gemini-2.5-flash-lite",
     addressCacheCount,
     aiAddressCleaningEnabled: Boolean(
       storeConfig?.aiAddressCleaningEnabled ?? true

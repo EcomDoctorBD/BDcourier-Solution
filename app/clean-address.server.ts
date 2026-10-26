@@ -153,13 +153,25 @@ Confidence Rules:
 - "LOW": Address is ambiguous, conflicting, fake, unidentifiable, or missing district. Set district to null if confidence is LOW.`;
 
 /**
+ * Title Case Formatter for standardized address display
+ */
+export function toTitleCase(str: string): string {
+  return str.replace(
+    /\w\S*/g,
+    (txt) => txt.charAt(0).toUpperCase() + txt.substring(1).toLowerCase()
+  );
+}
+
+/**
  * AI Address Correction & Caching Pipeline
  * 1. Step A: Fast MongoDB Cache Check (<5ms)
- * 2. Step B: Google AI Studio Gemini API Fallback on Cache Miss
- * 3. Step C: Save Translation Pair Asynchronously into AddressCache
+ * 2. Step B: Local Dictionary & Neighborhood Pre-Filter (<1ms, $0.00 cost)
+ * 3. Step C: Google AI Studio Gemini API (Active low-cost models) on complex addresses
+ * 4. Step D: Comprehensive Caching (including LOW confidence) to prevent duplicate lookups
  */
 export async function cleanAndCacheAddress(
-  rawAddress: string
+  rawAddress: string,
+  options?: { allowAi?: boolean }
 ): Promise<CleanAddressResult> {
   // Input sanitization & bounds enforcement (Issue 5.2)
   const safeRaw = String(rawAddress ?? "")
@@ -192,6 +204,16 @@ export async function cleanAndCacheAddress(
     }).lean();
 
     if (cached) {
+      if (cached.confidence === "LOW") {
+        return {
+          cleanAddress: String(cached.cleanAddress || safeRaw),
+          district: resolveCanonicalDistrict(cached.district),
+          thana: String(cached.thana || ""),
+          confidence: "LOW",
+          source: "cache",
+        };
+      }
+
       const cachedDistrict = resolveCanonicalDistrict(cached.district);
       if (cachedDistrict) {
         return {
@@ -213,12 +235,101 @@ export async function cleanAndCacheAddress(
   }
 
   // -------------------------------------------------------------
-  // STEP B: Gemini API Fallback
+  // STEP B: Local Dictionary Pre-Filter (Sub-1ms, $0.00 cost)
+  // Inverted check: resolves complete addresses locally before calling Gemini
+  // -------------------------------------------------------------
+  let matchedDistrict: string | null = null;
+  let matchedThana = "";
+
+  // 1. Check local neighborhood map (e.g. Uttara -> Dhaka, Uttara; Mirpur -> Dhaka, Mirpur)
+  for (const [neighborhood, loc] of Object.entries(LOCAL_NEIGHBORHOOD_MAP)) {
+    if (normalizedRaw.includes(neighborhood)) {
+      matchedDistrict = loc.district;
+      matchedThana = loc.thana;
+      break;
+    }
+  }
+
+  // 2. Check canonical district names & aliases
+  if (!matchedDistrict) {
+    for (const [keyword, canonDistrict] of Object.entries(CANONICAL_BD_DISTRICTS)) {
+      if (normalizedRaw.includes(keyword)) {
+        matchedDistrict = canonDistrict;
+        break;
+      }
+    }
+  }
+
+  const hasEmbeddedPhone = /01[3-9]\d{8}/.test(safeRaw);
+
+  // If local matcher successfully identifies both a valid district and thana
+  // (and raw address does not contain embedded Bangladeshi phone numbers 01[3-9]\d{8} that need stripping),
+  // format into Title Case, save to AddressCache with confidence: "HIGH", and return immediately without calling Gemini.
+  if (matchedDistrict && matchedThana && !hasEmbeddedPhone) {
+    const cleanAddress = toTitleCase(safeRaw);
+    AddressCache.updateOne(
+      { rawInput: String(normalizedRaw) },
+      {
+        $set: {
+          rawInput: String(normalizedRaw),
+          cleanAddress,
+          district: matchedDistrict,
+          thana: matchedThana,
+          confidence: "HIGH",
+          createdAt: new Date(),
+        },
+      },
+      { upsert: true }
+    ).catch((err: any) =>
+      console.error("Failed to asynchronously save local AddressCache:", err)
+    );
+
+    return {
+      cleanAddress,
+      district: matchedDistrict,
+      thana: matchedThana,
+      confidence: "HIGH",
+      source: "fallback",
+    };
+  }
+
+  // If merchant has disabled AI address normalizer, bypass Gemini completely and use local matching
+  const allowAi = options?.allowAi !== false;
+  if (!allowAi) {
+    const fallbackConfidence: "HIGH" | "MEDIUM" | "LOW" = matchedDistrict ? "MEDIUM" : "LOW";
+    const cleanAddress = safeRaw;
+
+    AddressCache.updateOne(
+      { rawInput: String(normalizedRaw) },
+      {
+        $set: {
+          rawInput: String(normalizedRaw),
+          cleanAddress,
+          district: matchedDistrict || "",
+          thana: matchedThana,
+          confidence: fallbackConfidence,
+          createdAt: new Date(),
+        },
+      },
+      { upsert: true }
+    ).catch(() => {});
+
+    return {
+      cleanAddress,
+      district: matchedDistrict,
+      thana: matchedThana,
+      confidence: fallbackConfidence,
+      source: "fallback",
+    };
+  }
+
+  // -------------------------------------------------------------
+  // STEP C: Gemini API Fallback (Active Low-Cost Models)
   // -------------------------------------------------------------
   const geminiApiKey = process.env.GEMINI_API_KEY?.trim();
-  const configuredModel = process.env.GEMINI_MODEL?.trim() || "gemini-1.5-flash";
+  const configuredModel = process.env.GEMINI_MODEL?.trim() || "gemini-2.5-flash-lite";
   const candidateModels = Array.from(
-    new Set([configuredModel, "gemini-1.5-flash", "gemini-2.0-flash", "gemini-flash-latest"])
+    new Set([configuredModel, "gemini-2.5-flash-lite", "gemini-3.5-flash-lite", "gemini-flash-latest"])
   );
 
   // Neutralize prompt-override patterns and frame with XML delimiters (Issue 5.2)
@@ -286,25 +397,23 @@ ${sanitizedInput}
                 ? rawConfidence
                 : "LOW";
 
-            // STEP C: Save Cache ONLY if verified canonical district AND HIGH/MEDIUM confidence
-            if (district && (confidence === "HIGH" || confidence === "MEDIUM")) {
-              AddressCache.updateOne(
-                { rawInput: String(normalizedRaw) },
-                {
-                  $set: {
-                    rawInput: String(normalizedRaw),
-                    cleanAddress,
-                    district,
-                    thana,
-                    confidence,
-                    createdAt: new Date(),
-                  },
+            // STEP D: Save Cache for ALL results (including LOW) to eliminate repeat API hits
+            AddressCache.updateOne(
+              { rawInput: String(normalizedRaw) },
+              {
+                $set: {
+                  rawInput: String(normalizedRaw),
+                  cleanAddress,
+                  district: district || "",
+                  thana,
+                  confidence,
+                  createdAt: new Date(),
                 },
-                { upsert: true }
-              ).catch((err: any) =>
-                console.error("Failed to asynchronously save AddressCache:", err)
-              );
-            }
+              },
+              { upsert: true }
+            ).catch((err: any) =>
+              console.error("Failed to asynchronously save AddressCache:", err)
+            );
 
             return {
               cleanAddress: cleanAddress || safeRaw,
@@ -329,56 +438,32 @@ ${sanitizedInput}
   }
 
   // -------------------------------------------------------------
-  // LOCAL FALLBACK NORMALIZER (When Gemini API key is missing or offline)
+  // LOCAL FALLBACK NORMALIZER (When Gemini API key is missing, offline, or failed)
   // -------------------------------------------------------------
-  let matchedDistrict: string | null = null;
-  let matchedThana = "";
-
-  // 1. Check local neighborhood map (e.g. Uttara -> Dhaka)
-  for (const [neighborhood, loc] of Object.entries(LOCAL_NEIGHBORHOOD_MAP)) {
-    if (normalizedRaw.includes(neighborhood)) {
-      matchedDistrict = loc.district;
-      matchedThana = loc.thana;
-      break;
-    }
-  }
-
-  // 2. Check canonical district names & aliases
-  if (!matchedDistrict) {
-    for (const [keyword, canonDistrict] of Object.entries(CANONICAL_BD_DISTRICTS)) {
-      if (normalizedRaw.includes(keyword)) {
-        matchedDistrict = canonDistrict;
-        break;
-      }
-    }
-  }
-
-  const confidence = matchedDistrict ? "MEDIUM" : "LOW";
+  const fallbackConfidence = matchedDistrict ? "MEDIUM" : "LOW";
   const cleanAddress = safeRaw;
 
-  // Only cache if a canonical district was matched
-  if (matchedDistrict) {
-    AddressCache.updateOne(
-      { rawInput: String(normalizedRaw) },
-      {
-        $set: {
-          rawInput: String(normalizedRaw),
-          cleanAddress,
-          district: matchedDistrict,
-          thana: matchedThana,
-          confidence,
-          createdAt: new Date(),
-        },
+  // Always cache local resolution (including LOW) to eliminate repeat hits
+  AddressCache.updateOne(
+    { rawInput: String(normalizedRaw) },
+    {
+      $set: {
+        rawInput: String(normalizedRaw),
+        cleanAddress,
+        district: matchedDistrict || "",
+        thana: matchedThana,
+        confidence: fallbackConfidence,
+        createdAt: new Date(),
       },
-      { upsert: true }
-    ).catch(() => {});
-  }
+    },
+    { upsert: true }
+  ).catch(() => {});
 
   return {
     cleanAddress,
     district: matchedDistrict,
     thana: matchedThana,
-    confidence,
+    confidence: fallbackConfidence,
     source: "fallback",
   };
 }
