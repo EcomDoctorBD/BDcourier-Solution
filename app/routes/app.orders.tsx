@@ -37,6 +37,7 @@ import {
   ActionList,
   Spinner,
   Link,
+  DatePicker,
 } from "@shopify/polaris";
 
 import { authenticate, unauthenticated, sessionStorage } from "../shopify.server";
@@ -2739,6 +2740,29 @@ function DynamicBarcodeGraphic({
   );
 }
 
+const formatDateToYMD = (d: Date | null): string => {
+  if (!d || Number.isNaN(d.getTime())) return "";
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
+
+interface DatePresetItem {
+  id: string;
+  title: string;
+}
+
+const DATE_PRESET_ITEMS: DatePresetItem[] = [
+  { id: "all", title: "All time" },
+  { id: "today", title: "Today" },
+  { id: "yesterday", title: "Yesterday" },
+  { id: "last7", title: "Last 7 Days" },
+  { id: "last30", title: "Last 30 Days" },
+  { id: "last3m", title: "Last 3 months" },
+  { id: "last6m", title: "Last 6 months" },
+];
+
 export default function OrdersFulfillmentPage() {
   const {
     shopDomain,
@@ -2863,6 +2887,7 @@ export default function OrdersFulfillmentPage() {
   );
   const [selectedTabId, setSelectedTabId] = useState(initialTabId);
   const [isDatePopoverActive, setIsDatePopoverActive] = useState(false);
+  const [selectedPresetId, setSelectedPresetId] = useState<string>("all");
   const [dateRange, setDateRange] = useState<{ start: Date | null; end: Date | null } | null>(() => {
     if (activeFilters?.startDate || activeFilters?.endDate) {
       return {
@@ -2872,11 +2897,19 @@ export default function OrdersFulfillmentPage() {
     }
     return null;
   });
+  const [tempRange, setTempRange] = useState<{ start: Date | null; end: Date | null } | null>(dateRange);
+  const [startDateInput, setStartDateInput] = useState(() => formatDateToYMD(dateRange?.start ?? null));
+  const [endDateInput, setEndDateInput] = useState(() => formatDateToYMD(dateRange?.end ?? null));
   const [dateRangeLabel, setDateRangeLabel] = useState(() => {
-    if (activeFilters?.startDate || activeFilters?.endDate) {
-      return "📅 Custom Range";
+    if (activeFilters?.startDate && activeFilters?.endDate) {
+      return `📅 ${activeFilters.startDate} ➔ ${activeFilters.endDate}`;
     }
     return "📅 All time";
+  });
+
+  const [{ month: pickerMonth, year: pickerYear }, setPickerMonthYear] = useState(() => {
+    const d = dateRange?.start || new Date();
+    return { month: d.getMonth(), year: d.getFullYear() };
   });
 
   useEffect(() => {
@@ -2885,84 +2918,148 @@ export default function OrdersFulfillmentPage() {
     }
   }, [urlTab]);
 
-  const handleSelectDatePreset = useCallback(
-    (preset: string) => {
-      const now = new Date();
-      let start: Date | null = null;
-      let end: Date | null = null;
-      let label = "📅 All time";
+  const handleMonthChange = useCallback((month: number, year: number) => {
+    setPickerMonthYear({ month, year });
+  }, []);
 
-      if (preset === "all") {
-        start = null;
-        end = null;
-        label = "📅 All time";
-      } else if (preset === "today") {
-        start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-        end = new Date(
-          now.getFullYear(),
-          now.getMonth(),
-          now.getDate(),
-          23,
-          59,
-          59,
-          999
-        );
-        label = "📅 Today";
-      } else if (preset === "yesterday") {
-        const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-        start = new Date(
-          yesterday.getFullYear(),
-          yesterday.getMonth(),
-          yesterday.getDate()
-        );
-        end = new Date(
-          yesterday.getFullYear(),
-          yesterday.getMonth(),
-          yesterday.getDate(),
-          23,
-          59,
-          59,
-          999
-        );
-        label = "📅 Yesterday";
-      } else if (preset === "last7") {
-        start = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-        end = now;
-        label = "📅 Last 7 Days";
-      } else if (preset === "last30") {
-        start = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-        end = now;
-        label = "📅 Last 30 Days";
-      } else if (preset === "thisMonth") {
-        start = new Date(now.getFullYear(), now.getMonth(), 1);
-        end = now;
-        label = "📅 This Month";
+  const handleDatePickerChange = useCallback(({ start, end }: { start: Date; end: Date }) => {
+    const normalizedStart = new Date(start.getFullYear(), start.getMonth(), start.getDate(), 0, 0, 0, 0);
+    const normalizedEnd = new Date(end.getFullYear(), end.getMonth(), end.getDate(), 23, 59, 59, 999);
+    setTempRange({ start: normalizedStart, end: normalizedEnd });
+    setStartDateInput(formatDateToYMD(start));
+    setEndDateInput(formatDateToYMD(end));
+    setSelectedPresetId("custom");
+  }, []);
+
+  const handlePresetClick = useCallback((presetId: string) => {
+    setSelectedPresetId(presetId);
+    const now = new Date();
+    let start: Date | null = null;
+    let end: Date | null = null;
+
+    if (presetId === "all") {
+      start = null;
+      end = null;
+    } else if (presetId === "today") {
+      start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+      end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+    } else if (presetId === "yesterday") {
+      start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 0, 0, 0, 0);
+      end = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 23, 59, 59, 999);
+    } else if (presetId === "last7") {
+      start = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      end = now;
+    } else if (presetId === "last30") {
+      start = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+      end = now;
+    } else if (presetId === "last3m") {
+      start = new Date(now.getFullYear(), now.getMonth() - 3, now.getDate(), 0, 0, 0, 0);
+      end = now;
+    } else if (presetId === "last6m") {
+      start = new Date(now.getFullYear(), now.getMonth() - 6, now.getDate(), 0, 0, 0, 0);
+      end = now;
+    }
+
+    if (start && end) {
+      setTempRange({ start, end });
+      setStartDateInput(formatDateToYMD(start));
+      setEndDateInput(formatDateToYMD(end));
+      setPickerMonthYear({ month: start.getMonth(), year: start.getFullYear() });
+    } else {
+      setTempRange(null);
+      setStartDateInput("");
+      setEndDateInput("");
+    }
+  }, []);
+
+  const handleStartDateInputChange = useCallback((val: string) => {
+    setStartDateInput(val);
+    setSelectedPresetId("custom");
+    if (val.length === 10) {
+      const parsed = new Date(val);
+      if (!Number.isNaN(parsed.getTime())) {
+        const startDay = new Date(parsed.getFullYear(), parsed.getMonth(), parsed.getDate(), 0, 0, 0, 0);
+        setTempRange((prev) => ({
+          start: startDay,
+          end: prev?.end || new Date(parsed.getFullYear(), parsed.getMonth(), parsed.getDate(), 23, 59, 59, 999),
+        }));
+        setPickerMonthYear({ month: parsed.getMonth(), year: parsed.getFullYear() });
       }
+    }
+  }, []);
 
-      setDateRange(start ? { start, end } : null);
-      setDateRangeLabel(label);
-      setIsDatePopoverActive(false);
-
-      if (
-        searchParams.get("tab") === "old_orders" ||
-        searchParams.has("startDate")
-      ) {
-        const nextParams = new URLSearchParams(searchParams);
-        if (start) {
-          nextParams.set("startDate", start.toISOString().split("T")[0]);
-        } else {
-          nextParams.delete("startDate");
-        }
-        if (end) {
-          nextParams.set("endDate", end.toISOString().split("T")[0]);
-        } else {
-          nextParams.delete("endDate");
-        }
-        setSearchParams(nextParams, { replace: true });
+  const handleEndDateInputChange = useCallback((val: string) => {
+    setEndDateInput(val);
+    setSelectedPresetId("custom");
+    if (val.length === 10) {
+      const parsed = new Date(val);
+      if (!Number.isNaN(parsed.getTime())) {
+        const endDay = new Date(parsed.getFullYear(), parsed.getMonth(), parsed.getDate(), 23, 59, 59, 999);
+        setTempRange((prev) => ({
+          start: prev?.start || new Date(parsed.getFullYear(), parsed.getMonth(), parsed.getDate(), 0, 0, 0, 0),
+          end: endDay,
+        }));
       }
-    },
-    [searchParams, setSearchParams]
-  );
+    }
+  }, []);
+
+  const handleCancelDatePopover = useCallback(() => {
+    setTempRange(dateRange);
+    setStartDateInput(formatDateToYMD(dateRange?.start ?? null));
+    setEndDateInput(formatDateToYMD(dateRange?.end ?? null));
+    setIsDatePopoverActive(false);
+  }, [dateRange]);
+
+  const handleApplyDatePopover = useCallback(() => {
+    let finalRange: { start: Date; end: Date } | null = null;
+    let label = "📅 All time";
+
+    if (tempRange && tempRange.start) {
+      const finalStart = tempRange.start;
+      const finalEnd = tempRange.end || new Date(tempRange.start.getFullYear(), tempRange.start.getMonth(), tempRange.start.getDate(), 23, 59, 59, 999);
+      finalRange = { start: finalStart, end: finalEnd };
+
+      const matchedPreset = DATE_PRESET_ITEMS.find((p) => p.id === selectedPresetId && p.id !== "all");
+      if (matchedPreset) {
+        label = `📅 ${matchedPreset.title}`;
+      } else {
+        label = `📅 ${formatDateToYMD(finalStart)} ➔ ${formatDateToYMD(finalEnd)}`;
+      }
+    } else {
+      setSelectedPresetId("all");
+    }
+
+    setDateRange(finalRange);
+    setDateRangeLabel(label);
+    setIsDatePopoverActive(false);
+
+    if (
+      searchParams.get("tab") === "old_orders" ||
+      searchParams.has("startDate")
+    ) {
+      const nextParams = new URLSearchParams(searchParams);
+      if (finalRange?.start) {
+        nextParams.set("startDate", formatDateToYMD(finalRange.start));
+      } else {
+        nextParams.delete("startDate");
+      }
+      if (finalRange?.end) {
+        nextParams.set("endDate", formatDateToYMD(finalRange.end));
+      } else {
+        nextParams.delete("endDate");
+      }
+      setSearchParams(nextParams, { replace: true });
+    }
+  }, [tempRange, selectedPresetId, searchParams, setSearchParams]);
+
+  const handleClearAllDates = useCallback(() => {
+    setDateRange(null);
+    setTempRange(null);
+    setSelectedPresetId("all");
+    setStartDateInput("");
+    setEndDateInput("");
+    setDateRangeLabel("📅 All time");
+  }, []);
 
   const checkIsLocked = useCallback(
     (order: NormalizedOrder) => {
@@ -5135,23 +5232,144 @@ export default function OrdersFulfillmentPage() {
                   <Popover
                     active={isDatePopoverActive}
                     activator={
-                      <Button disclosure onClick={() => setIsDatePopoverActive((prev) => !prev)}>
+                      <Button
+                        disclosure
+                        onClick={() => {
+                          if (!isDatePopoverActive) {
+                            setTempRange(dateRange);
+                            setStartDateInput(formatDateToYMD(dateRange?.start ?? null));
+                            setEndDateInput(formatDateToYMD(dateRange?.end ?? null));
+                          }
+                          setIsDatePopoverActive((prev) => !prev);
+                        }}
+                      >
                         {dateRangeLabel}
                       </Button>
                     }
                     onClose={() => setIsDatePopoverActive(false)}
+                    preferredAlignment="right"
                   >
-                    <ActionList
-                      actionRole="menuitem"
-                      items={[
-                        { content: "📅 All time", onAction: () => handleSelectDatePreset("all") },
-                        { content: "Today", onAction: () => handleSelectDatePreset("today") },
-                        { content: "Yesterday", onAction: () => handleSelectDatePreset("yesterday") },
-                        { content: "Last 7 Days", onAction: () => handleSelectDatePreset("last7") },
-                        { content: "Last 30 Days", onAction: () => handleSelectDatePreset("last30") },
-                        { content: "This Month", onAction: () => handleSelectDatePreset("thisMonth") },
-                      ]}
-                    />
+                    <Box minWidth="640px" maxWidth="720px">
+                      <div
+                        style={{
+                          display: "flex",
+                          flexDirection: "row",
+                          gap: "16px",
+                          padding: "16px",
+                        }}
+                      >
+                        {/* Left Column: Quick Presets Sidebar */}
+                        <div
+                          style={{
+                            width: "140px",
+                            flexShrink: 0,
+                            borderRight: "1px solid #E5E7EB",
+                            paddingRight: "12px",
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: "4px",
+                          }}
+                        >
+                          <Text variant="headingXs" as="h6" tone="subdued">
+                            PRESETS
+                          </Text>
+                          {DATE_PRESET_ITEMS.map((p) => {
+                            const isSelected = selectedPresetId === p.id;
+                            return (
+                              <button
+                                key={p.id}
+                                type="button"
+                                onClick={() => handlePresetClick(p.id)}
+                                style={{
+                                  textAlign: "left",
+                                  padding: "7px 10px",
+                                  borderRadius: "6px",
+                                  fontSize: "13px",
+                                  fontWeight: isSelected ? 600 : 400,
+                                  color: isSelected ? "#2563EB" : "#374151",
+                                  backgroundColor: isSelected ? "#EFF6FF" : "transparent",
+                                  border: "none",
+                                  cursor: "pointer",
+                                  transition: "background-color 0.15s ease",
+                                }}
+                              >
+                                {p.title}
+                              </button>
+                            );
+                          })}
+                        </div>
+
+                        {/* Right Column: Inputs Top Bar + Dual Month Calendar */}
+                        <div
+                          style={{
+                            flex: 1,
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: "12px",
+                            minWidth: "460px",
+                          }}
+                        >
+                          {/* Inputs Top Bar: [2026-10-26] ➔ [2026-10-26] */}
+                          <InlineStack gap="200" blockAlign="center">
+                            <div style={{ flex: 1 }}>
+                              <TextField
+                                label="Start Date"
+                                labelHidden
+                                value={startDateInput}
+                                onChange={handleStartDateInputChange}
+                                placeholder="YYYY-MM-DD"
+                                autoComplete="off"
+                                prefix={<span style={{ color: "#9CA3AF" }}>📅</span>}
+                              />
+                            </div>
+                            <Text as="span" variant="bodyMd" tone="subdued">
+                              ➔
+                            </Text>
+                            <div style={{ flex: 1 }}>
+                              <TextField
+                                label="End Date"
+                                labelHidden
+                                value={endDateInput}
+                                onChange={handleEndDateInputChange}
+                                placeholder="YYYY-MM-DD"
+                                autoComplete="off"
+                                prefix={<span style={{ color: "#9CA3AF" }}>📅</span>}
+                              />
+                            </div>
+                          </InlineStack>
+
+                          {/* Dual Month Calendar */}
+                          <Box border="border" borderRadius="200" padding="200">
+                            <DatePicker
+                              month={pickerMonth}
+                              year={pickerYear}
+                              onChange={handleDatePickerChange}
+                              onMonthChange={handleMonthChange}
+                              selected={
+                                tempRange && tempRange.start && tempRange.end
+                                  ? { start: tempRange.start, end: tempRange.end }
+                                  : tempRange && tempRange.start
+                                  ? { start: tempRange.start, end: tempRange.start }
+                                  : undefined
+                              }
+                              multiMonth
+                              allowRange
+                            />
+                          </Box>
+                        </div>
+                      </div>
+
+                      {/* Footer Actions */}
+                      <Divider />
+                      <Box padding="300">
+                        <InlineStack align="end" gap="200">
+                          <Button onClick={handleCancelDatePopover}>Cancel</Button>
+                          <Button variant="primary" onClick={handleApplyDatePopover}>
+                            Apply
+                          </Button>
+                        </InlineStack>
+                      </Box>
+                    </Box>
                   </Popover>
                 </InlineStack>
               </Box>
@@ -5171,7 +5389,7 @@ export default function OrdersFulfillmentPage() {
                         onClick={() => {
                           setSearchQuery("");
                           setSelectedTabId("all");
-                          handleSelectDatePreset("all");
+                          handleClearAllDates();
                           if (
                             searchParams.has("q") ||
                             searchParams.has("tab") ||
