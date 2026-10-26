@@ -38,6 +38,7 @@ import {
   Spinner,
   Link,
   DatePicker,
+  Tooltip,
 } from "@shopify/polaris";
 
 import { authenticate, unauthenticated, sessionStorage } from "../shopify.server";
@@ -3455,26 +3456,6 @@ export default function OrdersFulfillmentPage() {
     [courierSelectOptions]
   );
 
-  const [courierAlertToast, setCourierAlertToast] = useState<string | null>(null);
-
-  const triggerCourierConfigToast = useCallback(() => {
-    const alertMessage =
-      "কুরিয়ারে পাঠাতে Courier Settings পেজ থেকে কুরিয়ার অ্যাকাউন্টটি কনফিগার করে নিন।";
-    if (typeof window !== "undefined" && (window as any).shopify?.toast?.show) {
-      (window as any).shopify.toast.show(alertMessage, { duration: 4000 });
-    }
-    setCourierAlertToast(alertMessage);
-  }, []);
-
-  useEffect(() => {
-    if (courierAlertToast) {
-      const timer = setTimeout(() => {
-        setCourierAlertToast(null);
-      }, 4000);
-      return () => clearTimeout(timer);
-    }
-  }, [courierAlertToast]);
-
   const fallbackCourierOptions = [
     { label: "Pathao Courier", value: "pathao" },
     { label: "Steadfast Courier", value: "steadfast" },
@@ -4159,48 +4140,56 @@ export default function OrdersFulfillmentPage() {
               style={{
                 maxWidth: "160px",
                 width: "100%",
-                cursor: !hasActiveCouriers ? "pointer" : "default",
-              }}
-              onClick={(e) => {
-                e.stopPropagation();
-                if (!hasActiveCouriers) {
-                  triggerCourierConfigToast();
-                }
-              }}
-              onMouseDownCapture={(e) => {
-                if (!hasActiveCouriers) {
-                  e.stopPropagation();
-                  triggerCourierConfigToast();
-                }
               }}
             >
               <BlockStack gap="100">
-                <div
-                  style={{
-                    maxWidth: "160px",
-                    width: "100%",
-                    pointerEvents: !hasActiveCouriers ? "none" : "auto",
-                  }}
-                >
-                  <Select
-                    label={`Select courier for ${order.name}`}
-                    labelHidden
-                    options={courierSelectOptions}
-                    value={selectedCourier}
-                    onChange={(val) =>
-                      setSelectedCouriersByOrder((prev) => ({
-                        ...prev,
-                        [order.id]: val,
-                      }))
-                    }
-                    disabled={
-                      Boolean(dispatchedInfo) ||
-                      isRowProcessing ||
-                      isLockedBySafetyNet ||
-                      !hasActiveCouriers
-                    }
-                  />
-                </div>
+                {!hasActiveCouriers ? (
+                  <Tooltip content="কুরিয়ার অ্যাকাউন্ট কনফিগার করুন" preferredPosition="above">
+                    <div
+                      style={{
+                        maxWidth: "160px",
+                        width: "100%",
+                        display: "inline-block",
+                        cursor: "not-allowed",
+                      }}
+                    >
+                      <div style={{ pointerEvents: "none" }}>
+                        <Select
+                          label={`Select courier for ${order.name}`}
+                          labelHidden
+                          options={courierSelectOptions}
+                          value={selectedCourier}
+                          disabled={true}
+                        />
+                      </div>
+                    </div>
+                  </Tooltip>
+                ) : (
+                  <div
+                    style={{
+                      maxWidth: "160px",
+                      width: "100%",
+                    }}
+                  >
+                    <Select
+                      label={`Select courier for ${order.name}`}
+                      labelHidden
+                      options={courierSelectOptions}
+                      value={selectedCourier}
+                      onChange={(val) =>
+                        setSelectedCouriersByOrder((prev) => ({
+                          ...prev,
+                          [order.id]: val,
+                        }))
+                      }
+                      disabled={
+                        Boolean(dispatchedInfo) ||
+                        isRowProcessing ||
+                        isLockedBySafetyNet
+                      }
+                    />
+                  </div>
+                )}
 
                 {dispatchedInfo ? (
                   <BlockStack gap="050">
@@ -4531,16 +4520,6 @@ export default function OrdersFulfillmentPage() {
           min-height: 32px !important;
           padding: 4px 8px !important;
           font-size: 12px !important;
-        }
-        @keyframes fadeInToast {
-          from {
-            opacity: 0;
-            transform: translate(-50%, 8px);
-          }
-          to {
-            opacity: 1;
-            transform: translate(-50%, 0);
-          }
         }
       `}</style>
 
@@ -5867,52 +5846,6 @@ export default function OrdersFulfillmentPage() {
           </Layout.Section>
         </Layout>
       </Page>
-
-      {courierAlertToast && (
-        <div
-          role="status"
-          aria-live="polite"
-          style={{
-            position: "fixed",
-            bottom: "28px",
-            left: "50%",
-            transform: "translateX(-50%)",
-            zIndex: 999999,
-            backgroundColor: "#1A1A1A",
-            color: "#FFFFFF",
-            padding: "10px 18px",
-            borderRadius: "8px",
-            boxShadow: "0 6px 20px rgba(0, 0, 0, 0.3)",
-            fontSize: "13px",
-            fontWeight: 500,
-            display: "flex",
-            alignItems: "center",
-            gap: "10px",
-            maxWidth: "92vw",
-            border: "1px solid #333333",
-            animation: "fadeInToast 0.2s ease-in-out",
-          }}
-        >
-          <span>⚠️ {courierAlertToast}</span>
-          <button
-            type="button"
-            onClick={() => setCourierAlertToast(null)}
-            style={{
-              background: "none",
-              border: "none",
-              color: "#9CA3AF",
-              cursor: "pointer",
-              fontSize: "16px",
-              lineHeight: 1,
-              padding: "0 4px",
-              marginLeft: "4px",
-            }}
-            title="Dismiss"
-          >
-            ✕
-          </button>
-        </div>
-      )}
     </>
   );
 }
