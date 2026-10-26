@@ -232,6 +232,7 @@ const shopify = shopifyApp({
           "read_shipping",
           "write_shipping",
           "read_customers",
+          "read_products",
           ...process.env.SCOPES.split(",").map((s) => s.trim()),
         ])
       )
@@ -243,6 +244,7 @@ const shopify = shopifyApp({
         "read_shipping",
         "write_shipping",
         "read_customers",
+        "read_products",
       ],
   appUrl,
   authPathPrefix: "/auth",

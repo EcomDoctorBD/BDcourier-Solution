@@ -1772,6 +1772,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     "write_fulfillments",
     "read_shipping",
     "write_shipping",
+    "read_products",
   ];
   const grantedScopes = (session.scope || "").split(",").map((s) => s.trim());
   const isMissingCoreScopes = REQUIRED_SCOPES.some(
@@ -2095,18 +2096,6 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
                       amount
                     }
                   }
-                  variant {
-                    image {
-                      url
-                      altText
-                    }
-                  }
-                  product {
-                    featuredImage {
-                      url
-                      altText
-                    }
-                  }
                 }
               }
             }
@@ -2312,6 +2301,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       if (/protected customer data|not approved to access/i.test(finalMsg)) {
         graphqlWarning =
           "Could not query live orders due to Protected Customer Data restrictions. Please enable Protected Customer Data in your Shopify Partner Dashboard (App setup -> API access).";
+      } else if (/read_products/i.test(finalMsg)) {
+        graphqlWarning =
+          "Product media and variant access restricted. Please re-authenticate your app to grant the 'read_products' scope.";
       } else if (/read_orders/i.test(finalMsg)) {
         graphqlWarning =
           "Could not query live orders from Shopify GraphQL API. Make sure 'read_orders' scope is enabled in your app configuration.";
