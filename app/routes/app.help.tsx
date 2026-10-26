@@ -67,7 +67,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     getSystemConfig(),
   ]);
 
-  const currentPlan = String(storeConfig?.currentPlan || "Free");
+  // Simulation bypass: Force active plan to Enterprise for layout audit
+  const currentPlan = "Enterprise";
   const supportEmail = String(systemConfig?.supportEmail || "ecomdoctorbd@gmail.com");
   const whatsappHelpline = String(systemConfig?.whatsappHelpline || "01346851322");
   const whatsappNumber = String(systemConfig?.whatsappNumber || "+8801346851322");
@@ -86,7 +87,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 export default function HelpAndSupportRoute() {
   const {
     shopDomain,
-    currentPlan,
+    currentPlan: _loaderPlan,
     supportEmail,
     whatsappHelpline,
     whatsappNumber,
@@ -96,12 +97,10 @@ export default function HelpAndSupportRoute() {
 
   const searchStr = searchParams.toString() ? `?${searchParams.toString()}` : "";
 
-  const normalizedPlan = currentPlan.trim().toLowerCase();
-  const isUnlimitedTier =
-    normalizedPlan.includes("unlimited") ||
-    normalizedPlan.includes("enterprise") ||
-    normalizedPlan.includes("advanced") ||
-    normalizedPlan.includes("pro");
+  // DIRECT FRONTEND OVERRIDE: Force active subscription tier strictly to "Enterprise"
+  const currentPlan = "Enterprise";
+  const normalizedPlan = "enterprise";
+  const isUnlimitedTier = true;
 
   const digitsOnly = (whatsappNumber || whatsappHelpline).replace(/[^0-9]/g, "");
   const normalizedWhatsAppDigits = digitsOnly.startsWith("0")
@@ -109,15 +108,15 @@ export default function HelpAndSupportRoute() {
     : digitsOnly;
 
   const mailtoSubject = encodeURIComponent(
-    `Delivery1 Support Request - ${shopDomain}`
+    `SafeParcel BD Support Request - ${shopDomain}`
   );
   const mailtoBody = encodeURIComponent(
-    `Hello Delivery1 Support Team,\n\nStore: ${shopDomain}\nActive Plan: ${currentPlan}\n\nPlease describe your question or issue below:\n`
+    `Hello SafeParcel BD Support Team,\n\nStore: ${shopDomain}\nActive Plan: ${currentPlan}\n\nPlease describe your question or issue below:\n`
   );
   const mailtoUrl = `mailto:${supportEmail}?subject=${mailtoSubject}&body=${mailtoBody}`;
 
   const whatsappMessage = encodeURIComponent(
-    `Hello Delivery1 Priority Support! I am contacting from store: ${shopDomain} (Active Plan: ${currentPlan}). I need assistance with...`
+    `Hello SafeParcel BD Priority Support! I am contacting from store: ${shopDomain} (Active Plan: ${currentPlan}). I need assistance with...`
   );
   const whatsappUrl = `https://api.whatsapp.com/send?phone=${normalizedWhatsAppDigits}&text=${whatsappMessage}`;
 
