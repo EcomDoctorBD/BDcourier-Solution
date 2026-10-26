@@ -3316,38 +3316,30 @@ export default function OrdersFulfillmentPage() {
     );
   };
 
-  const courierSelectOptions = [
-    {
-      label: activeCouriers.pathao
-        ? "Pathao Courier (Connected)"
-        : "Pathao Courier (Not Configured)",
-      value: "pathao",
-    },
-    {
-      label: activeCouriers.steadfast
-        ? "Steadfast Courier (Connected)"
-        : "Steadfast Courier (Not Configured)",
-      value: "steadfast",
-    },
-    {
-      label: activeCouriers.redx
-        ? "RedX Delivery (Connected)"
-        : "RedX Delivery (Not Configured)",
-      value: "redx",
-    },
-    {
-      label: activeCouriers.carrybee
-        ? "CarryBee (Connected)"
-        : "CarryBee (Not Configured)",
-      value: "carrybee",
-    },
-    {
-      label: activeCouriers.bahok
-        ? "Bahok Courier (Connected)"
-        : "Bahok Courier (Not Configured)",
-      value: "bahok",
-    },
-  ];
+  const courierSelectOptions = useMemo(() => {
+    const list: Array<{ label: string; value: string; disabled?: boolean }> = [];
+    if (activeCouriers.pathao) {
+      list.push({ label: "Pathao Courier", value: "pathao" });
+    }
+    if (activeCouriers.steadfast) {
+      list.push({ label: "Steadfast Courier", value: "steadfast" });
+    }
+    if (activeCouriers.redx) {
+      list.push({ label: "RedX Delivery", value: "redx" });
+    }
+    if (activeCouriers.carrybee) {
+      list.push({ label: "CarryBee", value: "carrybee" });
+    }
+    if (activeCouriers.bahok) {
+      list.push({ label: "Bahok Courier", value: "bahok" });
+    }
+
+    if (list.length === 0) {
+      return [{ label: "No active courier configured", value: "", disabled: true }];
+    }
+
+    return list;
+  }, [activeCouriers]);
 
   const fallbackCourierOptions = [
     { label: "Pathao Courier", value: "pathao" },
@@ -3379,8 +3371,14 @@ export default function OrdersFulfillmentPage() {
   ];
 
   const handleSendSingleOrder = (order: NormalizedOrder) => {
-    const chosenCourier =
+    const rawCourier =
       selectedCouriersByOrder[order.id] || order.assignedCourier;
+    const isChosenActive = courierSelectOptions.some(
+      (opt) => opt.value === rawCourier && !opt.disabled
+    );
+    const chosenCourier = isChosenActive
+      ? rawCourier
+      : courierSelectOptions[0]?.value || rawCourier;
     const isUnlocked = Boolean(manuallyUnlockedOrders[order.id]);
     const customNote = warehouseNotesByOrder[order.id] ?? order.warehouseNote;
 
@@ -3433,26 +3431,36 @@ export default function OrdersFulfillmentPage() {
 
     const selectedOrderObjects = displayedOrders
       .filter((order) => selectedResources.includes(order.id))
-      .map((order) => ({
-        orderId: order.id,
-        orderName: order.name,
-        selectedCourier:
-          selectedCouriersByOrder[order.id] || order.assignedCourier,
-        customerName: order.customerName,
-        customerPhone: order.customerPhone,
-        shippingAddress: order.shippingAddress,
-        isInsideDhaka: order.isInsideDhaka,
-        codAmount: String(order.codAmount),
-        currencyCode: order.currencyCode,
-        warehouseNote: warehouseNotesByOrder[order.id] ?? order.warehouseNote,
-        lineItems: order.lineItems,
-        isRiskyLocked: order.isRiskyLocked,
-        manualOverrideConfirmed: Boolean(manuallyUnlockedOrders[order.id]),
-        manualCityId: manualCityIds[order.id] || null,
-        manualZoneId: manualZoneIds[order.id] || null,
-        manualAreaId: manualAreaIds[order.id] || null,
-        manualAreaName: manualAreaNames[order.id] || null,
-      }));
+      .map((order) => {
+        const rawCourier =
+          selectedCouriersByOrder[order.id] || order.assignedCourier;
+        const isChosenActive = courierSelectOptions.some(
+          (opt) => opt.value === rawCourier && !opt.disabled
+        );
+        const selectedCourier = isChosenActive
+          ? rawCourier
+          : courierSelectOptions[0]?.value || rawCourier;
+
+        return {
+          orderId: order.id,
+          orderName: order.name,
+          selectedCourier,
+          customerName: order.customerName,
+          customerPhone: order.customerPhone,
+          shippingAddress: order.shippingAddress,
+          isInsideDhaka: order.isInsideDhaka,
+          codAmount: String(order.codAmount),
+          currencyCode: order.currencyCode,
+          warehouseNote: warehouseNotesByOrder[order.id] ?? order.warehouseNote,
+          lineItems: order.lineItems,
+          isRiskyLocked: order.isRiskyLocked,
+          manualOverrideConfirmed: Boolean(manuallyUnlockedOrders[order.id]),
+          manualCityId: manualCityIds[order.id] || null,
+          manualZoneId: manualZoneIds[order.id] || null,
+          manualAreaId: manualAreaIds[order.id] || null,
+          manualAreaName: manualAreaNames[order.id] || null,
+        };
+      });
 
     const formData = new FormData();
     formData.append("actionType", "bulkBookCouriers");
@@ -3540,8 +3548,14 @@ export default function OrdersFulfillmentPage() {
   ];
 
   const rowMarkup = displayedOrders.map((order, index) => {
-    const selectedCourier =
+    const rawSelectedCourier =
       selectedCouriersByOrder[order.id] || order.assignedCourier;
+    const isSelectedActive = courierSelectOptions.some(
+      (opt) => opt.value === rawSelectedCourier && !opt.disabled
+    );
+    const selectedCourier = isSelectedActive
+      ? rawSelectedCourier
+      : courierSelectOptions[0]?.value || "";
     const isRowSubmitting =
       navigation.state === "submitting" &&
       pendingActionType === "dispatchOrder" &&
@@ -3874,7 +3888,7 @@ export default function OrdersFulfillmentPage() {
         {/* Column 6: Courier Selection & Tracking Consignment */}
         <IndexTable.Cell>
           <div onClick={(e) => e.stopPropagation()}>
-            <Box minWidth="150px" maxWidth="190px">
+            <Box minWidth="135px" maxWidth="170px">
               <BlockStack gap="100">
                 <Select
                   label={`Select courier for ${order.name}`}
@@ -3887,7 +3901,12 @@ export default function OrdersFulfillmentPage() {
                       [order.id]: val,
                     }))
                   }
-                  disabled={Boolean(dispatchedInfo) || isRowProcessing || isLockedBySafetyNet}
+                  disabled={
+                    Boolean(dispatchedInfo) ||
+                    isRowProcessing ||
+                    isLockedBySafetyNet ||
+                    !courierSelectOptions.some((opt) => !opt.disabled && opt.value !== "")
+                  }
                 />
 
                 {dispatchedInfo ? (
