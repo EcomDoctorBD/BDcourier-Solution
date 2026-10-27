@@ -35,6 +35,7 @@ import {
 } from "@shopify/polaris";
 
 import { authenticate } from "../shopify.server";
+import { syncAppDeliveryProfileWithShopify } from "../services/shipping-profile.server";
 import CourierConfig, {
   connectDB,
   ShippingZone,
@@ -238,273 +239,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     savedZones,
     currentPlan: storeConfig?.currentPlan || "Free",
     isSynced,
+    appDeliveryProfileId: storeConfig?.appDeliveryProfileId || null,
   });
 };
-
-/**
- * Helper function to create or locate CarrierService on Shopify and link to General Delivery Profile.
- */
-async function syncCarrierServiceWithShopify(
-  admin: any,
-  request: Request,
-  shopDomain: string
-): Promise<{ success: boolean; message: string }> {
-  const appBaseUrl =
-    process.env.SHOPIFY_APP_URL || new URL(request.url).origin;
-  const callbackUrl = `${appBaseUrl.replace(/\/$/, "")}/api/shipping-rates?shop=${encodeURIComponent(shopDomain)}`;
-
-  const CREATE_CARRIER_MUTATION = `#graphql
-    mutation RegisterBDCarrierService($input: DeliveryCarrierServiceCreateInput!) {
-      carrierServiceCreate(input: $input) {
-        carrierService {
-          id
-          name
-          callbackUrl
-          active
-        }
-        userErrors {
-          field
-          message
-        }
-      }
-    }
-  `;
-
-  try {
-    const response = await admin.graphql(CREATE_CARRIER_MUTATION, {
-      variables: {
-        input: {
-          name: "BD Dynamic Courier Shipping Rates",
-          callbackUrl,
-          supportsServiceDiscovery: true,
-          active: true,
-        },
-      },
-    });
-    const result: any = await response.json();
-    const userErrors = result?.data?.carrierServiceCreate?.userErrors || [];
-    let carrierServiceId =
-      result?.data?.carrierServiceCreate?.carrierService?.id;
-
-    // Step 1: Fallback to existing carrier service if already created or userErrors indicate duplicate
-    if (!carrierServiceId || userErrors.length > 0) {
-      const GET_CARRIER_SERVICES = `#graphql
-        query GetCarrierServices {
-          carrierServices(first: 10) {
-            edges {
-              node {
-                id
-                name
-                callbackUrl
-              }
-            }
-          }
-        }
-      `;
-      const existingRes = await admin.graphql(GET_CARRIER_SERVICES);
-      const existingJson: any = await existingRes.json();
-      const edges = existingJson?.data?.carrierServices?.edges || [];
-      const found = edges.find(
-        ({ node }: any) =>
-          node.name === "BD Dynamic Courier Shipping Rates" ||
-          node.callbackUrl === callbackUrl ||
-          (node.callbackUrl && node.callbackUrl.includes("/api/shipping-rates"))
-      );
-
-      if (found?.node?.id) {
-        carrierServiceId = found.node.id;
-
-        // If the registered carrier service has an outdated callbackUrl, sync it now
-        if (found.node.callbackUrl !== callbackUrl) {
-          const UPDATE_CARRIER_MUTATION = `#graphql
-            mutation UpdateBDCarrierService($id: ID!, $input: DeliveryCarrierServiceUpdateInput!) {
-              carrierServiceUpdate(id: $id, input: $input) {
-                carrierService {
-                  id
-                  callbackUrl
-                }
-                userErrors {
-                  field
-                  message
-                }
-              }
-            }
-          `;
-          await admin.graphql(UPDATE_CARRIER_MUTATION, {
-            variables: {
-              id: carrierServiceId,
-              input: {
-                callbackUrl,
-                active: true,
-              },
-            },
-          });
-        }
-      } else if (userErrors.length > 0) {
-        return {
-          success: false,
-          message: `CarrierService Error: ${userErrors[0].message} (Webhook endpoint active at ${callbackUrl})`,
-        };
-      }
-    }
-
-    if (!carrierServiceId) {
-      return {
-        success: false,
-        message: "Unable to create or locate CarrierService ID.",
-      };
-    }
-
-    // Step 2: Query the General Delivery Profile & Zones
-    const GET_GENERAL_PROFILE = `#graphql
-      query GetGeneralDeliveryProfile {
-        deliveryProfiles(first: 1) {
-          edges {
-            node {
-              id
-              profileLocationGroups {
-                locationGroup {
-                  id
-                }
-                locationGroupZones(first: 50) {
-                  edges {
-                    node {
-                      zone {
-                        id
-                        name
-                      }
-                      methodDefinitions(first: 50) {
-                        edges {
-                          node {
-                            id
-                            rateProvider {
-                              ... on DeliveryParticipant {
-                                carrierService {
-                                  id
-                                }
-                              }
-                            }
-                          }
-                        }
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    `;
-
-    const profileRes = await admin.graphql(GET_GENERAL_PROFILE);
-    const profileJson: any = await profileRes.json();
-    const profileNode = profileJson?.data?.deliveryProfiles?.edges?.[0]?.node;
-    const profileId = profileNode?.id;
-
-    if (!profileId) {
-      return {
-        success: true,
-        message: `Shopify CarrierService active (${carrierServiceId}), but no general shipping profile was found.`,
-      };
-    }
-
-    // Step 3: Build the DeliveryProfileInput Payload (Preventing Duplicates)
-    const locationGroupsToUpdate: any[] = [];
-    let totalZonesAttached = 0;
-    let alreadyAttachedZonesCount = 0;
-
-    for (const group of profileNode.profileLocationGroups || []) {
-      const locationGroupId = group.locationGroup?.id;
-      const zonesToUpdate: any[] = [];
-
-      for (const zoneEdge of group.locationGroupZones?.edges || []) {
-        const zoneNode = zoneEdge.node;
-        const zoneId = zoneNode?.zone?.id;
-        if (!zoneId) continue;
-
-        // Check if methodDefinitions already has this carrierServiceId
-        const hasCarrier = (zoneNode.methodDefinitions?.edges || []).some(
-          ({ node: mNode }: any) =>
-            mNode?.rateProvider?.carrierService?.id === carrierServiceId
-        );
-
-        if (hasCarrier) {
-          alreadyAttachedZonesCount++;
-        } else {
-          zonesToUpdate.push({
-            id: zoneId,
-            methodDefinitionsToCreate: [
-              {
-                name: "BD Dynamic Courier Shipping Rates",
-                active: true,
-                participant: {
-                  carrierServiceId,
-                  adaptToNewServicesFlag: true,
-                },
-              },
-            ],
-          });
-          totalZonesAttached++;
-        }
-      }
-
-      if (zonesToUpdate.length > 0) {
-        locationGroupsToUpdate.push({
-          id: locationGroupId,
-          zonesToUpdate,
-        });
-      }
-    }
-
-    // Step 4: Execute deliveryProfileUpdate Mutation
-    if (locationGroupsToUpdate.length > 0) {
-      const ATTACH_CARRIER_MUTATION = `#graphql
-        mutation AttachCarrierToDeliveryProfile($id: ID!, $profile: DeliveryProfileInput!) {
-          deliveryProfileUpdate(id: $id, profile: $profile) {
-            profile {
-              id
-            }
-            userErrors {
-              field
-              message
-            }
-          }
-        }
-      `;
-
-      const updateRes = await admin.graphql(ATTACH_CARRIER_MUTATION, {
-        variables: {
-          id: profileId,
-          profile: {
-            locationGroupsToUpdate,
-          },
-        },
-      });
-
-      const updateJson: any = await updateRes.json();
-      const profileErrors =
-        updateJson?.data?.deliveryProfileUpdate?.userErrors || [];
-
-      if (profileErrors.length > 0) {
-        return {
-          success: false,
-          message: `CarrierService registered, but failed to link to Shipping Profile: ${profileErrors[0].message}`,
-        };
-      }
-    }
-
-    return {
-      success: true,
-      message: `Shopify CarrierService registered and automatically linked to General Shipping Profile zones! Checkout rates will now query ${callbackUrl} (<500ms).`,
-    };
-  } catch (err: any) {
-    return {
-      success: false,
-      message: `Failed to register CarrierService: ${err?.message || "Unknown error"}`,
-    };
-  }
-}
 
 export const action = async ({ request }: ActionFunctionArgs) => {
   const { admin, session } = await authenticate.admin(request);
@@ -552,40 +289,20 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     });
   }
 
-  // ==================== 2. REGISTER CARRIER SERVICE WITH SHOPIFY ====================
+  // ==================== 2. REGISTER APP-OWNED DELIVERY PROFILE (OPTION A: coversAllItems) ====================
   if (actionType === "registerCarrierService") {
-    const syncResult = await syncCarrierServiceWithShopify(
+    const syncResult = await syncAppDeliveryProfileWithShopify(
       admin,
       request,
       shopDomain
     );
 
-    if (syncResult.success) {
-      await CourierConfig.findOneAndUpdate(
-        { shopDomain },
-        {
-          $set: {
-            shippingRatesSynced: true,
-            shippingRatesLastSyncedAt: new Date(),
-          },
-        },
-        { upsert: true }
-      );
-
-      return json({
-        success: true,
-        actionType: "registerCarrierService",
-        isSynced: true,
-        message: syncResult.message,
-      });
-    } else {
-      return json({
-        success: false,
-        actionType: "registerCarrierService",
-        isSynced: false,
-        message: syncResult.message,
-      });
-    }
+    return json({
+      success: syncResult.success,
+      actionType: "registerCarrierService",
+      isSynced: syncResult.success,
+      message: syncResult.message,
+    });
   }
 
   // ==================== 3. SAVE OR UPDATE A SHIPPING ZONE ====================
@@ -678,32 +395,21 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       { upsert: true, new: true, setDefaultsOnInsert: true }
     );
 
-    // If this is the merchant's very first shipping zone, auto-trigger CarrierService registration!
+    // If this is the merchant's very first shipping zone, auto-trigger App-Owned Delivery Profile registration!
     if (isFirstTimeSetup) {
-      const syncResult = await syncCarrierServiceWithShopify(
+      const syncResult = await syncAppDeliveryProfileWithShopify(
         admin,
         request,
         shopDomain
       );
 
       if (syncResult.success) {
-        await CourierConfig.findOneAndUpdate(
-          { shopDomain },
-          {
-            $set: {
-              shippingRatesSynced: true,
-              shippingRatesLastSyncedAt: new Date(),
-            },
-          },
-          { upsert: true }
-        );
-
         return json({
           success: true,
           actionType: "saveZone",
           isSynced: true,
           autoSynced: true,
-          message: `Shipping Zone "${zoneName}" saved and automatically activated in Shopify Checkout!`,
+          message: `Shipping Zone "${zoneName}" saved and automatically activated in Shopify Checkout via App-Owned Delivery Profile!`,
         });
       } else {
         await CourierConfig.findOneAndUpdate(

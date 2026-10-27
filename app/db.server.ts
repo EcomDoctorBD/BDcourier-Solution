@@ -450,13 +450,21 @@ const courierConfigSchema = new mongoose.Schema(
         },
       ],
     },
-    // Dynamic Shipping Rates & CarrierService Synchronization State
+    // Dynamic Shipping Rates & App-Owned Delivery Profile Synchronization State
     shippingRatesSynced: {
       type: Boolean,
       default: false,
     },
     shippingRatesLastSyncedAt: {
       type: Date,
+      default: null,
+    },
+    appDeliveryProfileId: {
+      type: String,
+      default: null,
+    },
+    carrierServiceId: {
+      type: String,
       default: null,
     },
   },

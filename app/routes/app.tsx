@@ -7,7 +7,8 @@ import { NavMenu } from "@shopify/app-bridge-react";
 import polarisStyles from "@shopify/polaris/build/esm/styles.css?url";
 
 import { authenticate } from "../shopify.server";
-import { connectDB, getSystemConfig } from "../db.server";
+import { connectDB, getSystemConfig, CourierConfig } from "../db.server";
+import { syncAppDeliveryProfileWithShopify } from "../services/shipping-profile.server";
 
 export const links = () => [{ rel: "stylesheet", href: polarisStyles }];
 
@@ -51,7 +52,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     }
   }
 
-  const { session } = await authenticate.admin(request);
+  const { session, admin } = await authenticate.admin(request);
   const shop = session.shop;
   const host = url.searchParams.get("host") || "";
 
@@ -73,8 +74,21 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   try {
     await connectDB();
     systemConfig = await getSystemConfig();
+
+    // Market-driven shipping: Ensure App-Owned Delivery Profile is active (Option A: coversAllItems: true)
+    if (admin && shop) {
+      const storeConfig = await CourierConfig.findOne({ shopDomain: shop })
+        .select("appDeliveryProfileId")
+        .lean();
+
+      if (!storeConfig?.appDeliveryProfileId) {
+        syncAppDeliveryProfileWithShopify(admin, request, shop).catch((err) => {
+          console.warn("Background App-Owned Delivery Profile sync notice:", err?.message || err);
+        });
+      }
+    }
   } catch (err) {
-    console.warn("Could not load SystemConfig in app layout:", err);
+    console.warn("Could not load SystemConfig or sync app delivery profile:", err);
   }
 
   return json(
