@@ -1771,6 +1771,7 @@ export default function CourierSettingsPage() {
       <BlockStack gap="500">
         {/* Top Settings Navigation Bar */}
         <div
+          className="bg-white dark:bg-[#1a1a1a] rounded-lg border border-gray-200 dark:border-gray-800"
           style={{
             borderBottom: "1px solid var(--p-color-border, #E1E3E5)",
             background: "var(--p-color-bg-surface, #FFFFFF)",
@@ -1844,14 +1845,14 @@ export default function CourierSettingsPage() {
             >
               {/* LEFT SIDEBAR PANEL (Width: ~25%-30%) */}
               <div
-                className="w-full md:w-80 flex-shrink-0"
+                className="w-full md:w-80 flex-shrink-0 bg-white dark:bg-[#1a1a1a] border border-gray-200 dark:border-gray-800 rounded-2xl shadow-sm"
                 style={{
                   width: "280px",
-                  backgroundColor: "#FFFFFF",
+                  backgroundColor: "var(--p-color-bg-surface, #FFFFFF)",
                   borderRadius: "16px",
                   padding: "20px",
                   boxShadow: "0 1px 3px rgba(0, 0, 0, 0.05)",
-                  border: "1px solid #E2E8F0",
+                  border: "1px solid var(--p-color-border, #E2E8F0)",
                 }}
               >
                 {/* Respective Courier Logo & Title */}
@@ -1862,7 +1863,7 @@ export default function CourierSettingsPage() {
                     gap: "12px",
                     marginBottom: "16px",
                     paddingBottom: "16px",
-                    borderBottom: "1px solid #F1F5F9",
+                    borderBottom: "1px solid var(--p-color-border, #F1F5F9)",
                   }}
                 >
                   <CourierLogo courier={activeCourierId} size={42} />
@@ -1903,6 +1904,7 @@ export default function CourierSettingsPage() {
                   <button
                     type="button"
                     onClick={() => setActiveSetupTab("api")}
+                    className={activeSetupTab === "api" ? "bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-slate-100" : "text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/50"}
                     style={{
                       display: "flex",
                       alignItems: "center",
@@ -1911,9 +1913,9 @@ export default function CourierSettingsPage() {
                       borderRadius: "10px",
                       fontSize: "13px",
                       fontWeight: activeSetupTab === "api" ? 700 : 500,
-                      backgroundColor: activeSetupTab === "api" ? "#F1F5F9" : "transparent",
-                      color: activeSetupTab === "api" ? "#0F172A" : "#64748B",
-                      border: activeSetupTab === "api" ? "1px solid #CBD5E1" : "1px solid transparent",
+                      backgroundColor: activeSetupTab === "api" ? "var(--p-color-bg-surface-selected, #F1F5F9)" : "transparent",
+                      color: activeSetupTab === "api" ? "var(--p-color-text, #0F172A)" : "var(--p-color-text-secondary, #64748B)",
+                      border: activeSetupTab === "api" ? "1px solid var(--p-color-border, #CBD5E1)" : "1px solid transparent",
                       cursor: "pointer",
                       textAlign: "left",
                       width: "100%",
@@ -1927,6 +1929,7 @@ export default function CourierSettingsPage() {
                   <button
                     type="button"
                     onClick={() => setActiveSetupTab("webhook")}
+                    className={activeSetupTab === "webhook" ? "bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-slate-100" : "text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/50"}
                     style={{
                       display: "flex",
                       alignItems: "center",
@@ -1935,9 +1938,9 @@ export default function CourierSettingsPage() {
                       borderRadius: "10px",
                       fontSize: "13px",
                       fontWeight: activeSetupTab === "webhook" ? 700 : 500,
-                      backgroundColor: activeSetupTab === "webhook" ? "#F1F5F9" : "transparent",
-                      color: activeSetupTab === "webhook" ? "#0F172A" : "#64748B",
-                      border: activeSetupTab === "webhook" ? "1px solid #CBD5E1" : "1px solid transparent",
+                      backgroundColor: activeSetupTab === "webhook" ? "var(--p-color-bg-surface-selected, #F1F5F9)" : "transparent",
+                      color: activeSetupTab === "webhook" ? "var(--p-color-text, #0F172A)" : "var(--p-color-text-secondary, #64748B)",
+                      border: activeSetupTab === "webhook" ? "1px solid var(--p-color-border, #CBD5E1)" : "1px solid transparent",
                       cursor: "pointer",
                       textAlign: "left",
                       width: "100%",
@@ -1951,6 +1954,7 @@ export default function CourierSettingsPage() {
                   <button
                     type="button"
                     onClick={() => setActiveSetupTab("settings")}
+                    className={activeSetupTab === "settings" ? "bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-slate-100" : "text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/50"}
                     style={{
                       display: "flex",
                       alignItems: "center",
@@ -1959,9 +1963,9 @@ export default function CourierSettingsPage() {
                       borderRadius: "10px",
                       fontSize: "13px",
                       fontWeight: activeSetupTab === "settings" ? 700 : 500,
-                      backgroundColor: activeSetupTab === "settings" ? "#F1F5F9" : "transparent",
-                      color: activeSetupTab === "settings" ? "#0F172A" : "#64748B",
-                      border: activeSetupTab === "settings" ? "1px solid #CBD5E1" : "1px solid transparent",
+                      backgroundColor: activeSetupTab === "settings" ? "var(--p-color-bg-surface-selected, #F1F5F9)" : "transparent",
+                      color: activeSetupTab === "settings" ? "var(--p-color-text, #0F172A)" : "var(--p-color-text-secondary, #64748B)",
+                      border: activeSetupTab === "settings" ? "1px solid var(--p-color-border, #CBD5E1)" : "1px solid transparent",
                       cursor: "pointer",
                       textAlign: "left",
                       width: "100%",
@@ -2214,7 +2218,7 @@ export default function CourierSettingsPage() {
                                 </InlineStack>
                               </BlockStack>
                               {pathaoStoreId && (
-                                <div style={{ backgroundColor: "#F8FAFC", padding: "14px 16px", borderRadius: "10px", border: "1px solid #E2E8F0" }}>
+                                <div className="bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-lg" style={{ backgroundColor: "var(--p-color-bg-surface-secondary, #F8FAFC)", padding: "14px 16px", borderRadius: "10px", border: "1px solid var(--p-color-border, #E2E8F0)" }}>
                                   <Text as="p" variant="bodySm" tone="subdued">
                                     Default Pickup Store: <strong>{pathaoStoreName || pathaoStoreId}</strong> (ID: {pathaoStoreId}). Configured under API Configuration.
                                   </Text>
@@ -3089,12 +3093,12 @@ export default function CourierSettingsPage() {
             >
               {/* Card 1: Pathao Settings */}
               <div
-                className="w-full bg-white rounded-2xl shadow-sm p-6 flex flex-col justify-between hover:shadow-md transition-shadow duration-200"
+                className="w-full bg-white dark:bg-[#1a1a1a] rounded-2xl shadow-sm p-6 flex flex-col justify-between hover:shadow-md transition-shadow duration-200 border border-gray-200 dark:border-gray-800"
                 style={{
-                  backgroundColor: "#FFFFFF",
+                  backgroundColor: "var(--p-color-bg-surface, #FFFFFF)",
                   borderRadius: "16px",
                   boxShadow: "0 2px 8px -2px rgba(0, 0, 0, 0.05), 0 1px 4px -1px rgba(0, 0, 0, 0.03)",
-                  border: "none",
+                  border: "1px solid var(--p-color-border, #E2E8F0)",
                   padding: "24px",
                   display: "flex",
                   flexDirection: "column",
@@ -3116,7 +3120,7 @@ export default function CourierSettingsPage() {
                       {isPathaoConnected ? "● Active" : "Not Configured"}
                     </Badge>
                   </div>
-                  <div style={{ color: "#64748B", fontSize: "13px", lineHeight: "1.5", textAlign: "center", maxWidth: "280px" }}>
+                  <div className="text-slate-500 dark:text-slate-400" style={{ color: "var(--p-color-text-secondary, #64748B)", fontSize: "13px", lineHeight: "1.5", textAlign: "center", maxWidth: "280px" }}>
                     Express parcel delivery and real-time consignment tracking via Pathao Merchant API.
                   </div>
                 </div>
@@ -3135,12 +3139,12 @@ export default function CourierSettingsPage() {
 
               {/* Card 2: Steadfast Settings */}
               <div
-                className="w-full bg-white rounded-2xl shadow-sm p-6 flex flex-col justify-between hover:shadow-md transition-shadow duration-200"
+                className="w-full bg-white dark:bg-[#1a1a1a] rounded-2xl shadow-sm p-6 flex flex-col justify-between hover:shadow-md transition-shadow duration-200 border border-gray-200 dark:border-gray-800"
                 style={{
-                  backgroundColor: "#FFFFFF",
+                  backgroundColor: "var(--p-color-bg-surface, #FFFFFF)",
                   borderRadius: "16px",
                   boxShadow: "0 2px 8px -2px rgba(0, 0, 0, 0.05), 0 1px 4px -1px rgba(0, 0, 0, 0.03)",
-                  border: "none",
+                  border: "1px solid var(--p-color-border, #E2E8F0)",
                   padding: "24px",
                   display: "flex",
                   flexDirection: "column",
@@ -3162,7 +3166,7 @@ export default function CourierSettingsPage() {
                       {isSteadfastConnected ? "● Active" : "Not Configured"}
                     </Badge>
                   </div>
-                  <div style={{ color: "#64748B", fontSize: "13px", lineHeight: "1.5", textAlign: "center", maxWidth: "280px" }}>
+                  <div className="text-slate-500 dark:text-slate-400" style={{ color: "var(--p-color-text-secondary, #64748B)", fontSize: "13px", lineHeight: "1.5", textAlign: "center", maxWidth: "280px" }}>
                     Nationwide door-to-door cash on delivery coverage with automated next-day merchant payouts.
                   </div>
                 </div>
@@ -3181,12 +3185,12 @@ export default function CourierSettingsPage() {
 
               {/* Card 3: REDX Settings */}
               <div
-                className="w-full bg-white rounded-2xl shadow-sm p-6 flex flex-col justify-between hover:shadow-md transition-shadow duration-200"
+                className="w-full bg-white dark:bg-[#1a1a1a] rounded-2xl shadow-sm p-6 flex flex-col justify-between hover:shadow-md transition-shadow duration-200 border border-gray-200 dark:border-gray-800"
                 style={{
-                  backgroundColor: "#FFFFFF",
+                  backgroundColor: "var(--p-color-bg-surface, #FFFFFF)",
                   borderRadius: "16px",
                   boxShadow: "0 2px 8px -2px rgba(0, 0, 0, 0.05), 0 1px 4px -1px rgba(0, 0, 0, 0.03)",
-                  border: "none",
+                  border: "1px solid var(--p-color-border, #E2E8F0)",
                   padding: "24px",
                   display: "flex",
                   flexDirection: "column",
@@ -3208,7 +3212,7 @@ export default function CourierSettingsPage() {
                       {isRedxConnected ? "● Active" : "Not Configured"}
                     </Badge>
                   </div>
-                  <div style={{ color: "#64748B", fontSize: "13px", lineHeight: "1.5", textAlign: "center", maxWidth: "280px" }}>
+                  <div className="text-slate-500 dark:text-slate-400" style={{ color: "var(--p-color-text-secondary, #64748B)", fontSize: "13px", lineHeight: "1.5", textAlign: "center", maxWidth: "280px" }}>
                     Enterprise-grade logistics with extensive coverage across Dhaka and 64 districts with automated tracking.
                   </div>
                 </div>
@@ -3227,12 +3231,12 @@ export default function CourierSettingsPage() {
 
               {/* Card 4: CarryBee Settings */}
               <div
-                className="w-full bg-white rounded-2xl shadow-sm p-6 flex flex-col justify-between hover:shadow-md transition-shadow duration-200"
+                className="w-full bg-white dark:bg-[#1a1a1a] rounded-2xl shadow-sm p-6 flex flex-col justify-between hover:shadow-md transition-shadow duration-200 border border-gray-200 dark:border-gray-800"
                 style={{
-                  backgroundColor: "#FFFFFF",
+                  backgroundColor: "var(--p-color-bg-surface, #FFFFFF)",
                   borderRadius: "16px",
                   boxShadow: "0 2px 8px -2px rgba(0, 0, 0, 0.05), 0 1px 4px -1px rgba(0, 0, 0, 0.03)",
-                  border: "none",
+                  border: "1px solid var(--p-color-border, #E2E8F0)",
                   padding: "24px",
                   display: "flex",
                   flexDirection: "column",
@@ -3254,7 +3258,7 @@ export default function CourierSettingsPage() {
                       {isCarrybeeConnected ? "● Active" : "Not Configured"}
                     </Badge>
                   </div>
-                  <div style={{ color: "#64748B", fontSize: "13px", lineHeight: "1.5", textAlign: "center", maxWidth: "280px" }}>
+                  <div className="text-slate-500 dark:text-slate-400" style={{ color: "var(--p-color-text-secondary, #64748B)", fontSize: "13px", lineHeight: "1.5", textAlign: "center", maxWidth: "280px" }}>
                     Modern eCommerce logistics network with fast dispatch, real-time tracking, and automated COD payouts.
                   </div>
                 </div>
@@ -3273,12 +3277,12 @@ export default function CourierSettingsPage() {
 
               {/* Card 5: Bahok Courier Settings */}
               <div
-                className="w-full bg-white rounded-2xl shadow-sm p-6 flex flex-col justify-between hover:shadow-md transition-shadow duration-200"
+                className="w-full bg-white dark:bg-[#1a1a1a] rounded-2xl shadow-sm p-6 flex flex-col justify-between hover:shadow-md transition-shadow duration-200 border border-gray-200 dark:border-gray-800"
                 style={{
-                  backgroundColor: "#FFFFFF",
+                  backgroundColor: "var(--p-color-bg-surface, #FFFFFF)",
                   borderRadius: "16px",
                   boxShadow: "0 2px 8px -2px rgba(0, 0, 0, 0.05), 0 1px 4px -1px rgba(0, 0, 0, 0.03)",
-                  border: "none",
+                  border: "1px solid var(--p-color-border, #E2E8F0)",
                   padding: "24px",
                   display: "flex",
                   flexDirection: "column",
@@ -3300,7 +3304,7 @@ export default function CourierSettingsPage() {
                       {isBahokConnected ? "● Active" : "Not Configured"}
                     </Badge>
                   </div>
-                  <div style={{ color: "#64748B", fontSize: "13px", lineHeight: "1.5", textAlign: "center", maxWidth: "280px" }}>
+                  <div className="text-slate-500 dark:text-slate-400" style={{ color: "var(--p-color-text-secondary, #64748B)", fontSize: "13px", lineHeight: "1.5", textAlign: "center", maxWidth: "280px" }}>
                     Reliable nationwide courier service with automated booking, SMS alerts, and fast COD reconciliation.
                   </div>
                 </div>
@@ -3812,7 +3816,7 @@ export default function CourierSettingsPage() {
                           border: "1px solid var(--p-color-border, #E2E8F0)",
                           borderRadius: "8px",
                           padding: "12px",
-                          backgroundColor: "#F8FAFC",
+                          backgroundColor: "var(--p-color-bg-surface-secondary, #F8FAFC)",
                         }}
                       >
                         <InlineStack align="space-between" blockAlign="center">
@@ -3876,7 +3880,7 @@ export default function CourierSettingsPage() {
                       borderRadius: "12px",
                       padding: "48px 20px",
                       textAlign: "center",
-                      backgroundColor: "#F8FAFC",
+                      backgroundColor: "var(--p-color-bg-surface-secondary, #F8FAFC)",
                     }}
                   >
                     <Text as="p" variant="bodyMd" tone="subdued">
@@ -3886,8 +3890,10 @@ export default function CourierSettingsPage() {
                 ) : (
                   /* ACTIVE LIVE LABEL GENERATION */
                   <div
+                    className="bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800"
                     style={{
-                      backgroundColor: "#F1F5F9",
+                      backgroundColor: "var(--p-color-bg-surface-secondary, #F1F5F9)",
+                      border: "1px solid var(--p-color-border, transparent)",
                       padding: "24px 16px",
                       borderRadius: "12px",
                       display: "flex",
@@ -4247,7 +4253,7 @@ export default function CourierSettingsPage() {
                         Brand Logo
                       </Text>
                       {invoiceBrandLogo ? (
-                        <div className="flex items-center gap-4 p-3 bg-gray-50 rounded-lg border border-gray-200">
+                        <div className="flex items-center gap-4 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
                           <img
                             src={invoiceBrandLogo}
                             alt="Brand Logo"
@@ -4439,7 +4445,7 @@ export default function CourierSettingsPage() {
 
                   {/* EMPTY STATE HANDLING: If invoiceTemplate is empty or null */}
                   {!invoiceTemplate ? (
-                    <div className="py-16 px-6 text-center border-2 border-dashed border-gray-200 rounded-xl bg-gray-50/50 my-6">
+                    <div className="py-16 px-6 text-center border-2 border-dashed border-gray-200 dark:border-gray-800 rounded-xl bg-gray-50/50 dark:bg-gray-800/30 my-6">
                       <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-blue-50 text-blue-600 mb-3 text-xl">
                         ℹ️
                       </div>
@@ -4452,7 +4458,7 @@ export default function CourierSettingsPage() {
                     </div>
                   ) : (
                     /* A4 SHEET MOCKUP CONTAINER */
-                    <div className="bg-slate-100 p-3 sm:p-4 rounded-xl border border-slate-200 overflow-x-auto">
+                    <div className="bg-slate-100 dark:bg-slate-900 p-3 sm:p-4 rounded-xl border border-slate-200 dark:border-slate-800 overflow-x-auto">
                       <div
                         className="bg-white mx-auto shadow-lg rounded-sm text-gray-800 text-xs font-sans transition-all duration-200"
                         style={{

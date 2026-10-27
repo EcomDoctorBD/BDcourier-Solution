@@ -5239,9 +5239,9 @@ export default function OrdersFulfillmentPage() {
                             width: "38px",
                             height: "38px",
                             borderRadius: "8px",
-                            border: "2px solid #FFFFFF",
+                            border: "2px solid var(--p-color-bg-surface, #FFFFFF)",
                             boxShadow: "0 1px 3px rgba(0, 0, 0, 0.12)",
-                            backgroundColor: "#F3F4F6",
+                            backgroundColor: "var(--p-color-bg-surface-secondary, #F3F4F6)",
                             overflow: "hidden",
                             marginLeft: idx === 0 ? "0" : "-12px",
                             zIndex: 10 - idx,
@@ -5274,11 +5274,11 @@ export default function OrdersFulfillmentPage() {
                             height: "22px",
                             padding: "0 8px",
                             borderRadius: "6px",
-                            backgroundColor: "#F3F4F6",
-                            border: "1px solid #D1D5DB",
+                            backgroundColor: "var(--p-color-bg-surface-secondary, #F3F4F6)",
+                            border: "1px solid var(--p-color-border, #D1D5DB)",
                             fontSize: "11px",
                             fontWeight: 600,
-                            color: "#374151",
+                            color: "var(--p-color-text, #374151)",
                             display: "flex",
                             alignItems: "center",
                             justifyContent: "center",
@@ -5369,9 +5369,9 @@ export default function OrdersFulfillmentPage() {
                             width: "24px",
                             height: "24px",
                             borderRadius: "50%",
-                            backgroundColor: "#EFF6FF",
-                            color: "#2563EB",
-                            border: "1px solid #BFDBFE",
+                            backgroundColor: "var(--p-color-bg-surface-info, #EFF6FF)",
+                            color: "var(--p-color-text-info, #2563EB)",
+                            border: "1px solid var(--p-color-border-info, #BFDBFE)",
                             cursor: "pointer",
                             transition: "all 0.15s ease-in-out",
                           }}
@@ -5394,9 +5394,9 @@ export default function OrdersFulfillmentPage() {
                             width: "24px",
                             height: "24px",
                             borderRadius: "50%",
-                            backgroundColor: "#F0FDF4",
-                            color: "#16A34A",
-                            border: "1px solid #BBF7D0",
+                            backgroundColor: "var(--p-color-bg-surface-success, #F0FDF4)",
+                            color: "var(--p-color-text-success, #16A34A)",
+                            border: "1px solid var(--p-color-border-success, #BBF7D0)",
                             cursor: "pointer",
                             transition: "all 0.15s ease-in-out",
                           }}
@@ -8887,12 +8887,12 @@ export default function OrdersFulfillmentPage() {
           {/* ==================== BULK COURIER FULFILLMENT QUEUE OVERVIEW ==================== */}
           <Layout.Section>
             <div
-              className="bg-slate-50 rounded-xl p-4"
+              className="bg-slate-50 dark:bg-[#1a1a1a] rounded-xl p-4 border border-gray-200 dark:border-gray-800"
               style={{
-                backgroundColor: "#f8fafc",
+                backgroundColor: "var(--p-color-bg-surface-secondary, #f8fafc)",
                 borderRadius: "12px",
                 padding: "16px",
-                border: "none",
+                border: "1px solid var(--p-color-border, #e2e8f0)",
                 boxShadow: "none",
               }}
             >
@@ -8966,10 +8966,10 @@ export default function OrdersFulfillmentPage() {
           {/* ==================== SMART AI ADDRESS SETTINGS BANNER ==================== */}
           <Layout.Section>
             <div
-              className="bg-blue-50/50 rounded-lg"
+              className="bg-blue-50/50 dark:bg-blue-950/30 rounded-lg border border-blue-200/50 dark:border-blue-900/50"
               style={{
-                backgroundColor: "rgba(239, 246, 255, 0.5)",
-                border: "1px solid rgba(191, 219, 254, 0.5)",
+                backgroundColor: "var(--p-color-bg-surface-info, rgba(239, 246, 255, 0.5))",
+                border: "1px solid var(--p-color-border-info, rgba(191, 219, 254, 0.5))",
                 borderRadius: "8px",
                 padding: "8px 14px",
               }}
@@ -8985,7 +8985,7 @@ export default function OrdersFulfillmentPage() {
               >
                 <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                   <span style={{ fontSize: "14px", lineHeight: 1 }}>✨</span>
-                  <span style={{ fontSize: "12px", color: "#1e40af", fontWeight: 500 }}>
+                  <span style={{ fontSize: "12px", color: "var(--p-color-text-info, #1e40af)", fontWeight: 500 }}>
                     To clean, verify, and correct customer addresses automatically using Smart Gemini AI, please make sure the feature is turned on in your app settings.
                   </span>
                 </div>
@@ -8993,7 +8993,7 @@ export default function OrdersFulfillmentPage() {
                   <span
                     style={{
                       fontSize: "12px",
-                      color: "#2563eb",
+                      color: "var(--p-color-text-interactive, #2563eb)",
                       fontWeight: 600,
                       display: "inline-flex",
                       alignItems: "center",
@@ -9107,7 +9107,7 @@ export default function OrdersFulfillmentPage() {
                           style={{
                             width: "180px",
                             minWidth: "180px",
-                            borderRight: "1px solid #e1e3e5",
+                            borderRight: "1px solid var(--p-color-border, #e1e3e5)",
                             padding: "12px",
                             display: "flex",
                             flexDirection: "column",
@@ -9131,8 +9131,8 @@ export default function OrdersFulfillmentPage() {
                                   borderRadius: "6px",
                                   fontSize: "13px",
                                   fontWeight: isSelected ? 600 : 400,
-                                  color: isSelected ? "#2563EB" : "#374151",
-                                  backgroundColor: isSelected ? "#EFF6FF" : "transparent",
+                                  color: isSelected ? "var(--p-color-text-brand, #2563EB)" : "var(--p-color-text, #374151)",
+                                  backgroundColor: isSelected ? "var(--p-color-bg-surface-selected, #EFF6FF)" : "transparent",
                                   border: "none",
                                   cursor: "pointer",
                                   transition: "background-color 0.15s ease",
