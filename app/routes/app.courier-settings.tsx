@@ -917,6 +917,42 @@ export default function CourierSettingsPage() {
   const [showCarrybeeForm, setShowCarrybeeForm] = useState(false);
   const [showBahokForm, setShowBahokForm] = useState(false);
 
+  const handleToggleCourierForm = (
+    courier: "pathao" | "steadfast" | "redx" | "carrybee" | "bahok"
+  ) => {
+    if (courier === "pathao") {
+      setShowPathaoForm((prev) => !prev);
+      setShowSteadfastForm(false);
+      setShowRedxForm(false);
+      setShowCarrybeeForm(false);
+      setShowBahokForm(false);
+    } else if (courier === "steadfast") {
+      setShowSteadfastForm((prev) => !prev);
+      setShowPathaoForm(false);
+      setShowRedxForm(false);
+      setShowCarrybeeForm(false);
+      setShowBahokForm(false);
+    } else if (courier === "redx") {
+      setShowRedxForm((prev) => !prev);
+      setShowPathaoForm(false);
+      setShowSteadfastForm(false);
+      setShowCarrybeeForm(false);
+      setShowBahokForm(false);
+    } else if (courier === "carrybee") {
+      setShowCarrybeeForm((prev) => !prev);
+      setShowPathaoForm(false);
+      setShowSteadfastForm(false);
+      setShowRedxForm(false);
+      setShowBahokForm(false);
+    } else if (courier === "bahok") {
+      setShowBahokForm((prev) => !prev);
+      setShowPathaoForm(false);
+      setShowSteadfastForm(false);
+      setShowRedxForm(false);
+      setShowCarrybeeForm(false);
+    }
+  };
+
   // ==================== 1. PATHAO GATEWAY STATE ====================
   const [pathaoEnvironment, setPathaoEnvironment] = useState(
     courierConfig.pathaoEnvironment || "production"
@@ -1319,135 +1355,304 @@ export default function CourierSettingsPage() {
         </BlockStack>
 
         {/* ==================================================================== */}
-        {/* SECTION 1: COURIER GATEWAYS LAYOUT (5 Gateways)                      */}
+        {/* SECTION 1: COURIER GATEWAYS LAYOUT (3-Column Grid)                   */}
         {/* ==================================================================== */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 items-start">
-            {/* Card 1: Pathao Settings */}
-            <div className="w-full h-auto">
-              <Card padding="500">
-                <BlockStack gap="400">
-                  <InlineStack align="space-between" blockAlign="center">
-                    <InlineStack gap="300" blockAlign="center">
-                      <CourierLogo courier="pathao" size={44} />
-                      <Text as="h3" variant="headingMd">
-                        Pathao Courier
-                      </Text>
-                    </InlineStack>
+        <div
+          className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 items-stretch"
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fill, minmax(310px, 1fr))",
+            gap: "24px",
+            alignItems: "stretch",
+          }}
+        >
+          {/* Card 1: Pathao Settings */}
+          <div
+            className="w-full bg-white rounded-2xl shadow-sm p-6 flex flex-col justify-between hover:shadow-md transition-shadow duration-200"
+            style={{
+              backgroundColor: "#FFFFFF",
+              borderRadius: "16px",
+              boxShadow: showPathaoForm
+                ? "0 0 0 2px #0F172A, 0 4px 14px rgba(15, 23, 42, 0.08)"
+                : "0 2px 8px -2px rgba(0, 0, 0, 0.05), 0 1px 4px -1px rgba(0, 0, 0, 0.03)",
+              border: "none",
+              padding: "24px",
+              display: "flex",
+              flexDirection: "column",
+              justifyContent: "space-between",
+              minHeight: "290px",
+            }}
+          >
+            {/* Top: Centered Logo + Name + Status Badge + Description */}
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", width: "100%" }}>
+              <div style={{ display: "flex", justifyContent: "center", alignItems: "center", marginBottom: "12px", minHeight: "56px" }}>
+                <CourierLogo courier="pathao" size={52} />
+              </div>
 
-                    {isPathaoConnected ? (
-                      <span
-                        style={{
-                          backgroundColor: "#DCFCE7",
-                          color: "#166534",
-                          fontSize: "12px",
-                          fontWeight: 600,
-                          padding: "3px 10px",
-                          borderRadius: "12px",
-                          lineHeight: "1.2",
-                          display: "inline-flex",
-                          alignItems: "center",
-                          gap: "5px",
-                        }}
-                      >
-                        <span
-                          style={{
-                            width: "6px",
-                            height: "6px",
-                            borderRadius: "50%",
-                            backgroundColor: "#16A34A",
-                          }}
-                        />
-                        Connected
-                      </span>
-                    ) : (
-                      <span
-                        style={{
-                          backgroundColor: "#F3F4F6",
-                          color: "#4B5563",
-                          fontSize: "12px",
-                          fontWeight: 600,
-                          padding: "3px 10px",
-                          borderRadius: "12px",
-                          lineHeight: "1.2",
-                          display: "inline-flex",
-                          alignItems: "center",
-                          gap: "5px",
-                        }}
-                      >
-                        <span
-                          style={{
-                            width: "6px",
-                            height: "6px",
-                            borderRadius: "50%",
-                            backgroundColor: "#9CA3AF",
-                          }}
-                        />
-                        Not Configured
-                      </span>
-                    )}
-                  </InlineStack>
+              <div style={{ marginBottom: "6px" }}>
+                <Text as="h3" variant="headingMd" fontWeight="bold">
+                  Pathao Courier
+                </Text>
+              </div>
 
-                  <Divider />
+              <div style={{ marginBottom: "12px", display: "flex", justifyContent: "center" }}>
+                <Badge tone={isPathaoConnected ? "success" : undefined}>
+                  {isPathaoConnected ? "● Active" : "Not Configured"}
+                </Badge>
+              </div>
 
-                  <div className="min-h-[58px] flex flex-col justify-start">
-                    <BlockStack gap="150">
-                      <Text as="p" variant="bodySm" tone="subdued">
-                        Express parcel delivery and real-time consignment tracking via Pathao Merchant API.
-                      </Text>
-                      <Text as="p" variant="bodyXs" tone="subdued">
-                        Required: <strong>Client ID, Client Secret, Username, Password, Store ID</strong>
-                      </Text>
-                    </BlockStack>
-                  </div>
+              <div style={{ color: "#64748B", fontSize: "13px", lineHeight: "1.5", textAlign: "center", maxWidth: "280px" }}>
+                Express parcel delivery and real-time consignment tracking via Pathao Merchant API.
+              </div>
+            </div>
 
-                  <div className="pt-2">
-                    <button
-                      type="button"
-                      onClick={() => setShowPathaoForm((prev) => !prev)}
-                      style={{
-                        width: "100%",
-                        padding: "9px 16px",
-                        borderRadius: "8px",
-                        fontSize: "13px",
-                        fontWeight: 600,
-                        cursor: "pointer",
-                        transition: "all 0.15s ease-in-out",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        gap: "6px",
-                        border: showPathaoForm
-                          ? "1px solid #9CA3AF"
-                          : isPathaoConnected
-                          ? "1px solid #D1D5DB"
-                          : "none",
-                        backgroundColor: showPathaoForm
-                          ? "#F3F4F6"
-                          : isPathaoConnected
-                          ? "#FFFFFF"
-                          : "#1F2937",
-                        color: showPathaoForm
-                          ? "#374151"
-                          : isPathaoConnected
-                          ? "#1F2937"
-                          : "#FFFFFF",
-                        boxShadow:
-                          !isPathaoConnected && !showPathaoForm
-                            ? "0 1px 3px rgba(0,0,0,0.12)"
-                            : "0 1px 2px rgba(0,0,0,0.05)",
-                      }}
-                    >
-                      {showPathaoForm
-                        ? "Hide Configuration"
-                        : isPathaoConnected
-                        ? "Update Pathao Settings →"
-                        : "Configure Pathao →"}
-                    </button>
-                  </div>
+            {/* Bottom: Primary Action Button at Bottom-Left */}
+            <div style={{ marginTop: "auto", paddingTop: "20px", display: "flex", justifyContent: "flex-start", width: "100%" }}>
+              <Button
+                variant={isPathaoConnected ? "secondary" : "primary"}
+                onClick={() => handleToggleCourierForm("pathao")}
+              >
+                Configure
+              </Button>
+            </div>
+          </div>
 
-                      {showPathaoForm && (
+          {/* Card 2: Steadfast Settings */}
+          <div
+            className="w-full bg-white rounded-2xl shadow-sm p-6 flex flex-col justify-between hover:shadow-md transition-shadow duration-200"
+            style={{
+              backgroundColor: "#FFFFFF",
+              borderRadius: "16px",
+              boxShadow: showSteadfastForm
+                ? "0 0 0 2px #0F172A, 0 4px 14px rgba(15, 23, 42, 0.08)"
+                : "0 2px 8px -2px rgba(0, 0, 0, 0.05), 0 1px 4px -1px rgba(0, 0, 0, 0.03)",
+              border: "none",
+              padding: "24px",
+              display: "flex",
+              flexDirection: "column",
+              justifyContent: "space-between",
+              minHeight: "290px",
+            }}
+          >
+            {/* Top: Centered Logo + Name + Status Badge + Description */}
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", width: "100%" }}>
+              <div style={{ display: "flex", justifyContent: "center", alignItems: "center", marginBottom: "12px", minHeight: "56px" }}>
+                <CourierLogo courier="steadfast" size={52} />
+              </div>
+
+              <div style={{ marginBottom: "6px" }}>
+                <Text as="h3" variant="headingMd" fontWeight="bold">
+                  Steadfast Courier
+                </Text>
+              </div>
+
+              <div style={{ marginBottom: "12px", display: "flex", justifyContent: "center" }}>
+                <Badge tone={isSteadfastConnected ? "success" : undefined}>
+                  {isSteadfastConnected ? "● Active" : "Not Configured"}
+                </Badge>
+              </div>
+
+              <div style={{ color: "#64748B", fontSize: "13px", lineHeight: "1.5", textAlign: "center", maxWidth: "280px" }}>
+                Nationwide door-to-door cash on delivery coverage with automated next-day merchant payouts.
+              </div>
+            </div>
+
+            {/* Bottom: Primary Action Button at Bottom-Left */}
+            <div style={{ marginTop: "auto", paddingTop: "20px", display: "flex", justifyContent: "flex-start", width: "100%" }}>
+              <Button
+                variant={isSteadfastConnected ? "secondary" : "primary"}
+                onClick={() => handleToggleCourierForm("steadfast")}
+              >
+                Configure
+              </Button>
+            </div>
+          </div>
+
+          {/* Card 3: REDX Settings */}
+          <div
+            className="w-full bg-white rounded-2xl shadow-sm p-6 flex flex-col justify-between hover:shadow-md transition-shadow duration-200"
+            style={{
+              backgroundColor: "#FFFFFF",
+              borderRadius: "16px",
+              boxShadow: showRedxForm
+                ? "0 0 0 2px #0F172A, 0 4px 14px rgba(15, 23, 42, 0.08)"
+                : "0 2px 8px -2px rgba(0, 0, 0, 0.05), 0 1px 4px -1px rgba(0, 0, 0, 0.03)",
+              border: "none",
+              padding: "24px",
+              display: "flex",
+              flexDirection: "column",
+              justifyContent: "space-between",
+              minHeight: "290px",
+            }}
+          >
+            {/* Top: Centered Logo + Name + Status Badge + Description */}
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", width: "100%" }}>
+              <div style={{ display: "flex", justifyContent: "center", alignItems: "center", marginBottom: "12px", minHeight: "56px" }}>
+                <CourierLogo courier="redx" size={52} />
+              </div>
+
+              <div style={{ marginBottom: "6px" }}>
+                <Text as="h3" variant="headingMd" fontWeight="bold">
+                  REDX Delivery
+                </Text>
+              </div>
+
+              <div style={{ marginBottom: "12px", display: "flex", justifyContent: "center" }}>
+                <Badge tone={isRedxConnected ? "success" : undefined}>
+                  {isRedxConnected ? "● Active" : "Not Configured"}
+                </Badge>
+              </div>
+
+              <div style={{ color: "#64748B", fontSize: "13px", lineHeight: "1.5", textAlign: "center", maxWidth: "280px" }}>
+                Enterprise-grade logistics with extensive coverage across Dhaka and 64 districts with automated tracking.
+              </div>
+            </div>
+
+            {/* Bottom: Primary Action Button at Bottom-Left */}
+            <div style={{ marginTop: "auto", paddingTop: "20px", display: "flex", justifyContent: "flex-start", width: "100%" }}>
+              <Button
+                variant={isRedxConnected ? "secondary" : "primary"}
+                onClick={() => handleToggleCourierForm("redx")}
+              >
+                Configure
+              </Button>
+            </div>
+          </div>
+
+          {/* Card 4: CarryBee Settings */}
+          <div
+            className="w-full bg-white rounded-2xl shadow-sm p-6 flex flex-col justify-between hover:shadow-md transition-shadow duration-200"
+            style={{
+              backgroundColor: "#FFFFFF",
+              borderRadius: "16px",
+              boxShadow: showCarrybeeForm
+                ? "0 0 0 2px #0F172A, 0 4px 14px rgba(15, 23, 42, 0.08)"
+                : "0 2px 8px -2px rgba(0, 0, 0, 0.05), 0 1px 4px -1px rgba(0, 0, 0, 0.03)",
+              border: "none",
+              padding: "24px",
+              display: "flex",
+              flexDirection: "column",
+              justifyContent: "space-between",
+              minHeight: "290px",
+            }}
+          >
+            {/* Top: Centered Logo + Name + Status Badge + Description */}
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", width: "100%" }}>
+              <div style={{ display: "flex", justifyContent: "center", alignItems: "center", marginBottom: "12px", minHeight: "56px" }}>
+                <CourierLogo courier="carrybee" size={52} />
+              </div>
+
+              <div style={{ marginBottom: "6px" }}>
+                <Text as="h3" variant="headingMd" fontWeight="bold">
+                  CarryBee Logistics
+                </Text>
+              </div>
+
+              <div style={{ marginBottom: "12px", display: "flex", justifyContent: "center" }}>
+                <Badge tone={isCarrybeeConnected ? "success" : undefined}>
+                  {isCarrybeeConnected ? "● Active" : "Not Configured"}
+                </Badge>
+              </div>
+
+              <div style={{ color: "#64748B", fontSize: "13px", lineHeight: "1.5", textAlign: "center", maxWidth: "280px" }}>
+                Modern eCommerce logistics network with fast dispatch, real-time tracking, and automated COD payouts.
+              </div>
+            </div>
+
+            {/* Bottom: Primary Action Button at Bottom-Left */}
+            <div style={{ marginTop: "auto", paddingTop: "20px", display: "flex", justifyContent: "flex-start", width: "100%" }}>
+              <Button
+                variant={isCarrybeeConnected ? "secondary" : "primary"}
+                onClick={() => handleToggleCourierForm("carrybee")}
+              >
+                Configure
+              </Button>
+            </div>
+          </div>
+
+          {/* Card 5: Bahok Courier Settings */}
+          <div
+            className="w-full bg-white rounded-2xl shadow-sm p-6 flex flex-col justify-between hover:shadow-md transition-shadow duration-200"
+            style={{
+              backgroundColor: "#FFFFFF",
+              borderRadius: "16px",
+              boxShadow: showBahokForm
+                ? "0 0 0 2px #0F172A, 0 4px 14px rgba(15, 23, 42, 0.08)"
+                : "0 2px 8px -2px rgba(0, 0, 0, 0.05), 0 1px 4px -1px rgba(0, 0, 0, 0.03)",
+              border: "none",
+              padding: "24px",
+              display: "flex",
+              flexDirection: "column",
+              justifyContent: "space-between",
+              minHeight: "290px",
+            }}
+          >
+            {/* Top: Centered Logo + Name + Status Badge + Description */}
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", width: "100%" }}>
+              <div style={{ display: "flex", justifyContent: "center", alignItems: "center", marginBottom: "12px", minHeight: "56px" }}>
+                <CourierLogo courier="bahok" size={52} />
+              </div>
+
+              <div style={{ marginBottom: "6px" }}>
+                <Text as="h3" variant="headingMd" fontWeight="bold">
+                  Bahok Courier
+                </Text>
+              </div>
+
+              <div style={{ marginBottom: "12px", display: "flex", justifyContent: "center" }}>
+                <Badge tone={isBahokConnected ? "success" : undefined}>
+                  {isBahokConnected ? "● Active" : "Not Configured"}
+                </Badge>
+              </div>
+
+              <div style={{ color: "#64748B", fontSize: "13px", lineHeight: "1.5", textAlign: "center", maxWidth: "280px" }}>
+                Reliable nationwide courier service with automated booking, SMS alerts, and fast COD reconciliation.
+              </div>
+            </div>
+
+            {/* Bottom: Primary Action Button at Bottom-Left */}
+            <div style={{ marginTop: "auto", paddingTop: "20px", display: "flex", justifyContent: "flex-start", width: "100%" }}>
+              <Button
+                variant={isBahokConnected ? "secondary" : "primary"}
+                onClick={() => handleToggleCourierForm("bahok")}
+              >
+                Configure
+              </Button>
+            </div>
+          </div>
+        </div>
+
+        {/* ==================================================================== */}
+        {/* DECOUPLED GATEWAY CONFIGURATION VIEW                                 */}
+        {/* (Decoupled from inline grid rows; staged for Section 2 Side Panel)   */}
+        {/* ==================================================================== */}
+        {(showPathaoForm || showSteadfastForm || showRedxForm || showCarrybeeForm || showBahokForm) && (
+          <div
+            id="courier-config-drawer"
+            style={{
+              marginTop: "28px",
+              backgroundColor: "#FFFFFF",
+              borderRadius: "16px",
+              boxShadow: "0 4px 20px -2px rgba(0, 0, 0, 0.06), 0 2px 6px -1px rgba(0, 0, 0, 0.03)",
+              padding: "28px",
+              border: "1px solid #E2E8F0",
+            }}
+          >
+            {showPathaoForm && (
                     <BlockStack gap="400">
-                      <Divider />
+                      <InlineStack align="space-between" blockAlign="center">
+                      <InlineStack gap="300" blockAlign="center">
+                        <CourierLogo courier="pathao" size={32} />
+                        <BlockStack gap="050">
+                          <Text as="h2" variant="headingLg">Configure Pathao Courier</Text>
+                          <Text as="p" variant="bodySm" tone="subdued">Set up your Pathao Merchant API credentials and live webhook callback.</Text>
+                        </BlockStack>
+                      </InlineStack>
+                      <Button onClick={() => setShowPathaoForm(false)}>
+                        ✕ Close Panel
+                      </Button>
+                    </InlineStack>
+                    <Divider />
 
                       <BlockStack gap="300">
                         <Select
@@ -1632,136 +1837,21 @@ export default function CourierSettingsPage() {
                       </InlineStack>
                     </BlockStack>
                   )}
-                </BlockStack>
-              </Card>
-            </div>
-
-            {/* Card 2: Steadfast Settings */}
-            <div className="w-full h-auto">
-              <Card padding="500">
-                <BlockStack gap="400">
-                  <InlineStack align="space-between" blockAlign="center">
-                    <InlineStack gap="300" blockAlign="center">
-                      <CourierLogo courier="steadfast" size={44} />
-                      <Text as="h3" variant="headingMd">
-                        Steadfast Courier
-                      </Text>
-                    </InlineStack>
-
-                    {isSteadfastConnected ? (
-                      <span
-                        style={{
-                          backgroundColor: "#DCFCE7",
-                          color: "#166534",
-                          fontSize: "12px",
-                          fontWeight: 600,
-                          padding: "3px 10px",
-                          borderRadius: "12px",
-                          lineHeight: "1.2",
-                          display: "inline-flex",
-                          alignItems: "center",
-                          gap: "5px",
-                        }}
-                      >
-                        <span
-                          style={{
-                            width: "6px",
-                            height: "6px",
-                            borderRadius: "50%",
-                            backgroundColor: "#16A34A",
-                          }}
-                        />
-                        Connected
-                      </span>
-                    ) : (
-                      <span
-                        style={{
-                          backgroundColor: "#F3F4F6",
-                          color: "#4B5563",
-                          fontSize: "12px",
-                          fontWeight: 600,
-                          padding: "3px 10px",
-                          borderRadius: "12px",
-                          lineHeight: "1.2",
-                          display: "inline-flex",
-                          alignItems: "center",
-                          gap: "5px",
-                        }}
-                      >
-                        <span
-                          style={{
-                            width: "6px",
-                            height: "6px",
-                            borderRadius: "50%",
-                            backgroundColor: "#9CA3AF",
-                          }}
-                        />
-                        Not Configured
-                      </span>
-                    )}
-                  </InlineStack>
-
-                  <Divider />
-
-                  <div className="min-h-[58px] flex flex-col justify-start">
-                    <BlockStack gap="150">
-                      <Text as="p" variant="bodySm" tone="subdued">
-                        Fast Cash-on-Delivery (COD) fulfillment across all 64 Bangladeshi districts.
-                      </Text>
-                      <Text as="p" variant="bodyXs" tone="subdued">
-                        Required: <strong>API Key, Secret Key</strong>
-                      </Text>
-                    </BlockStack>
-                  </div>
-
-                  <div className="pt-2">
-                    <button
-                      type="button"
-                      onClick={() => setShowSteadfastForm((prev) => !prev)}
-                      style={{
-                        width: "100%",
-                        padding: "9px 16px",
-                        borderRadius: "8px",
-                        fontSize: "13px",
-                        fontWeight: 600,
-                        cursor: "pointer",
-                        transition: "all 0.15s ease-in-out",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        gap: "6px",
-                        border: showSteadfastForm
-                          ? "1px solid #9CA3AF"
-                          : isSteadfastConnected
-                          ? "1px solid #D1D5DB"
-                          : "none",
-                        backgroundColor: showSteadfastForm
-                          ? "#F3F4F6"
-                          : isSteadfastConnected
-                          ? "#FFFFFF"
-                          : "#1F2937",
-                        color: showSteadfastForm
-                          ? "#374151"
-                          : isSteadfastConnected
-                          ? "#1F2937"
-                          : "#FFFFFF",
-                        boxShadow:
-                          !isSteadfastConnected && !showSteadfastForm
-                            ? "0 1px 3px rgba(0,0,0,0.12)"
-                            : "0 1px 2px rgba(0,0,0,0.05)",
-                      }}
-                    >
-                      {showSteadfastForm
-                        ? "Hide Configuration"
-                        : isSteadfastConnected
-                        ? "Update Steadfast Settings →"
-                        : "Configure Steadfast →"}
-                    </button>
-                  </div>
-
-                  {showSteadfastForm && (
+            {showSteadfastForm && (
                     <BlockStack gap="400">
-                      <Divider />
+                      <InlineStack align="space-between" blockAlign="center">
+                      <InlineStack gap="300" blockAlign="center">
+                        <CourierLogo courier="steadfast" size={32} />
+                        <BlockStack gap="050">
+                          <Text as="h2" variant="headingLg">Configure Steadfast Courier</Text>
+                          <Text as="p" variant="bodySm" tone="subdued">Set up your Steadfast API Key, Secret Key, and live webhook listener.</Text>
+                        </BlockStack>
+                      </InlineStack>
+                      <Button onClick={() => setShowSteadfastForm(false)}>
+                        ✕ Close Panel
+                      </Button>
+                    </InlineStack>
+                    <Divider />
 
                       <BlockStack gap="300">
                         <TextField
@@ -1861,136 +1951,21 @@ export default function CourierSettingsPage() {
                       </InlineStack>
                     </BlockStack>
                   )}
-                </BlockStack>
-              </Card>
-            </div>
-
-            {/* Card 3: REDX Settings */}
-            <div className="w-full h-auto">
-              <Card padding="500">
-                <BlockStack gap="400">
-                  <InlineStack align="space-between" blockAlign="center">
-                    <InlineStack gap="300" blockAlign="center">
-                      <CourierLogo courier="redx" size={44} />
-                      <Text as="h3" variant="headingMd">
-                        REDX Delivery
-                      </Text>
-                    </InlineStack>
-
-                    {isRedxConnected ? (
-                      <span
-                        style={{
-                          backgroundColor: "#DCFCE7",
-                          color: "#166534",
-                          fontSize: "12px",
-                          fontWeight: 600,
-                          padding: "3px 10px",
-                          borderRadius: "12px",
-                          lineHeight: "1.2",
-                          display: "inline-flex",
-                          alignItems: "center",
-                          gap: "5px",
-                        }}
-                      >
-                        <span
-                          style={{
-                            width: "6px",
-                            height: "6px",
-                            borderRadius: "50%",
-                            backgroundColor: "#16A34A",
-                          }}
-                        />
-                        Connected
-                      </span>
-                    ) : (
-                      <span
-                        style={{
-                          backgroundColor: "#F3F4F6",
-                          color: "#4B5563",
-                          fontSize: "12px",
-                          fontWeight: 600,
-                          padding: "3px 10px",
-                          borderRadius: "12px",
-                          lineHeight: "1.2",
-                          display: "inline-flex",
-                          alignItems: "center",
-                          gap: "5px",
-                        }}
-                      >
-                        <span
-                          style={{
-                            width: "6px",
-                            height: "6px",
-                            borderRadius: "50%",
-                            backgroundColor: "#9CA3AF",
-                          }}
-                        />
-                        Not Configured
-                      </span>
-                    )}
-                  </InlineStack>
-
-                  <Divider />
-
-                  <div className="min-h-[58px] flex flex-col justify-start">
-                    <BlockStack gap="150">
-                      <Text as="p" variant="bodySm" tone="subdued">
-                        64-district doorstep delivery network with automated pickup scheduling.
-                      </Text>
-                      <Text as="p" variant="bodyXs" tone="subdued">
-                        Required: <strong>API Access Token, Pickup Store ID</strong>
-                      </Text>
-                    </BlockStack>
-                  </div>
-
-                  <div className="pt-2">
-                    <button
-                      type="button"
-                      onClick={() => setShowRedxForm((prev) => !prev)}
-                      style={{
-                        width: "100%",
-                        padding: "9px 16px",
-                        borderRadius: "8px",
-                        fontSize: "13px",
-                        fontWeight: 600,
-                        cursor: "pointer",
-                        transition: "all 0.15s ease-in-out",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        gap: "6px",
-                        border: showRedxForm
-                          ? "1px solid #9CA3AF"
-                          : isRedxConnected
-                          ? "1px solid #D1D5DB"
-                          : "none",
-                        backgroundColor: showRedxForm
-                          ? "#F3F4F6"
-                          : isRedxConnected
-                          ? "#FFFFFF"
-                          : "#1F2937",
-                        color: showRedxForm
-                          ? "#374151"
-                          : isRedxConnected
-                          ? "#1F2937"
-                          : "#FFFFFF",
-                        boxShadow:
-                          !isRedxConnected && !showRedxForm
-                            ? "0 1px 3px rgba(0,0,0,0.12)"
-                            : "0 1px 2px rgba(0,0,0,0.05)",
-                      }}
-                    >
-                      {showRedxForm
-                        ? "Hide Configuration"
-                        : isRedxConnected
-                        ? "Update REDX Settings →"
-                        : "Configure REDX →"}
-                    </button>
-                  </div>
-
-                  {showRedxForm && (
+            {showRedxForm && (
                     <BlockStack gap="400">
-                      <Divider />
+                      <InlineStack align="space-between" blockAlign="center">
+                      <InlineStack gap="300" blockAlign="center">
+                        <CourierLogo courier="redx" size={32} />
+                        <BlockStack gap="050">
+                          <Text as="h2" variant="headingLg">Configure REDX Delivery</Text>
+                          <Text as="p" variant="bodySm" tone="subdued">Set up your REDX Access Token, Pickup Store mapping, and webhook.</Text>
+                        </BlockStack>
+                      </InlineStack>
+                      <Button onClick={() => setShowRedxForm(false)}>
+                        ✕ Close Panel
+                      </Button>
+                    </InlineStack>
+                    <Divider />
 
                       <BlockStack gap="300">
                         <Select
@@ -2147,136 +2122,21 @@ export default function CourierSettingsPage() {
                       </InlineStack>
                     </BlockStack>
                   )}
-                </BlockStack>
-              </Card>
-            </div>
-
-            {/* Card 4: CarryBee Settings */}
-            <div className="w-full h-auto">
-              <Card padding="500">
-                <BlockStack gap="400">
-                  <InlineStack align="space-between" blockAlign="center">
-                    <InlineStack gap="300" blockAlign="center">
-                      <CourierLogo courier="carrybee" size={44} />
-                      <Text as="h3" variant="headingMd">
-                        CarryBee
-                      </Text>
-                    </InlineStack>
-
-                    {isCarrybeeConnected ? (
-                      <span
-                        style={{
-                          backgroundColor: "#DCFCE7",
-                          color: "#166534",
-                          fontSize: "12px",
-                          fontWeight: 600,
-                          padding: "3px 10px",
-                          borderRadius: "12px",
-                          lineHeight: "1.2",
-                          display: "inline-flex",
-                          alignItems: "center",
-                          gap: "5px",
-                        }}
-                      >
-                        <span
-                          style={{
-                            width: "6px",
-                            height: "6px",
-                            borderRadius: "50%",
-                            backgroundColor: "#16A34A",
-                          }}
-                        />
-                        Connected
-                      </span>
-                    ) : (
-                      <span
-                        style={{
-                          backgroundColor: "#F3F4F6",
-                          color: "#4B5563",
-                          fontSize: "12px",
-                          fontWeight: 600,
-                          padding: "3px 10px",
-                          borderRadius: "12px",
-                          lineHeight: "1.2",
-                          display: "inline-flex",
-                          alignItems: "center",
-                          gap: "5px",
-                        }}
-                      >
-                        <span
-                          style={{
-                            width: "6px",
-                            height: "6px",
-                            borderRadius: "50%",
-                            backgroundColor: "#9CA3AF",
-                          }}
-                        />
-                        Not Configured
-                      </span>
-                    )}
-                  </InlineStack>
-
-                  <Divider />
-
-                  <div className="min-h-[58px] flex flex-col justify-start">
-                    <BlockStack gap="150">
-                      <Text as="p" variant="bodySm" tone="subdued">
-                        Tech-first automated logistics network with rapid parcel dispatch and API status sync.
-                      </Text>
-                      <Text as="p" variant="bodyXs" tone="subdued">
-                        Required: <strong>Client ID, Client Secret, Client Context</strong>
-                      </Text>
-                    </BlockStack>
-                  </div>
-
-                  <div className="pt-2">
-                    <button
-                      type="button"
-                      onClick={() => setShowCarrybeeForm((prev) => !prev)}
-                      style={{
-                        width: "100%",
-                        padding: "9px 16px",
-                        borderRadius: "8px",
-                        fontSize: "13px",
-                        fontWeight: 600,
-                        cursor: "pointer",
-                        transition: "all 0.15s ease-in-out",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        gap: "6px",
-                        border: showCarrybeeForm
-                          ? "1px solid #9CA3AF"
-                          : isCarrybeeConnected
-                          ? "1px solid #D1D5DB"
-                          : "none",
-                        backgroundColor: showCarrybeeForm
-                          ? "#F3F4F6"
-                          : isCarrybeeConnected
-                          ? "#FFFFFF"
-                          : "#1F2937",
-                        color: showCarrybeeForm
-                          ? "#374151"
-                          : isCarrybeeConnected
-                          ? "#1F2937"
-                          : "#FFFFFF",
-                        boxShadow:
-                          !isCarrybeeConnected && !showCarrybeeForm
-                            ? "0 1px 3px rgba(0,0,0,0.12)"
-                            : "0 1px 2px rgba(0,0,0,0.05)",
-                      }}
-                    >
-                      {showCarrybeeForm
-                        ? "Hide Configuration"
-                        : isCarrybeeConnected
-                        ? "Update CarryBee Settings →"
-                        : "Configure CarryBee →"}
-                    </button>
-                  </div>
-
-                  {showCarrybeeForm && (
+            {showCarrybeeForm && (
                     <BlockStack gap="400">
-                      <Divider />
+                      <InlineStack align="space-between" blockAlign="center">
+                      <InlineStack gap="300" blockAlign="center">
+                        <CourierLogo courier="carrybee" size={32} />
+                        <BlockStack gap="050">
+                          <Text as="h2" variant="headingLg">Configure CarryBee Logistics</Text>
+                          <Text as="p" variant="bodySm" tone="subdued">Set up your CarryBee Client credentials, sandbox mode, and webhooks.</Text>
+                        </BlockStack>
+                      </InlineStack>
+                      <Button onClick={() => setShowCarrybeeForm(false)}>
+                        ✕ Close Panel
+                      </Button>
+                    </InlineStack>
+                    <Divider />
 
                       <BlockStack gap="300">
                         <Select
@@ -2416,136 +2276,21 @@ export default function CourierSettingsPage() {
                       </InlineStack>
                     </BlockStack>
                   )}
-                </BlockStack>
-              </Card>
-            </div>
-
-            {/* Card 5: Bahok Courier Settings */}
-            <div className="w-full h-auto">
-              <Card padding="500">
-                <BlockStack gap="400">
-                  <InlineStack align="space-between" blockAlign="center">
-                    <InlineStack gap="300" blockAlign="center">
-                      <CourierLogo courier="bahok" size={44} />
-                      <Text as="h3" variant="headingMd">
-                        Bahok Courier
-                      </Text>
-                    </InlineStack>
-
-                    {isBahokConnected ? (
-                      <span
-                        style={{
-                          backgroundColor: "#DCFCE7",
-                          color: "#166534",
-                          fontSize: "12px",
-                          fontWeight: 600,
-                          padding: "3px 10px",
-                          borderRadius: "12px",
-                          lineHeight: "1.2",
-                          display: "inline-flex",
-                          alignItems: "center",
-                          gap: "5px",
-                        }}
-                      >
-                        <span
-                          style={{
-                            width: "6px",
-                            height: "6px",
-                            borderRadius: "50%",
-                            backgroundColor: "#16A34A",
-                          }}
-                        />
-                        Connected
-                      </span>
-                    ) : (
-                      <span
-                        style={{
-                          backgroundColor: "#F3F4F6",
-                          color: "#4B5563",
-                          fontSize: "12px",
-                          fontWeight: 600,
-                          padding: "3px 10px",
-                          borderRadius: "12px",
-                          lineHeight: "1.2",
-                          display: "inline-flex",
-                          alignItems: "center",
-                          gap: "5px",
-                        }}
-                      >
-                        <span
-                          style={{
-                            width: "6px",
-                            height: "6px",
-                            borderRadius: "50%",
-                            backgroundColor: "#9CA3AF",
-                          }}
-                        />
-                        Not Configured
-                      </span>
-                    )}
-                  </InlineStack>
-
-                  <Divider />
-
-                  <div className="min-h-[58px] flex flex-col justify-start">
-                    <BlockStack gap="150">
-                      <Text as="p" variant="bodySm" tone="subdued">
-                        Reliable nationwide e-commerce courier service with doorstep delivery across Bangladesh.
-                      </Text>
-                      <Text as="p" variant="bodyXs" tone="subdued">
-                        Required: <strong>Merchant ID, API Key, API Secret / Token</strong>
-                      </Text>
-                    </BlockStack>
-                  </div>
-
-                  <div className="pt-2">
-                    <button
-                      type="button"
-                      onClick={() => setShowBahokForm((prev) => !prev)}
-                      style={{
-                        width: "100%",
-                        padding: "9px 16px",
-                        borderRadius: "8px",
-                        fontSize: "13px",
-                        fontWeight: 600,
-                        cursor: "pointer",
-                        transition: "all 0.15s ease-in-out",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        gap: "6px",
-                        border: showBahokForm
-                          ? "1px solid #9CA3AF"
-                          : isBahokConnected
-                          ? "1px solid #D1D5DB"
-                          : "none",
-                        backgroundColor: showBahokForm
-                          ? "#F3F4F6"
-                          : isBahokConnected
-                          ? "#FFFFFF"
-                          : "#1F2937",
-                        color: showBahokForm
-                          ? "#374151"
-                          : isBahokConnected
-                          ? "#1F2937"
-                          : "#FFFFFF",
-                        boxShadow:
-                          !isBahokConnected && !showBahokForm
-                            ? "0 1px 3px rgba(0,0,0,0.12)"
-                            : "0 1px 2px rgba(0,0,0,0.05)",
-                      }}
-                    >
-                      {showBahokForm
-                        ? "Hide Configuration"
-                        : isBahokConnected
-                        ? "Update Bahok Settings →"
-                        : "Configure Bahok →"}
-                    </button>
-                  </div>
-
-                  {showBahokForm && (
+            {showBahokForm && (
                     <BlockStack gap="400">
-                      <Divider />
+                      <InlineStack align="space-between" blockAlign="center">
+                      <InlineStack gap="300" blockAlign="center">
+                        <CourierLogo courier="bahok" size={32} />
+                        <BlockStack gap="050">
+                          <Text as="h2" variant="headingLg">Configure Bahok Courier</Text>
+                          <Text as="p" variant="bodySm" tone="subdued">Set up your Bahok Merchant ID, API Key, Token, and webhooks.</Text>
+                        </BlockStack>
+                      </InlineStack>
+                      <Button onClick={() => setShowBahokForm(false)}>
+                        ✕ Close Panel
+                      </Button>
+                    </InlineStack>
+                    <Divider />
 
                       <BlockStack gap="300">
                         <TextField
@@ -2656,10 +2401,8 @@ export default function CourierSettingsPage() {
                       </InlineStack>
                     </BlockStack>
                   )}
-                </BlockStack>
-              </Card>
-            </div>
           </div>
+        )}
 
         {/* ==================================================================== */}
         {/* SECTION 2: AUTOMATION RULES & AI WRAPPER                             */}
