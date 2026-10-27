@@ -538,6 +538,30 @@ const courierConfigSchema = new mongoose.Schema(
       default: "",
       trim: true,
     },
+    defaultParcelWeight: {
+      type: Number,
+      default: 0.5,
+    },
+    pathaoDefaultWeight: {
+      type: Number,
+      default: 0.5,
+    },
+    redxDefaultWeight: {
+      type: Number,
+      default: 0.5,
+    },
+    carrybeeDefaultWeight: {
+      type: Number,
+      default: 0.5,
+    },
+    bahokDefaultWeight: {
+      type: Number,
+      default: 0.5,
+    },
+    steadfastDefaultWeight: {
+      type: Number,
+      default: 0.5,
+    },
     // Invoice Customization
     invoiceTemplate: {
       type: String,

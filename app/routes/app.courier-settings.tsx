@@ -457,6 +457,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     if (formData.has("pathaoParcelNote")) {
       updateSet.pathaoParcelNote = pathaoParcelNote;
     }
+    const pathaoDefaultWeight = parseFloat(String(formData.get("pathaoDefaultWeight") || ""));
+    if (!isNaN(pathaoDefaultWeight) && pathaoDefaultWeight > 0) {
+      updateSet.pathaoDefaultWeight = pathaoDefaultWeight;
+      updateSet.defaultParcelWeight = pathaoDefaultWeight;
+    }
     if (!isMaskedOrEmpty(pathaoSecret)) {
       updateSet.pathaoSecret = encryptSecret(pathaoSecret);
     } else if (rawExisting?.pathaoSecret) {
@@ -621,6 +626,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     if (formData.has("redxParcelNote")) {
       updateSet.redxParcelNote = redxParcelNote;
     }
+    const redxDefaultWeight = parseFloat(String(formData.get("redxDefaultWeight") || ""));
+    if (!isNaN(redxDefaultWeight) && redxDefaultWeight > 0) {
+      updateSet.redxDefaultWeight = redxDefaultWeight;
+      updateSet.defaultParcelWeight = redxDefaultWeight;
+    }
 
     await CourierConfig.findOneAndUpdate(
       { shopDomain },
@@ -742,6 +752,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const carrybeeParcelNote = String(formData.get("carrybeeParcelNote") || "").trim();
     if (formData.has("carrybeeParcelNote")) {
       updateSet.carrybeeParcelNote = carrybeeParcelNote;
+    }
+    const carrybeeDefaultWeight = parseFloat(String(formData.get("carrybeeDefaultWeight") || ""));
+    if (!isNaN(carrybeeDefaultWeight) && carrybeeDefaultWeight > 0) {
+      updateSet.carrybeeDefaultWeight = carrybeeDefaultWeight;
+      updateSet.defaultParcelWeight = carrybeeDefaultWeight;
     }
 
     await CourierConfig.findOneAndUpdate(

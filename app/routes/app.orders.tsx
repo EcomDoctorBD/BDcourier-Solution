@@ -284,6 +284,96 @@ export interface AutoRoutingConfig {
 const DEFAULT_PRODUCT_PLACEHOLDER =
   "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%239CA3AF'%3E%3Cpath d='M12.378 1.602a.75.75 0 0 0-.756 0L3 6.632l9 5.25 9-5.25-8.622-5.03ZM21.75 7.93l-9 5.25v9.248l8.622-5.03a.75.75 0 0 0 .378-.648V7.93ZM10.5 22.428v-9.248L1.5 7.93v8.82a.75.75 0 0 0 .378.648l8.622 5.03Z'/%3E%3C/svg%3E";
 
+
+/**
+ * SHOPIFY TO KG DYNAMIC UNIT CONVERSION MATRIX & FALLBACK RESOLVER
+ * Converts Grams, Pounds, Ounces, and Kilograms into strict Kilograms (KG).
+ * Falls back to merchant's persistent CourierConfig if order weight is missing/zero.
+ */
+export function calculateOrderWeightKg(params: {
+  lineItems?: Array<{
+    quantity?: number;
+    weight?: number;
+    weightUnit?: string;
+    variant?: { weight?: number; weightUnit?: string };
+    [key: string]: any;
+  }>;
+  orderTotalWeight?: number;
+  courierKey?: string;
+  storeConfig?: any;
+}): number {
+  const { lineItems = [], orderTotalWeight, courierKey, storeConfig } = params;
+
+  let accumulatedWeightKg = 0;
+
+  // 1. Dynamic unit conversion across line items
+  if (Array.isArray(lineItems) && lineItems.length > 0) {
+    for (const item of lineItems) {
+      const qty = Number(item.quantity || 1);
+      const rawWeight = Number(
+        item.weight ??
+        item.variant?.weight ??
+        0
+      );
+      const rawUnit = String(
+        item.weightUnit ??
+        item.variant?.weightUnit ??
+        "KILOGRAMS"
+      ).toUpperCase().trim();
+
+      if (!isNaN(rawWeight) && rawWeight > 0) {
+        let weightInKg = 0;
+        if (rawUnit === "GRAMS" || rawUnit === "G") {
+          weightInKg = rawWeight * 0.001;
+        } else if (rawUnit === "POUNDS" || rawUnit === "LB" || rawUnit === "LBS") {
+          weightInKg = rawWeight * 0.453592;
+        } else if (rawUnit === "OUNCES" || rawUnit === "OZ") {
+          weightInKg = rawWeight * 0.0283495;
+        } else {
+          // Default: KILOGRAMS / KG
+          weightInKg = rawWeight;
+        }
+
+        accumulatedWeightKg += weightInKg * qty;
+      }
+    }
+  }
+
+  // 2. Fallback to Shopify's top-level order totalWeight (Shopify order totalWeight is represented in Grams)
+  if (accumulatedWeightKg <= 0 && orderTotalWeight && !isNaN(Number(orderTotalWeight))) {
+    const rawOrderWeight = Number(orderTotalWeight);
+    if (rawOrderWeight > 0) {
+      accumulatedWeightKg = rawOrderWeight * 0.001;
+    }
+  }
+
+  // 3. Fallback to Merchant's Persistent Settings in CourierConfig
+  if (accumulatedWeightKg <= 0) {
+    const normalizedCourier = String(courierKey || "").toLowerCase().trim();
+    let configuredWeight = 0;
+
+    if (normalizedCourier === "pathao") {
+      configuredWeight = parseFloat(String(storeConfig?.pathaoDefaultWeight || storeConfig?.defaultParcelWeight || "0.5"));
+    } else if (normalizedCourier === "redx") {
+      configuredWeight = parseFloat(String(storeConfig?.redxDefaultWeight || storeConfig?.defaultParcelWeight || "0.5"));
+    } else if (normalizedCourier === "carrybee") {
+      configuredWeight = parseFloat(String(storeConfig?.carrybeeDefaultWeight || storeConfig?.defaultParcelWeight || "0.5"));
+    } else if (normalizedCourier === "bahok") {
+      configuredWeight = parseFloat(String(storeConfig?.bahokDefaultWeight || storeConfig?.defaultParcelWeight || "0.5"));
+    } else if (normalizedCourier === "steadfast") {
+      configuredWeight = parseFloat(String(storeConfig?.steadfastDefaultWeight || storeConfig?.defaultParcelWeight || "0.5"));
+    } else {
+      configuredWeight = parseFloat(String(storeConfig?.defaultParcelWeight || "0.5"));
+    }
+
+    accumulatedWeightKg = !isNaN(configuredWeight) && configuredWeight > 0 ? configuredWeight : 0.5;
+  }
+
+  // 4. Safe rounding to 2 decimal places to avoid floating-point overflow and scientific notation
+  const finalWeight = parseFloat(accumulatedWeightKg.toFixed(2));
+  return Math.max(0.1, finalWeight);
+}
+
 export interface OrderLineItem {
   title: string;
   variantTitle: string;
@@ -291,6 +381,8 @@ export interface OrderLineItem {
   quantity: number;
   unitPrice: string;
   imageUrl?: string;
+  weight?: number;
+  weightUnit?: string;
 }
 
 export interface CourierReconciliationInfo {
@@ -363,6 +455,7 @@ interface RawShopifyOrder {
   codAmount: number;
   warehouseNote: string;
   lineItems: OrderLineItem[];
+  totalWeight?: number;
 }
 
 interface NormalizedOrder extends RawShopifyOrder {
@@ -1517,6 +1610,7 @@ async function dispatchSingleOrderToCourier(params: {
   admin?: any;
   financialStatus?: string;
   totalPrice?: string | number;
+  totalWeight?: number;
 }): Promise<{
   success: boolean;
   orderId: string;
@@ -1809,6 +1903,14 @@ async function dispatchSingleOrderToCourier(params: {
     shippingAddress ||
     "";
 
+  // ==================== DYNAMIC WEIGHT UNIT CONVERSION MATRIX & FALLBACK ====================
+  const parcelWeightKg = calculateOrderWeightKg({
+    lineItems,
+    orderTotalWeight: params.totalWeight,
+    courierKey: activeCourier,
+    storeConfig,
+  });
+
   // 1. AUTOMATIC ZERO-LOCK FOR PREPAID / AUTHORIZED ORDERS
   const rawFinStatus = String(financialStatus || "").toLowerCase().trim();
   const isPrepaidOrder =
@@ -1894,7 +1996,7 @@ async function dispatchSingleOrderToCourier(params: {
         item_type: 2,
         special_instruction: courierInstructionPayload,
         item_quantity: 1,
-        item_weight: 0.5,
+        item_weight: parcelWeightKg,
         amount_to_collect: amountToCollect,
         item_description: `Order ${orderName} from ${shopDomain}`,
       };
@@ -1976,6 +2078,7 @@ async function dispatchSingleOrderToCourier(params: {
         recipient_address: cleanAddress,
         cod_amount: amountToCollect,
         note: courierInstructionPayload,
+        weight: parcelWeightKg,
       };
 
       let sfResponse = await fetch("https://packzy.com/api/v1/create_order", {
@@ -2079,7 +2182,7 @@ async function dispatchSingleOrderToCourier(params: {
           ? `${String(orderName || orderId).replace("#", "").trim()}-R${redispatchCount}`
           : String(orderName || orderId).replace("#", "").trim(),
         cash_collection_amount: String(amountToCollect),
-        parcel_weight: 500,
+        parcel_weight: Math.max(100, Math.round(parcelWeightKg * 1000)),
         instruction: courierInstructionPayload,
         value: amountToCollect || 100,
       };
@@ -2148,6 +2251,7 @@ async function dispatchSingleOrderToCourier(params: {
         recipient_address: cleanAddress,
         collectable_amount: amountToCollect,
         notes: courierInstructionPayload,
+        weight: parcelWeightKg,
       };
 
       const cbResponse = await fetch(`${baseUrl}/api/v1/orders`, {
@@ -2216,6 +2320,7 @@ async function dispatchSingleOrderToCourier(params: {
         recipient_address: cleanAddress,
         cod_amount: amountToCollect,
         instructions: courierInstructionPayload,
+        weight: parcelWeightKg,
       };
 
       const bahokResponse = await fetch(`${baseUrl}/api/v1/orders/create`, {
@@ -2660,6 +2765,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
               zip
               country
             }
+            totalWeight
             lineItems(first: 10) {
               edges {
                 node {
@@ -2673,6 +2779,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
                     }
                   }
                   variant {
+                    weight
+                    weightUnit
                     image {
                       url
                       altText
@@ -2718,6 +2826,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
                 currencyCode
               }
             }
+            totalWeight
             lineItems(first: 10) {
               edges {
                 node {
@@ -2725,6 +2834,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
                   variantTitle
                   sku
                   quantity
+                  variant {
+                    weight
+                    weightUnit
+                  }
                   originalUnitPriceSet {
                     shopMoney {
                       amount
@@ -2822,6 +2935,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
             node.totalPriceSet?.shopMoney?.amount ||
             "0.00",
           imageUrl,
+          weight: item.variant?.weight !== undefined ? Number(item.variant?.weight) : undefined,
+          weightUnit: item.variant?.weightUnit ? String(item.variant?.weightUnit) : undefined,
         };
       });
 
@@ -2847,6 +2962,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         codAmount,
         warehouseNote: node.note || "",
         lineItems,
+        totalWeight: node.totalWeight !== undefined ? Number(node.totalWeight) : undefined,
       };
     });
   } catch (err: any) {
@@ -3222,6 +3338,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           admin,
           financialStatus: String(item.financialStatus || item.displayFinancialStatus || ""),
           totalPrice: item.totalPrice,
+          totalWeight: item.totalWeight ? Number(item.totalWeight) : undefined,
         });
       })
     );
@@ -3351,6 +3468,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     admin,
     financialStatus: String(formData.get("financialStatus") || ""),
     totalPrice: formData.get("totalPrice") ? String(formData.get("totalPrice")) : undefined,
+    totalWeight: formData.get("totalWeight") ? Number(formData.get("totalWeight")) : undefined,
   });
 
   return {
@@ -4248,6 +4366,7 @@ export default function OrdersFulfillmentPage() {
     formData.append("warehouseNote", customNote);
     formData.append("financialStatus", String(order.financialStatus || order.displayFinancialStatus || ""));
     formData.append("totalPrice", String(order.totalPrice || ""));
+    formData.append("totalWeight", String(order.totalWeight || ""));
     formData.append("lineItemsJson", JSON.stringify(order.lineItems));
     formData.append("isRiskyLocked", String(order.isRiskyLocked));
     formData.append("manualOverrideConfirmed", String(isUnlocked));
@@ -4331,6 +4450,7 @@ export default function OrdersFulfillmentPage() {
           manualOverrideConfirmed: Boolean(manuallyUnlockedOrders[order.id]),
           financialStatus: String(order.financialStatus || order.displayFinancialStatus || ""),
           totalPrice: String(order.totalPrice || ""),
+          totalWeight: order.totalWeight,
           manualCityId: manualCityIds[order.id] || null,
           manualZoneId: manualZoneIds[order.id] || null,
           manualAreaId: manualAreaIds[order.id] || null,
