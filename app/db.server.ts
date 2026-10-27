@@ -467,6 +467,71 @@ const courierConfigSchema = new mongoose.Schema(
       type: String,
       default: null,
     },
+    // Shipping Label Configuration
+    labelSize: {
+      type: String,
+      default: "4in x 6in",
+      trim: true,
+    },
+    brandName: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+    brandPhone: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+    brandAddress: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+    brandLogo: {
+      type: String,
+      default: "",
+    },
+    // Invoice Customization
+    invoiceTemplate: {
+      type: String,
+      default: "classic",
+      trim: true,
+    },
+    invoiceBrandName: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+    invoiceBrandPhone: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+    invoiceBrandAddress: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+    invoiceBrandEmail: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+    invoiceBrandWebsite: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+    invoiceBrandLogo: {
+      type: String,
+      default: "",
+    },
+    invoiceAccentColor: {
+      type: String,
+      default: "#2563eb",
+      trim: true,
+    },
   },
   {
     timestamps: true,
