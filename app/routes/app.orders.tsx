@@ -519,6 +519,63 @@ function getSuccessRateBadgeTone(
 }
 
 /**
+ * Master Audit Point 8: Domestic Bangladeshi Taka Currency Formatter
+ * Formats numerical values cleanly into standard comma-separated currency values (e.g., 12500 -> "৳12,500.00" or "Tk. 12,500.00")
+ * Safely handles zero-value tax columns, partial discounts, and prevents floating-point inaccuracies.
+ */
+export function formatTakaCurrency(
+  amount: number | string | null | undefined,
+  options?: {
+    symbol?: string;
+    fallbackToAscii?: boolean;
+    showZeroAsPrepaid?: boolean;
+    decimals?: number;
+    appendCurrencyCode?: boolean;
+  }
+): string {
+  const {
+    symbol = "৳",
+    fallbackToAscii = false,
+    showZeroAsPrepaid = false,
+    decimals = 2,
+    appendCurrencyCode = false,
+  } = options || {};
+
+  const cleanSymbol = fallbackToAscii
+    ? "Tk. "
+    : symbol === "Tk"
+    ? "Tk. "
+    : symbol.endsWith(" ")
+    ? symbol
+    : `${symbol}`;
+
+  if (amount === null || amount === undefined || amount === "") {
+    return `${cleanSymbol}0.00`;
+  }
+
+  const num =
+    typeof amount === "number"
+      ? amount
+      : parseFloat(String(amount).replace(/[^0-9.-]/g, ""));
+
+  if (isNaN(num)) {
+    return `${cleanSymbol}0.00`;
+  }
+
+  if (num === 0 && showZeroAsPrepaid) {
+    return `${cleanSymbol}0.00 (PREPAID)`;
+  }
+
+  // Format with strict comma separation and exact decimal precision without floating point drift
+  const parts = Math.abs(num).toFixed(decimals).split(".");
+  parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  const formattedNumber = (num < 0 ? "-" : "") + parts.join(".");
+
+  const result = `${cleanSymbol}${formattedNumber}`;
+  return appendCurrencyCode ? `BDT ${result}` : result;
+}
+
+/**
  * Task 4 Helper: Automatically mutates Shopify Order to Paid & Fulfilled via Admin GraphQL API
  * when courier status is 'delivered' or 'disbursed'.
  */
@@ -3197,6 +3254,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       (storeConfig as any)?.brandLogo ||
       "",
     invoiceAccentColor: (storeConfig as any)?.invoiceAccentColor || "#2563eb",
+    currencySymbol: (storeConfig as any)?.currencySymbol || "৳",
+    fallbackToAscii: Boolean((storeConfig as any)?.fallbackToAscii),
   };
 
   return {
@@ -6569,11 +6628,13 @@ export default function OrdersFulfillmentPage() {
                                         Number(slip.codAmount) === 0
                                           ? "#047857"
                                           : "#000000",
+                                      whiteSpace: "nowrap",
+                                      fontVariantNumeric: "tabular-nums",
                                     }}
                                   >
                                     {Number(slip.codAmount) === 0
-                                      ? "PREPAID (৳0 COD)"
-                                      : `${slip.currencyCode} ৳${slip.codAmount}`}
+                                      ? `PREPAID (${formatTakaCurrency(0, { symbol: shippingLabelConfig?.currencySymbol || "৳" })} COD)`
+                                      : formatTakaCurrency(slip.codAmount, { symbol: shippingLabelConfig?.currencySymbol || "৳" })}
                                   </div>
                                 </div>
                                 <div style={{ textAlign: "right" }}>
@@ -6755,6 +6816,31 @@ export default function OrdersFulfillmentPage() {
                           invoiceConfig?.invoiceTemplate ||
                           "classic"
                         ).toLowerCase();
+
+                        // Master Audit Point 8: Domestic Currency Formatting & Financial Aggregate Matrix
+                        const currencySymbol = invoiceConfig?.currencySymbol || "৳";
+                        const fallbackToAscii = Boolean(invoiceConfig?.fallbackToAscii);
+
+                        const formatPrice = (amt: number | string | null | undefined, showZeroAsPrepaid = false) =>
+                          formatTakaCurrency(amt, {
+                            symbol: currencySymbol,
+                            fallbackToAscii,
+                            showZeroAsPrepaid,
+                            decimals: 2,
+                          });
+
+                        const invoiceTotalItemsCount = slip.lineItems.reduce(
+                          (acc, it) => acc + (it.quantity || 1),
+                          0
+                        );
+                        const subtotal = slip.lineItems.reduce(
+                          (acc, it) => acc + (Number(it.unitPrice) || 0) * (it.quantity || 1),
+                          0
+                        );
+                        const orderTotalPrice = Number(matchingOrder?.totalPrice || slip.codAmount || 0);
+                        const deliveryCharge = orderTotalPrice > subtotal ? orderTotalPrice - subtotal : 0;
+                        const taxAmount = 0; // Standard domestic VAT included or zero-rated
+                        const totalCodPayable = Number(slip.codAmount) || 0;
 
                         // A. CLASSIC MINIMALIST INVOICE
                         if (
@@ -7083,18 +7169,22 @@ export default function OrdersFulfillmentPage() {
                                               style={{
                                                 padding: "8px 10px",
                                                 textAlign: "right",
+                                                whiteSpace: "nowrap",
+                                                fontVariantNumeric: "tabular-nums",
                                               }}
                                             >
-                                              ৳{itemUnitPrice.toLocaleString()}
+                                              {formatPrice(itemUnitPrice)}
                                             </td>
                                             <td
                                               style={{
                                                 padding: "8px 10px",
                                                 textAlign: "right",
                                                 fontWeight: 700,
+                                                whiteSpace: "nowrap",
+                                                fontVariantNumeric: "tabular-nums",
                                               }}
                                             >
-                                              ৳{itemTotal.toLocaleString()}
+                                              {formatPrice(itemTotal)}
                                             </td>
                                           </tr>
                                         );
@@ -7110,11 +7200,12 @@ export default function OrdersFulfillmentPage() {
                                     justifyContent: "space-between",
                                     alignItems: "flex-start",
                                     marginTop: "16px",
+                                    gap: "16px",
                                   }}
                                 >
                                   <div
                                     style={{
-                                      maxWidth: "55%",
+                                      maxWidth: "52%",
                                       fontSize: "11px",
                                       color: "#4b5563",
                                     }}
@@ -7122,40 +7213,108 @@ export default function OrdersFulfillmentPage() {
                                     <strong>Note / Instructions:</strong>{" "}
                                     {effectiveNote}
                                   </div>
-                                  <div style={{ width: "220px", fontSize: "12px" }}>
+                                  <div
+                                    style={{
+                                      minWidth: "240px",
+                                      maxWidth: "260px",
+                                      fontSize: "12px",
+                                      fontFamily:
+                                        "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans Bengali', sans-serif",
+                                    }}
+                                  >
                                     <div
                                       style={{
                                         display: "flex",
                                         justifyContent: "space-between",
+                                        alignItems: "center",
                                         padding: "3px 0",
                                         color: "#4b5563",
                                       }}
                                     >
-                                      <span>Items Total:</span>
-                                      <span>
-                                        {slip.lineItems.reduce(
-                                          (acc, it) =>
-                                            acc + (it.quantity || 1),
-                                          0
-                                        )}{" "}
-                                        Pcs
+                                      <span style={{ whiteSpace: "nowrap" }}>
+                                        Subtotal ({invoiceTotalItemsCount} Pcs):
+                                      </span>
+                                      <span
+                                        style={{
+                                          whiteSpace: "nowrap",
+                                          fontVariantNumeric: "tabular-nums",
+                                          fontWeight: 600,
+                                        }}
+                                      >
+                                        {formatPrice(subtotal)}
                                       </span>
                                     </div>
                                     <div
                                       style={{
                                         display: "flex",
                                         justifyContent: "space-between",
-                                        padding: "6px 0",
-                                        borderTop: "2px solid #111827",
-                                        fontSize: "14px",
-                                        fontWeight: 800,
+                                        alignItems: "center",
+                                        padding: "3px 0",
+                                        color: "#4b5563",
                                       }}
                                     >
-                                      <span>Total Collectible:</span>
-                                      <span>
-                                        {Number(slip.codAmount) === 0
-                                          ? "৳0 (PREPAID)"
-                                          : `${slip.currencyCode} ৳${slip.codAmount}`}
+                                      <span style={{ whiteSpace: "nowrap" }}>
+                                        Delivery Charge:
+                                      </span>
+                                      <span
+                                        style={{
+                                          whiteSpace: "nowrap",
+                                          fontVariantNumeric: "tabular-nums",
+                                          fontWeight: 600,
+                                        }}
+                                      >
+                                        {deliveryCharge > 0 ? formatPrice(deliveryCharge) : formatPrice(0)}
+                                      </span>
+                                    </div>
+                                    <div
+                                      style={{
+                                        display: "flex",
+                                        justifyContent: "space-between",
+                                        alignItems: "center",
+                                        padding: "3px 0",
+                                        color: "#4b5563",
+                                      }}
+                                    >
+                                      <span style={{ whiteSpace: "nowrap" }}>
+                                        Estimated Tax (VAT 0%):
+                                      </span>
+                                      <span
+                                        style={{
+                                          whiteSpace: "nowrap",
+                                          fontVariantNumeric: "tabular-nums",
+                                          fontWeight: 600,
+                                        }}
+                                      >
+                                        {formatPrice(taxAmount)}
+                                      </span>
+                                    </div>
+                                    <div
+                                      style={{
+                                        display: "flex",
+                                        justifyContent: "space-between",
+                                        alignItems: "center",
+                                        padding: "6px 0",
+                                        marginTop: "4px",
+                                        borderTop: "2px solid #111827",
+                                        fontSize: "13px",
+                                        fontWeight: 800,
+                                        color: "#111827",
+                                      }}
+                                    >
+                                      <span style={{ whiteSpace: "nowrap" }}>
+                                        Total COD Payable:
+                                      </span>
+                                      <span
+                                        style={{
+                                          whiteSpace: "nowrap",
+                                          fontVariantNumeric: "tabular-nums",
+                                          color:
+                                            totalCodPayable === 0
+                                              ? "#047857"
+                                              : "#111827",
+                                        }}
+                                      >
+                                        {formatPrice(totalCodPayable, true)}
                                       </span>
                                     </div>
                                   </div>
@@ -7302,7 +7461,7 @@ export default function OrdersFulfillmentPage() {
                                             }}
                                           >
                                             {Number(slip.codAmount) === 0
-                                              ? "PREPAID · ৳0 COD"
+                                              ? `PREPAID · ${formatPrice(0)} COD`
                                               : "COD · Due on Delivery"}
                                           </span>
                                         </div>
@@ -7651,18 +7810,22 @@ export default function OrdersFulfillmentPage() {
                                               style={{
                                                 padding: "8px 6px",
                                                 textAlign: "right",
+                                                whiteSpace: "nowrap",
+                                                fontVariantNumeric: "tabular-nums",
                                               }}
                                             >
-                                              ৳{itemUnitPrice.toLocaleString()}
+                                              {formatPrice(itemUnitPrice)}
                                             </td>
                                             <td
                                               style={{
                                                 padding: "8px 6px",
                                                 textAlign: "right",
                                                 fontWeight: 800,
+                                                whiteSpace: "nowrap",
+                                                fontVariantNumeric: "tabular-nums",
                                               }}
                                             >
-                                              ৳{itemTotal.toLocaleString()}
+                                              {formatPrice(itemTotal)}
                                             </td>
                                           </tr>
                                         );
@@ -7677,6 +7840,7 @@ export default function OrdersFulfillmentPage() {
                                       justifyContent: "space-between",
                                       alignItems: "flex-start",
                                       marginTop: "16px",
+                                      gap: "16px",
                                     }}
                                   >
                                     <div
@@ -7690,48 +7854,106 @@ export default function OrdersFulfillmentPage() {
                                     </div>
                                     <div
                                       style={{
-                                        width: "230px",
+                                        minWidth: "240px",
+                                        maxWidth: "260px",
                                         padding: "10px 14px",
                                         borderRadius: "6px",
                                         border: "1px solid #e5e7eb",
                                         backgroundColor: "#f9fafb",
                                         fontSize: "11px",
+                                        fontFamily:
+                                          "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans Bengali', sans-serif",
                                       }}
                                     >
                                       <div
                                         style={{
                                           display: "flex",
                                           justifyContent: "space-between",
+                                          alignItems: "center",
                                           padding: "3px 0",
                                           color: "#4b5563",
                                         }}
                                       >
-                                        <span>Total Items:</span>
-                                        <span>
-                                          {slip.lineItems.reduce(
-                                            (acc, it) =>
-                                              acc + (it.quantity || 1),
-                                            0
-                                          )}{" "}
-                                          Pcs
+                                        <span style={{ whiteSpace: "nowrap" }}>
+                                          Subtotal ({invoiceTotalItemsCount} Pcs):
+                                        </span>
+                                        <span
+                                          style={{
+                                            whiteSpace: "nowrap",
+                                            fontVariantNumeric: "tabular-nums",
+                                            fontWeight: 600,
+                                          }}
+                                        >
+                                          {formatPrice(subtotal)}
                                         </span>
                                       </div>
                                       <div
                                         style={{
                                           display: "flex",
                                           justifyContent: "space-between",
+                                          alignItems: "center",
+                                          padding: "3px 0",
+                                          color: "#4b5563",
+                                        }}
+                                      >
+                                        <span style={{ whiteSpace: "nowrap" }}>
+                                          Delivery Charge:
+                                        </span>
+                                        <span
+                                          style={{
+                                            whiteSpace: "nowrap",
+                                            fontVariantNumeric: "tabular-nums",
+                                            fontWeight: 600,
+                                          }}
+                                        >
+                                          {deliveryCharge > 0 ? formatPrice(deliveryCharge) : formatPrice(0)}
+                                        </span>
+                                      </div>
+                                      <div
+                                        style={{
+                                          display: "flex",
+                                          justifyContent: "space-between",
+                                          alignItems: "center",
+                                          padding: "3px 0",
+                                          color: "#4b5563",
+                                        }}
+                                      >
+                                        <span style={{ whiteSpace: "nowrap" }}>
+                                          Estimated Tax (VAT 0%):
+                                        </span>
+                                        <span
+                                          style={{
+                                            whiteSpace: "nowrap",
+                                            fontVariantNumeric: "tabular-nums",
+                                            fontWeight: 600,
+                                          }}
+                                        >
+                                          {formatPrice(taxAmount)}
+                                        </span>
+                                      </div>
+                                      <div
+                                        style={{
+                                          display: "flex",
+                                          justifyContent: "space-between",
+                                          alignItems: "center",
                                           padding: "6px 0",
+                                          marginTop: "4px",
                                           borderTop: `2px solid ${accent}`,
-                                          fontSize: "14px",
+                                          fontSize: "13px",
                                           fontWeight: 900,
                                           color: accent,
                                         }}
                                       >
-                                        <span>Total Payable:</span>
-                                        <span>
-                                          {Number(slip.codAmount) === 0
-                                            ? "৳0 (PREPAID)"
-                                            : `${slip.currencyCode} ৳${slip.codAmount}`}
+                                        <span style={{ whiteSpace: "nowrap" }}>
+                                          Total COD Payable:
+                                        </span>
+                                        <span
+                                          style={{
+                                            whiteSpace: "nowrap",
+                                            fontVariantNumeric: "tabular-nums",
+                                          }}
+                                        >
+                                          {formatPrice(totalCodPayable, true)}
                                         </span>
                                       </div>
                                     </div>
@@ -8011,11 +8233,13 @@ export default function OrdersFulfillmentPage() {
                                           ? "#047857"
                                           : "#dc2626",
                                       marginTop: "2px",
+                                      whiteSpace: "nowrap",
+                                      fontVariantNumeric: "tabular-nums",
                                     }}
                                   >
                                     {Number(slip.codAmount) === 0
-                                      ? "PREPAID (৳0 COD)"
-                                      : `COLLECT CASH: ${slip.currencyCode} ৳${slip.codAmount}`}
+                                      ? `PREPAID (${formatPrice(0)} COD)`
+                                      : `COLLECT CASH: ${formatPrice(slip.codAmount)}`}
                                   </div>
                                   <div
                                     style={{
@@ -8149,12 +8373,11 @@ export default function OrdersFulfillmentPage() {
                                           padding: "8px 10px",
                                           textAlign: "right",
                                           fontWeight: 700,
+                                          whiteSpace: "nowrap",
+                                          fontVariantNumeric: "tabular-nums",
                                         }}
                                       >
-                                        ৳
-                                        {(
-                                          Number(item.unitPrice) || 0
-                                        ).toLocaleString()}
+                                        {formatPrice(item.unitPrice)}
                                       </td>
                                     </tr>
                                   ))}
