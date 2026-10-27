@@ -825,12 +825,34 @@ const shipmentBookingSchema = new mongoose.Schema(
       default: "⚠️ Fragile - Pack with bubble wrap",
     },
     bookedAt: { type: Date, default: Date.now },
+    bookingHistory: {
+      type: [
+        new mongoose.Schema(
+          {
+            courierKey: { type: String, default: "" },
+            courierName: { type: String, default: "" },
+            trackingNumber: { type: String, default: "" },
+            trackingUrl: { type: String, default: "" },
+            courierStatus: { type: String, default: "" },
+            deliveryStatus: { type: String, default: "" },
+            codAmount: { type: String, default: "0.00" },
+            bookedAt: { type: Date },
+            archivedAt: { type: Date, default: Date.now },
+            reason: { type: String, default: "redispatch" },
+          },
+          { _id: false }
+        ),
+      ],
+      default: [],
+    },
   },
   { timestamps: true }
 );
 
 // Compound Unique Index: prevents duplicate booking documents for the same shop and order
 shipmentBookingSchema.index({ shopDomain: 1, orderId: 1 }, { unique: true });
+shipmentBookingSchema.index({ shopDomain: 1, trackingNumber: 1 });
+shipmentBookingSchema.index({ shopDomain: 1, "bookingHistory.trackingNumber": 1 });
 
 if (mongoose.models.ShipmentBooking) {
   delete mongoose.models.ShipmentBooking;

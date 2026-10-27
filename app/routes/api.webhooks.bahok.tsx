@@ -238,7 +238,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   }
   if (merchantOrderId) {
     const cleanId = merchantOrderId.replace(/[^a-zA-Z0-9_-]/g, "");
-    queryConditions.push({ orderName: { $regex: new RegExp(`^#?${cleanId}$`, "i") } });
+    const baseId = cleanId.replace(/-R\d+$/i, "");
+    queryConditions.push({
+      orderName: { $regex: new RegExp("^#?(" + cleanId + "|" + baseId + ")$", "i") },
+      courierKey: { $in: ["bahok", "Bahok", ""] },
+    });
   }
 
   const isTerminalDelivered =
@@ -280,6 +284,21 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   }
 
   const updateResult = await ShipmentBooking.updateMany(query, { $set: updateDoc });
+
+  // Historical isolation: If active tracking was not matched, update corresponding bookingHistory sub-document
+  const bhConsignmentId = trackingCode || consignmentId;
+  if (bhConsignmentId && (!updateResult.matchedCount || updateResult.matchedCount === 0)) {
+    await ShipmentBooking.updateMany(
+      { shopDomain, "bookingHistory.trackingNumber": bhConsignmentId },
+      {
+        $set: {
+          "bookingHistory.$.courierStatus": normalizedStatus,
+          "bookingHistory.$.deliveryStatus": normalizedStatus,
+          updatedAt: new Date(),
+        },
+      }
+    );
+  }
 
   // 8. Strictly Await Shopify Paid & Fulfilled + Tagging sync on delivered/disbursed (Issue 9.1)
   if (isTerminalDelivered) {

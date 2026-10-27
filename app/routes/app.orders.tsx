@@ -387,6 +387,7 @@ export interface DispatchedSlipRecord {
   trackingNumber: string;
   trackingUrl?: string;
   courierName: string;
+  courierStatus?: string;
   customerName: string;
   customerPhone: string;
   shippingAddress: string;
@@ -1550,26 +1551,81 @@ async function dispatchSingleOrderToCourier(params: {
     totalPrice,
   } = params;
 
-  // 1. Pre-Flight Double-Booking Atomic Check (Issue 8.1 & Extra Trap #5)
+  // 1. Pre-Flight Double-Booking Atomic Check & Re-dispatch Safe Isolation
   const existingBooking: any = await ShipmentBooking.findOne({ shopDomain, orderId }).lean();
+  let isRedispatch = false;
+  let historicalEntryToArchive: any = null;
+
   if (existingBooking) {
-    const hasTracking = Boolean(existingBooking.trackingNumber && String(existingBooking.trackingNumber).trim());
-    const isBookedStatus = ["booked", "in_transit", "delivered", "disbursed"].includes(
-      String(existingBooking.courierStatus || "").toLowerCase()
+    const currentStatus = String(existingBooking.courierStatus || "").toLowerCase().trim();
+    const hasHistoricalTracking = Boolean(
+      existingBooking.trackingNumber && String(existingBooking.trackingNumber).trim()
     );
+
+    // Active in-flight booking check (<60 seconds)
     const isRecentInProgress =
-      String(existingBooking.courierStatus || "").toLowerCase() === "booking_in_progress" &&
+      currentStatus === "booking_in_progress" &&
       existingBooking.updatedAt &&
       Date.now() - new Date(existingBooking.updatedAt).getTime() < 60000;
 
-    if (hasTracking || isBookedStatus || isRecentInProgress) {
+    if (isRecentInProgress) {
       return {
         success: false,
         orderId,
         orderName,
         courierName: existingBooking.courierName || "",
         trackingNumber: existingBooking.trackingNumber || "",
-        message: `Order ${orderName} is already booked or currently being dispatched to a courier.`,
+        message: `Order ${orderName} is currently being dispatched to a courier. Please wait a moment.`,
+      };
+    }
+
+    // Terminal completion check: delivered or disbursed parcels must NOT be re-dispatched
+    const isTerminalDelivered = ["delivered", "disbursed"].includes(currentStatus);
+    if (isTerminalDelivered) {
+      return {
+        success: false,
+        orderId,
+        orderName,
+        courierName: existingBooking.courierName || "",
+        trackingNumber: existingBooking.trackingNumber || "",
+        message: `Order ${orderName} has already been marked as DELIVERED/DISBURSED by ${existingBooking.courierName || "courier"} (${existingBooking.trackingNumber}). Completed deliveries cannot be re-dispatched.`,
+      };
+    }
+
+    // Determine if this order is eligible for re-dispatch:
+    // It has historical tracking but was cancelled, returned, or failed by the courier
+    const isCancelledOrReturned =
+      ["cancelled", "returned", "failed", "partial_delivery", "paid_returned", "return_received", "cancelled_by_courier", "delivery_failed"].includes(
+        currentStatus
+      ) ||
+      currentStatus.includes("cancel") ||
+      currentStatus.includes("return");
+
+    if (hasHistoricalTracking && isCancelledOrReturned) {
+      isRedispatch = true;
+      historicalEntryToArchive = {
+        courierKey: existingBooking.courierKey || "",
+        courierName: existingBooking.courierName || "",
+        trackingNumber: existingBooking.trackingNumber || "",
+        trackingUrl: existingBooking.trackingUrl || "",
+        courierStatus: existingBooking.courierStatus || "cancelled",
+        deliveryStatus: existingBooking.deliveryStatus || "cancelled",
+        codAmount: existingBooking.codAmount || "0.00",
+        bookedAt: existingBooking.bookedAt || existingBooking.createdAt || new Date(),
+        archivedAt: new Date(),
+        reason: `redispatch_from_${existingBooking.courierStatus || "cancelled"}`,
+      };
+    } else if (
+      hasHistoricalTracking &&
+      ["in_transit", "booked", "accepted", "in_review", "processing"].includes(currentStatus)
+    ) {
+      return {
+        success: false,
+        orderId,
+        orderName,
+        courierName: existingBooking.courierName || "",
+        trackingNumber: existingBooking.trackingNumber || "",
+        message: `Order ${orderName} is actively in transit with ${existingBooking.courierName || "courier"} (${existingBooking.trackingNumber}). Please cancel the active shipment before re-dispatching.`,
       };
     }
   }
@@ -1625,21 +1681,47 @@ async function dispatchSingleOrderToCourier(params: {
     quotaReserved = true;
   }
 
-  // 4. Atomic Booking In-Progress Lock in MongoDB
-  await ShipmentBooking.findOneAndUpdate(
-    { shopDomain, orderId },
-    {
-      $set: {
-        shopDomain,
-        orderId,
-        orderName,
-        courierStatus: "booking_in_progress",
-        deliveryStatus: "booking_in_progress",
-        updatedAt: new Date(),
+  // 4. Atomic Booking In-Progress Lock in MongoDB & Clean State Flush
+  if (isRedispatch && historicalEntryToArchive) {
+    // Atomically archive legacy tracking details into history sub-document array
+    // Completely flush out primary active tracking placeholders before compiling the fresh payload
+    await ShipmentBooking.findOneAndUpdate(
+      { shopDomain, orderId },
+      {
+        $push: { bookingHistory: historicalEntryToArchive },
+        $set: {
+          shopDomain,
+          orderId,
+          orderName,
+          trackingNumber: "",
+          trackingUrl: "",
+          courierKey: "",
+          courierName: "",
+          courierStatus: "booking_in_progress",
+          deliveryStatus: "booking_in_progress",
+          updatedAt: new Date(),
+        },
       },
-    },
-    { upsert: true, new: true }
-  );
+      { upsert: true, new: true }
+    );
+  } else {
+    await ShipmentBooking.findOneAndUpdate(
+      { shopDomain, orderId },
+      {
+        $set: {
+          shopDomain,
+          orderId,
+          orderName,
+          courierStatus: "booking_in_progress",
+          deliveryStatus: "booking_in_progress",
+          updatedAt: new Date(),
+        },
+      },
+      { upsert: true, new: true }
+    );
+  }
+
+  let courierDisplayName = "";
 
   // Helper to cleanly rollback quota reservation and in-progress lock on courier failure
   const rollbackBooking = async (errorMessage: string) => {
@@ -1649,11 +1731,29 @@ async function dispatchSingleOrderToCourier(params: {
         { $inc: { monthlyOrderCount: -1 } }
       );
     }
-    await ShipmentBooking.deleteOne({
-      shopDomain,
-      orderId,
-      courierStatus: "booking_in_progress",
-    });
+    if (isRedispatch && historicalEntryToArchive) {
+      // Re-dispatch failure recovery: restore the archived tracking state as inactive/cancelled
+      await ShipmentBooking.updateOne(
+        { shopDomain, orderId, courierStatus: "booking_in_progress" },
+        {
+          $set: {
+            trackingNumber: historicalEntryToArchive.trackingNumber || "",
+            trackingUrl: historicalEntryToArchive.trackingUrl || "",
+            courierKey: historicalEntryToArchive.courierKey || "",
+            courierName: historicalEntryToArchive.courierName || "",
+            courierStatus: historicalEntryToArchive.courierStatus || "cancelled",
+            deliveryStatus: historicalEntryToArchive.deliveryStatus || "cancelled",
+            updatedAt: new Date(),
+          },
+        }
+      );
+    } else {
+      await ShipmentBooking.deleteOne({
+        shopDomain,
+        orderId,
+        courierStatus: "booking_in_progress",
+      });
+    }
     return {
       success: false,
       orderId,
@@ -1729,7 +1829,10 @@ async function dispatchSingleOrderToCourier(params: {
     }
   }
 
-  let courierDisplayName = "";
+  const redispatchCount = isRedispatch
+    ? Number(existingBooking?.bookingHistory?.length || 0) + 1
+    : 0;
+
   let finalTracking = "";
 
   if (activeCourier === "pathao") {
@@ -1788,7 +1891,9 @@ async function dispatchSingleOrderToCourier(params: {
           },
           body: JSON.stringify({
             store_id: Number(storeId) || storeId,
-            merchant_order_id: orderName.replace("#", ""),
+            merchant_order_id: isRedispatch
+              ? `${orderName.replace("#", "").trim()}-R${redispatchCount}`
+              : orderName.replace("#", "").trim(),
             recipient_name: customerName,
             recipient_phone: cleanPhone,
             recipient_address: cleanAddress,
@@ -1836,8 +1941,11 @@ async function dispatchSingleOrderToCourier(params: {
 
     try {
       const sanitizedInvoice = String(orderName || orderId).replace(/[^a-zA-Z0-9_-]/g, "");
+      const sfInvoice = isRedispatch
+        ? `${sanitizedInvoice}-R${redispatchCount}`
+        : sanitizedInvoice;
       const payload = {
-        invoice: sanitizedInvoice,
+        invoice: sfInvoice,
         recipient_name: customerName,
         recipient_phone: cleanPhone,
         recipient_address: cleanAddress,
@@ -1942,7 +2050,9 @@ async function dispatchSingleOrderToCourier(params: {
         delivery_area: deliveryArea,
         delivery_area_id: deliveryAreaId,
         customer_address: cleanAddress,
-        merchant_invoice_id: String(orderName || orderId).replace("#", ""),
+        merchant_invoice_id: isRedispatch
+          ? `${String(orderName || orderId).replace("#", "").trim()}-R${redispatchCount}`
+          : String(orderName || orderId).replace("#", "").trim(),
         cash_collection_amount: String(amountToCollect),
         parcel_weight: 500,
         instruction: courierInstructionPayload,
@@ -2005,7 +2115,9 @@ async function dispatchSingleOrderToCourier(params: {
 
       const payload: Record<string, any> = {
         store_id: storeId || undefined,
-        merchant_order_id: String(orderName || orderId).replace("#", ""),
+        merchant_order_id: isRedispatch
+          ? `${String(orderName || orderId).replace("#", "").trim()}-R${redispatchCount}`
+          : String(orderName || orderId).replace("#", "").trim(),
         recipient_name: customerName,
         recipient_phone: cleanPhone,
         recipient_address: cleanAddress,
@@ -2071,7 +2183,9 @@ async function dispatchSingleOrderToCourier(params: {
 
       const payload: Record<string, any> = {
         merchant_id: merchantId || undefined,
-        merchant_order_id: String(orderName || orderId).replace("#", ""),
+        merchant_order_id: isRedispatch
+          ? `${String(orderName || orderId).replace("#", "").trim()}-R${redispatchCount}`
+          : String(orderName || orderId).replace("#", "").trim(),
         recipient_name: customerName,
         recipient_phone: cleanPhone,
         recipient_address: cleanAddress,
@@ -2234,6 +2348,7 @@ async function dispatchSingleOrderToCourier(params: {
       trackingNumber: finalTracking,
       trackingUrl,
       courierName: courierDisplayName,
+      courierStatus: "in_transit",
       customerName,
       customerPhone: cleanPhone,
       shippingAddress: cleanAddress,
@@ -2419,6 +2534,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         trackingNumber: b.trackingNumber,
         trackingUrl,
         courierName: b.courierName || "Courier",
+        courierStatus: b.courierStatus || "in_transit",
         customerName: b.customerName || "",
         customerPhone: b.customerPhone || "",
         shippingAddress: b.shippingAddress || "",
@@ -4469,8 +4585,16 @@ export default function OrdersFulfillmentPage() {
         ? "Bahok"
         : "Courier";
     }
+    const isHistoricalCancelledOrReturned =
+      dispatchedInfo &&
+      ["cancelled", "returned", "failed", "partial_delivery", "paid_returned", "return_received", "cancelled_by_courier", "delivery_failed"].includes(
+        String(dispatchedInfo.courierStatus || "").toLowerCase()
+      );
+
     const sentBadgeText = dispatchedInfo
-      ? `✅ Sent: ${partnerName}${dispatchedInfo.trackingNumber ? ` [${dispatchedInfo.trackingNumber}]` : ""}`
+      ? isHistoricalCancelledOrReturned
+        ? `⚠️ ${String(dispatchedInfo.courierStatus || "").toLowerCase().includes("return") ? "Returned" : "Cancelled"}: ${partnerName} [${dispatchedInfo.trackingNumber}]`
+        : `✅ Sent: ${partnerName}${dispatchedInfo.trackingNumber ? ` [${dispatchedInfo.trackingNumber}]` : ""}`
       : "";
 
     const rateBadgeTone = order.fraudStats
@@ -5265,7 +5389,7 @@ export default function OrdersFulfillmentPage() {
                   <span>⚡ Sending...</span>
                 </InlineStack>
               </Badge>
-            ) : dispatchedInfo ? (
+            ) : dispatchedInfo && !isHistoricalCancelledOrReturned ? (
               <Badge tone="success" status="success">
                 ✓ Dispatched
               </Badge>
@@ -5284,13 +5408,13 @@ export default function OrdersFulfillmentPage() {
               </Button>
             ) : (
               <Button
-                variant="primary"
+                variant={isHistoricalCancelledOrReturned ? "secondary" : "primary"}
                 size="slim"
                 loading={isRowSubmitting}
                 disabled={isRowCodOverflow}
                 onClick={() => handleSendSingleOrder(order)}
               >
-                Confirm & Dispatch
+                {isHistoricalCancelledOrReturned ? "🔄 Re-dispatch" : "Confirm & Dispatch"}
               </Button>
             )}
           </div>

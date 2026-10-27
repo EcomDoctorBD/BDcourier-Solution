@@ -175,7 +175,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   }
   if (merchantInvoiceId) {
     const cleanInvoice = merchantInvoiceId.replace(/[^a-zA-Z0-9_-]/g, "");
-    queryConditions.push({ orderName: { $regex: new RegExp(`^#?${cleanInvoice}$`, "i") } });
+    const baseInvoice = cleanInvoice.replace(/-R\d+$/i, "");
+    queryConditions.push({
+      orderName: { $regex: new RegExp("^#?(" + cleanInvoice + "|" + baseInvoice + ")$", "i") },
+      courierKey: { $in: ["redx", "RedX", "red_x", ""] },
+    });
   }
 
   const isTerminalDelivered = normalizedStatus === "delivered" || normalizedStatus === "disbursed";
@@ -207,6 +211,20 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   }
 
   const updateResult = await ShipmentBooking.updateMany(query, { $set: updateDoc });
+
+  // Historical isolation: If active tracking was not matched, update corresponding bookingHistory sub-document
+  if (trackingId && (!updateResult.matchedCount || updateResult.matchedCount === 0)) {
+    await ShipmentBooking.updateMany(
+      { shopDomain, "bookingHistory.trackingNumber": trackingId },
+      {
+        $set: {
+          "bookingHistory.$.courierStatus": normalizedStatus,
+          "bookingHistory.$.deliveryStatus": normalizedStatus,
+          updatedAt: new Date(),
+        },
+      }
+    );
+  }
 
   // Await Shopify Paid & Fulfilled + Tagging sync when verified delivered or disbursed (Issue 9.1)
   if (isTerminalDelivered) {
