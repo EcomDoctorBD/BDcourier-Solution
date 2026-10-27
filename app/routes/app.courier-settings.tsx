@@ -409,6 +409,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       pathaoStoreId,
       pathaoStoreName,
     };
+
+    const defaultCourierParam = String(formData.get("defaultCourier") || "").trim();
+    if (defaultCourierParam && ["pathao", "steadfast", "redx", "carrybee", "bahok"].includes(defaultCourierParam)) {
+      updateSet.defaultCourier = defaultCourierParam;
+    }
     if (!isMaskedOrEmpty(pathaoSecret)) {
       updateSet.pathaoSecret = encryptSecret(pathaoSecret);
     } else if (rawExisting?.pathaoSecret) {
@@ -993,6 +998,41 @@ export default function CourierSettingsPage() {
   const [showPathaoSecret, setShowPathaoSecret] = useState(false);
   const [showPathaoPassword, setShowPathaoPassword] = useState(false);
   const [pathaoStores, setPathaoStores] = useState<PathaoStore[]>([]);
+  const [pathaoDefaultWeight, setPathaoDefaultWeight] = useState("0.5");
+  const [pathaoParcelNote, setPathaoParcelNote] = useState("");
+  const [pathaoDeliveryType, setPathaoDeliveryType] = useState("regular");
+
+  const handleResetPathao = () => {
+    setPathaoDefaultWeight("0.5");
+    setPathaoParcelNote("");
+    setPathaoDeliveryType("regular");
+    setDefaultCourier(routingConfig.defaultCourier || "steadfast");
+  };
+
+  const handleResetSteadfast = () => {
+    setSteadfastDeliveryType("home");
+    setSteadfastParcelNote("");
+    setDefaultCourier(routingConfig.defaultCourier || "steadfast");
+  };
+
+  const handleResetRedX = () => {
+    setRedxDefaultWeight("0.5");
+    setRedxParcelNote("");
+    setDefaultCourier(routingConfig.defaultCourier || "steadfast");
+  };
+
+  const handleResetCarrybee = () => {
+    setCarrybeeDefaultWeight("0.5");
+    setCarrybeeParcelNote("");
+    setCarrybeeDeliveryType("normal");
+    setCarrybeeProductType("parcel");
+    setDefaultCourier(routingConfig.defaultCourier || "steadfast");
+  };
+
+  const handleResetBahok = () => {
+    setBahokParcelNote("");
+    setDefaultCourier(routingConfig.defaultCourier || "steadfast");
+  };
 
   const isPathaoConnected = Boolean(
     pathaoClientId.trim() &&
@@ -1046,6 +1086,10 @@ export default function CourierSettingsPage() {
     formData.append("pathaoPassword", pathaoPassword);
     formData.append("pathaoStoreId", pathaoStoreId);
     formData.append("pathaoStoreName", pathaoStoreName);
+    formData.append("defaultCourier", defaultCourier);
+    formData.append("pathaoDefaultWeight", pathaoDefaultWeight);
+    formData.append("pathaoParcelNote", pathaoParcelNote);
+    formData.append("pathaoDeliveryType", pathaoDeliveryType);
     submit(formData, { method: "post" });
   };
 
@@ -1815,43 +1859,86 @@ export default function CourierSettingsPage() {
 
                       {/* Tab 3: Default Settings */}
                       {activeSetupTab === "settings" && (
-                        <BlockStack gap="500">
-                          <div style={{ textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center", gap: "8px" }}>
-                            <Text as="h3" variant="headingMd" fontWeight="bold">Pathao Fulfillment & Delivery Defaults</Text>
-                            <div style={{ maxWidth: "520px" }}>
+                        <Card padding="500">
+                          <BlockStack gap="400">
+                            <BlockStack gap="100">
+                              <Text as="h3" variant="headingMd" fontWeight="bold">Pathao Fulfillment &amp; Delivery Defaults</Text>
                               <Text as="p" variant="bodySm" tone="subdued">
-                                Manage your default Pathao dispatch routing rules, consignment notes, and parcel delivery settings.
+                                Configure default parcel preferences and automated dispatch parameters for Pathao Courier.
                               </Text>
-                            </div>
-                          </div>
-                          <Divider />
-                          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", width: "100%" }}>
-                            <div style={{ width: "100%", maxWidth: "560px", backgroundColor: "#F8FAFC", padding: "20px", borderRadius: "12px", border: "1px solid #E2E8F0" }}>
-                              <BlockStack gap="200">
-                                <Text as="h4" variant="headingSm" fontWeight="semibold">
-                                  Active Warehouse Routing
+                            </BlockStack>
+                            <Divider />
+                            <BlockStack gap="400">
+                              <Checkbox
+                                label="Set Pathao as default courier"
+                                checked={defaultCourier === "pathao"}
+                                onChange={(newChecked) => {
+                                  setDefaultCourier(newChecked ? "pathao" : "steadfast");
+                                }}
+                              />
+                              <TextField
+                                label="Default Parcel Weight (kg)"
+                                type="number"
+                                value={pathaoDefaultWeight}
+                                onChange={(val) => setPathaoDefaultWeight(val)}
+                                placeholder="0.5"
+                                autoComplete="off"
+                                min={0.1}
+                                step={0.1}
+                              />
+                              <TextField
+                                label="Default Parcel Note"
+                                value={pathaoParcelNote}
+                                onChange={(val) => setPathaoParcelNote(val)}
+                                placeholder="e.g. Please call customer before delivery"
+                                multiline={3}
+                                autoComplete="off"
+                                helpText="Don't use any special characters or emoji characters."
+                              />
+                              <BlockStack gap="150">
+                                <Text as="p" variant="bodyMd" fontWeight="medium">
+                                  Default Delivery Type
                                 </Text>
-                                <Text as="p" variant="bodySm" tone="subdued">
-                                  All automated one-click parcel dispatches are assigned to your active Pathao store:{" "}
-                                  <strong>{pathaoStoreName || pathaoStoreId || "Default Store"}</strong> (ID: {pathaoStoreId || "Auto-Selected"}).
-                                </Text>
-                                <Text as="p" variant="bodyXs" tone="subdued">
-                                  To switch or update pickup warehouse locations, use the &quot;Verify Credentials &amp; Fetch Stores&quot; selector in <strong>🔑 API Configuration</strong>.
-                                </Text>
+                                <InlineStack gap="400">
+                                  <RadioButton
+                                    label="Regular Delivery"
+                                    checked={pathaoDeliveryType === "regular"}
+                                    id="pathao_delivery_regular"
+                                    name="pathaoDeliveryType"
+                                    onChange={() => setPathaoDeliveryType("regular")}
+                                  />
+                                  <RadioButton
+                                    label="On Demand Delivery (Express)"
+                                    checked={pathaoDeliveryType === "express"}
+                                    id="pathao_delivery_express"
+                                    name="pathaoDeliveryType"
+                                    onChange={() => setPathaoDeliveryType("express")}
+                                  />
+                                </InlineStack>
                               </BlockStack>
-                            </div>
-                          </div>
-                          <Divider />
-                          <div style={{ display: "flex", justifyContent: "center", width: "100%" }}>
-                            <Button
-                              variant="primary"
-                              loading={isSubmittingPathao}
-                              onClick={handleSavePathao}
-                            >
-                              Save Settings
-                            </Button>
-                          </div>
-                        </BlockStack>
+                              {pathaoStoreId && (
+                                <div style={{ backgroundColor: "#F8FAFC", padding: "14px 16px", borderRadius: "10px", border: "1px solid #E2E8F0" }}>
+                                  <Text as="p" variant="bodySm" tone="subdued">
+                                    Default Pickup Store: <strong>{pathaoStoreName || pathaoStoreId}</strong> (ID: {pathaoStoreId}). Configured under API Configuration.
+                                  </Text>
+                                </div>
+                              )}
+                            </BlockStack>
+                            <Divider />
+                            <InlineStack align="end" gap="300">
+                              <Button variant="secondary" onClick={handleResetPathao}>
+                                Reset
+                              </Button>
+                              <Button
+                                variant="primary"
+                                loading={isSubmittingPathao}
+                                onClick={handleSavePathao}
+                              >
+                                Save Settings
+                              </Button>
+                            </InlineStack>
+                          </BlockStack>
+                        </Card>
                       )}
                     </>
                   )}
@@ -1961,64 +2048,69 @@ export default function CourierSettingsPage() {
 
                       {/* Tab 3: Default Settings */}
                       {activeSetupTab === "settings" && (
-                        <BlockStack gap="400">
-                          <BlockStack gap="100">
-                            <Text as="h3" variant="headingMd" fontWeight="bold">Default Delivery & COD Settings</Text>
-                            <Text as="p" variant="bodySm" tone="subdued">
-                              Configure default parcel preferences and delivery dispatch rules for Steadfast Courier.
-                            </Text>
-                          </BlockStack>
-                          <Divider />
+                        <Card padding="500">
                           <BlockStack gap="400">
-                            <Checkbox
-                              label="Set Steadfast as default courier"
-                              checked={defaultCourier === "steadfast"}
-                              onChange={(newChecked) => {
-                                setDefaultCourier(newChecked ? "steadfast" : "pathao");
-                              }}
-                            />
-                            <BlockStack gap="150">
-                              <Text as="p" variant="bodyMd" fontWeight="medium">
-                                Default Delivery Type
+                            <BlockStack gap="100">
+                              <Text as="h3" variant="headingMd" fontWeight="bold">Default Delivery &amp; COD Settings</Text>
+                              <Text as="p" variant="bodySm" tone="subdued">
+                                Configure default parcel preferences and delivery dispatch rules for Steadfast Courier.
                               </Text>
-                              <InlineStack gap="400">
-                                <RadioButton
-                                  label="Home Delivery"
-                                  checked={steadfastDeliveryType === "home"}
-                                  id="steadfast_delivery_home"
-                                  name="steadfastDeliveryType"
-                                  onChange={() => setSteadfastDeliveryType("home")}
-                                />
-                                <RadioButton
-                                  label="Hub Delivery"
-                                  checked={steadfastDeliveryType === "hub"}
-                                  id="steadfast_delivery_hub"
-                                  name="steadfastDeliveryType"
-                                  onChange={() => setSteadfastDeliveryType("hub")}
-                                />
-                              </InlineStack>
                             </BlockStack>
-                            <TextField
-                              label="Default Parcel Note"
-                              value={steadfastParcelNote}
-                              onChange={(val) => setSteadfastParcelNote(val)}
-                              placeholder="e.g. Please call customer before delivery"
-                              multiline={3}
-                              autoComplete="off"
-                              helpText="Don't use any special characters or emoji characters"
-                            />
+                            <Divider />
+                            <BlockStack gap="400">
+                              <Checkbox
+                                label="Set Steadfast as default courier"
+                                checked={defaultCourier === "steadfast"}
+                                onChange={(newChecked) => {
+                                  setDefaultCourier(newChecked ? "steadfast" : "pathao");
+                                }}
+                              />
+                              <BlockStack gap="150">
+                                <Text as="p" variant="bodyMd" fontWeight="medium">
+                                  Default Delivery Type
+                                </Text>
+                                <InlineStack gap="400">
+                                  <RadioButton
+                                    label="Home Delivery"
+                                    checked={steadfastDeliveryType === "home"}
+                                    id="steadfast_delivery_home"
+                                    name="steadfastDeliveryType"
+                                    onChange={() => setSteadfastDeliveryType("home")}
+                                  />
+                                  <RadioButton
+                                    label="Hub Delivery"
+                                    checked={steadfastDeliveryType === "hub"}
+                                    id="steadfast_delivery_hub"
+                                    name="steadfastDeliveryType"
+                                    onChange={() => setSteadfastDeliveryType("hub")}
+                                  />
+                                </InlineStack>
+                              </BlockStack>
+                              <TextField
+                                label="Default Parcel Note"
+                                value={steadfastParcelNote}
+                                onChange={(val) => setSteadfastParcelNote(val)}
+                                placeholder="e.g. Please call customer before delivery"
+                                multiline={3}
+                                autoComplete="off"
+                                helpText="Don't use any special characters or emoji characters."
+                              />
+                            </BlockStack>
+                            <Divider />
+                            <InlineStack align="end" gap="300">
+                              <Button variant="secondary" onClick={handleResetSteadfast}>
+                                Reset
+                              </Button>
+                              <Button
+                                variant="primary"
+                                loading={isSubmittingSteadfast}
+                                onClick={handleSaveSteadfast}
+                              >
+                                Save Settings
+                              </Button>
+                            </InlineStack>
                           </BlockStack>
-                          <Divider />
-                          <InlineStack align="end">
-                            <Button
-                              variant="primary"
-                              loading={isSubmittingSteadfast}
-                              onClick={handleSaveSteadfast}
-                            >
-                              Save Settings
-                            </Button>
-                          </InlineStack>
-                        </BlockStack>
+                        </Card>
                       )}
                     </>
                   )}
@@ -2187,53 +2279,58 @@ export default function CourierSettingsPage() {
 
                       {/* Tab 3: Default Settings */}
                       {activeSetupTab === "settings" && (
-                        <BlockStack gap="400">
-                          <BlockStack gap="100">
-                            <Text as="h3" variant="headingMd" fontWeight="bold">REDX Fulfillment Defaults</Text>
-                            <Text as="p" variant="bodySm" tone="subdued">
-                              Configure default parcel preferences and automated dispatch parameters for REDX Delivery.
-                            </Text>
-                          </BlockStack>
-                          <Divider />
+                        <Card padding="500">
                           <BlockStack gap="400">
-                            <Checkbox
-                              label="Set Redx as default courier"
-                              checked={defaultCourier === "redx"}
-                              onChange={(newChecked) => {
-                                setDefaultCourier(newChecked ? "redx" : "pathao");
-                              }}
-                            />
-                            <TextField
-                              label="Default Parcel Weight (kg)"
-                              type="number"
-                              value={redxDefaultWeight}
-                              onChange={(val) => setRedxDefaultWeight(val)}
-                              placeholder="0.5"
-                              autoComplete="off"
-                              min={0.1}
-                              step={0.1}
-                            />
-                            <TextField
-                              label="Default Parcel Note"
-                              value={redxParcelNote}
-                              onChange={(val) => setRedxParcelNote(val)}
-                              placeholder="e.g. Handle with care - fragile cosmetics"
-                              multiline={3}
-                              autoComplete="off"
-                              helpText="Don't use any special characters or emoji characters."
-                            />
+                            <BlockStack gap="100">
+                              <Text as="h3" variant="headingMd" fontWeight="bold">REDX Fulfillment Defaults</Text>
+                              <Text as="p" variant="bodySm" tone="subdued">
+                                Configure default parcel preferences and automated dispatch parameters for REDX Delivery.
+                              </Text>
+                            </BlockStack>
+                            <Divider />
+                            <BlockStack gap="400">
+                              <Checkbox
+                                label="Set Redx as default courier"
+                                checked={defaultCourier === "redx"}
+                                onChange={(newChecked) => {
+                                  setDefaultCourier(newChecked ? "redx" : "pathao");
+                                }}
+                              />
+                              <TextField
+                                label="Default Parcel Weight (kg)"
+                                type="number"
+                                value={redxDefaultWeight}
+                                onChange={(val) => setRedxDefaultWeight(val)}
+                                placeholder="0.5"
+                                autoComplete="off"
+                                min={0.1}
+                                step={0.1}
+                              />
+                              <TextField
+                                label="Default Parcel Note"
+                                value={redxParcelNote}
+                                onChange={(val) => setRedxParcelNote(val)}
+                                placeholder="e.g. Handle with care - fragile cosmetics"
+                                multiline={3}
+                                autoComplete="off"
+                                helpText="Don't use any special characters or emoji characters."
+                              />
+                            </BlockStack>
+                            <Divider />
+                            <InlineStack align="end" gap="300">
+                              <Button variant="secondary" onClick={handleResetRedX}>
+                                Reset
+                              </Button>
+                              <Button
+                                variant="primary"
+                                loading={isSubmittingRedx}
+                                onClick={handleSaveRedX}
+                              >
+                                Save Settings
+                              </Button>
+                            </InlineStack>
                           </BlockStack>
-                          <Divider />
-                          <InlineStack align="end">
-                            <Button
-                              variant="primary"
-                              loading={isSubmittingRedx}
-                              onClick={handleSaveRedX}
-                            >
-                              Save Settings
-                            </Button>
-                          </InlineStack>
-                        </BlockStack>
+                        </Card>
                       )}
                     </>
                   )}
@@ -2388,102 +2485,107 @@ export default function CourierSettingsPage() {
 
                       {/* Tab 3: Default Settings */}
                       {activeSetupTab === "settings" && (
-                        <BlockStack gap="400">
-                          <BlockStack gap="100">
-                            <Text as="h3" variant="headingMd" fontWeight="bold">CarryBee Fulfillment Defaults</Text>
-                            <Text as="p" variant="bodySm" tone="subdued">
-                              Configure default parcel preferences and automated dispatch parameters for Carry Bee Logistics.
-                            </Text>
-                          </BlockStack>
-                          <Divider />
+                        <Card padding="500">
                           <BlockStack gap="400">
-                            <Checkbox
-                              label="Set Carry Bee as default courier"
-                              checked={defaultCourier === "carrybee"}
-                              onChange={(newChecked) => {
-                                setDefaultCourier(newChecked ? "carrybee" : "pathao");
-                              }}
-                            />
-                            <TextField
-                              label="Default Parcel Weight (kg)"
-                              type="number"
-                              value={carrybeeDefaultWeight}
-                              onChange={(val) => setCarrybeeDefaultWeight(val)}
-                              placeholder="0.5"
-                              autoComplete="off"
-                              min={0.1}
-                              step={0.1}
-                            />
-                            <TextField
-                              label="Default Parcel Note"
-                              value={carrybeeParcelNote}
-                              onChange={(val) => setCarrybeeParcelNote(val)}
-                              placeholder="e.g. Please call before delivery"
-                              multiline={3}
-                              autoComplete="off"
-                              helpText="Don't use any special characters or emoji characters."
-                            />
-                            <BlockStack gap="150">
-                              <Text as="p" variant="bodyMd" fontWeight="medium">
-                                Default Delivery Type
+                            <BlockStack gap="100">
+                              <Text as="h3" variant="headingMd" fontWeight="bold">CarryBee Fulfillment Defaults</Text>
+                              <Text as="p" variant="bodySm" tone="subdued">
+                                Configure default parcel preferences and automated dispatch parameters for Carry Bee Logistics.
                               </Text>
-                              <InlineStack gap="400">
-                                <RadioButton
-                                  label="Normal Delivery"
-                                  checked={carrybeeDeliveryType === "normal"}
-                                  id="carrybee_delivery_normal"
-                                  name="carrybeeDeliveryType"
-                                  onChange={() => setCarrybeeDeliveryType("normal")}
-                                />
-                                <RadioButton
-                                  label="Express Delivery"
-                                  checked={carrybeeDeliveryType === "express"}
-                                  id="carrybee_delivery_express"
-                                  name="carrybeeDeliveryType"
-                                  onChange={() => setCarrybeeDeliveryType("express")}
-                                />
-                              </InlineStack>
                             </BlockStack>
-                            <BlockStack gap="150">
-                              <Text as="p" variant="bodyMd" fontWeight="medium">
-                                Default Product Type
-                              </Text>
-                              <InlineStack gap="400">
-                                <RadioButton
-                                  label="Parcel"
-                                  checked={carrybeeProductType === "parcel"}
-                                  id="carrybee_product_parcel"
-                                  name="carrybeeProductType"
-                                  onChange={() => setCarrybeeProductType("parcel")}
-                                />
-                                <RadioButton
-                                  label="Book"
-                                  checked={carrybeeProductType === "book"}
-                                  id="carrybee_product_book"
-                                  name="carrybeeProductType"
-                                  onChange={() => setCarrybeeProductType("book")}
-                                />
-                                <RadioButton
-                                  label="Document"
-                                  checked={carrybeeProductType === "document"}
-                                  id="carrybee_product_document"
-                                  name="carrybeeProductType"
-                                  onChange={() => setCarrybeeProductType("document")}
-                                />
-                              </InlineStack>
+                            <Divider />
+                            <BlockStack gap="400">
+                              <Checkbox
+                                label="Set Carry Bee as default courier"
+                                checked={defaultCourier === "carrybee"}
+                                onChange={(newChecked) => {
+                                  setDefaultCourier(newChecked ? "carrybee" : "pathao");
+                                }}
+                              />
+                              <TextField
+                                label="Default Parcel Weight (kg)"
+                                type="number"
+                                value={carrybeeDefaultWeight}
+                                onChange={(val) => setCarrybeeDefaultWeight(val)}
+                                placeholder="0.5"
+                                autoComplete="off"
+                                min={0.1}
+                                step={0.1}
+                              />
+                              <TextField
+                                label="Default Parcel Note"
+                                value={carrybeeParcelNote}
+                                onChange={(val) => setCarrybeeParcelNote(val)}
+                                placeholder="e.g. Please call before delivery"
+                                multiline={3}
+                                autoComplete="off"
+                                helpText="Don't use any special characters or emoji characters."
+                              />
+                              <BlockStack gap="150">
+                                <Text as="p" variant="bodyMd" fontWeight="medium">
+                                  Default Delivery Type
+                                </Text>
+                                <InlineStack gap="400">
+                                  <RadioButton
+                                    label="Normal Delivery"
+                                    checked={carrybeeDeliveryType === "normal"}
+                                    id="carrybee_delivery_normal"
+                                    name="carrybeeDeliveryType"
+                                    onChange={() => setCarrybeeDeliveryType("normal")}
+                                  />
+                                  <RadioButton
+                                    label="Express Delivery"
+                                    checked={carrybeeDeliveryType === "express"}
+                                    id="carrybee_delivery_express"
+                                    name="carrybeeDeliveryType"
+                                    onChange={() => setCarrybeeDeliveryType("express")}
+                                  />
+                                </InlineStack>
+                              </BlockStack>
+                              <BlockStack gap="150">
+                                <Text as="p" variant="bodyMd" fontWeight="medium">
+                                  Default Product Type
+                                </Text>
+                                <InlineStack gap="400">
+                                  <RadioButton
+                                    label="Parcel"
+                                    checked={carrybeeProductType === "parcel"}
+                                    id="carrybee_product_parcel"
+                                    name="carrybeeProductType"
+                                    onChange={() => setCarrybeeProductType("parcel")}
+                                  />
+                                  <RadioButton
+                                    label="Book"
+                                    checked={carrybeeProductType === "book"}
+                                    id="carrybee_product_book"
+                                    name="carrybeeProductType"
+                                    onChange={() => setCarrybeeProductType("book")}
+                                  />
+                                  <RadioButton
+                                    label="Document"
+                                    checked={carrybeeProductType === "document"}
+                                    id="carrybee_product_document"
+                                    name="carrybeeProductType"
+                                    onChange={() => setCarrybeeProductType("document")}
+                                  />
+                                </InlineStack>
+                              </BlockStack>
                             </BlockStack>
+                            <Divider />
+                            <InlineStack align="end" gap="300">
+                              <Button variant="secondary" onClick={handleResetCarrybee}>
+                                Reset
+                              </Button>
+                              <Button
+                                variant="primary"
+                                loading={isSubmittingCarrybee}
+                                onClick={handleSaveCarrybee}
+                              >
+                                Save Settings
+                              </Button>
+                            </InlineStack>
                           </BlockStack>
-                          <Divider />
-                          <InlineStack align="end">
-                            <Button
-                              variant="primary"
-                              loading={isSubmittingCarrybee}
-                              onClick={handleSaveCarrybee}
-                            >
-                              Save Settings
-                            </Button>
-                          </InlineStack>
-                        </BlockStack>
+                        </Card>
                       )}
                     </>
                   )}
@@ -2616,43 +2718,48 @@ export default function CourierSettingsPage() {
 
                       {/* Tab 3: Default Settings */}
                       {activeSetupTab === "settings" && (
-                        <BlockStack gap="400">
-                          <BlockStack gap="100">
-                            <Text as="h3" variant="headingMd" fontWeight="bold">Bahok Fulfillment Defaults</Text>
-                            <Text as="p" variant="bodySm" tone="subdued">
-                              Configure default parcel preferences and automated dispatch parameters for Bahok Courier.
-                            </Text>
-                          </BlockStack>
-                          <Divider />
+                        <Card padding="500">
                           <BlockStack gap="400">
-                            <Checkbox
-                              label="Set Bahok as default courier"
-                              checked={defaultCourier === "bahok"}
-                              onChange={(newChecked) => {
-                                setDefaultCourier(newChecked ? "bahok" : "pathao");
-                              }}
-                            />
-                            <TextField
-                              label="Default Parcel Note"
-                              value={bahokParcelNote}
-                              onChange={(val) => setBahokParcelNote(val)}
-                              placeholder="e.g. Please call customer before delivery"
-                              multiline={3}
-                              autoComplete="off"
-                              helpText="Don't use any special characters or emoji characters."
-                            />
+                            <BlockStack gap="100">
+                              <Text as="h3" variant="headingMd" fontWeight="bold">Bahok Fulfillment Defaults</Text>
+                              <Text as="p" variant="bodySm" tone="subdued">
+                                Configure default parcel preferences and automated dispatch parameters for Bahok Courier.
+                              </Text>
+                            </BlockStack>
+                            <Divider />
+                            <BlockStack gap="400">
+                              <Checkbox
+                                label="Set Bahok as default courier"
+                                checked={defaultCourier === "bahok"}
+                                onChange={(newChecked) => {
+                                  setDefaultCourier(newChecked ? "bahok" : "pathao");
+                                }}
+                              />
+                              <TextField
+                                label="Default Parcel Note"
+                                value={bahokParcelNote}
+                                onChange={(val) => setBahokParcelNote(val)}
+                                placeholder="e.g. Please call customer before delivery"
+                                multiline={3}
+                                autoComplete="off"
+                                helpText="Don't use any special characters or emoji characters."
+                              />
+                            </BlockStack>
+                            <Divider />
+                            <InlineStack align="end" gap="300">
+                              <Button variant="secondary" onClick={handleResetBahok}>
+                                Reset
+                              </Button>
+                              <Button
+                                variant="primary"
+                                loading={isSubmittingBahok}
+                                onClick={handleSaveBahok}
+                              >
+                                Save Settings
+                              </Button>
+                            </InlineStack>
                           </BlockStack>
-                          <Divider />
-                          <InlineStack align="end">
-                            <Button
-                              variant="primary"
-                              loading={isSubmittingBahok}
-                              onClick={handleSaveBahok}
-                            >
-                              Save Settings
-                            </Button>
-                          </InlineStack>
-                        </BlockStack>
+                        </Card>
                       )}
                     </>
                   )}
