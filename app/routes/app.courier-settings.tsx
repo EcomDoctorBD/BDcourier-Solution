@@ -536,7 +536,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   // ==================== 3. SAVE REDX CREDENTIALS ====================
   if (actionType === "saveRedX") {
     const rawExisting: any = await CourierConfig.findOne({ shopDomain }).lean();
-    const redxEnvironment = String(formData.get("redxEnvironment") || "production").trim();
+    const redxEnvironment = "production";
     const redxAccessToken = String(formData.get("redxAccessToken") || "").trim();
     const redxPickupStoreId = String(formData.get("redxPickupStoreId") || "").trim();
     const redxPickupStoreName = String(formData.get("redxPickupStoreName") || "").trim();
@@ -548,7 +548,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
     const updateSet: Record<string, any> = {
       shopDomain,
-      redxEnvironment: redxEnvironment === "sandbox" ? "sandbox" : "production",
+      redxEnvironment: "production",
       redxPickupStoreId: pickupId,
       redxPickupStoreName,
       redxProfileId: profileId,
@@ -558,6 +558,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       updateSet.redxAccessToken = encryptSecret(redxAccessToken);
     } else if (rawExisting?.redxAccessToken) {
       updateSet.redxAccessToken = rawExisting.redxAccessToken;
+    }
+
+    const defaultCourierParam = String(formData.get("defaultCourier") || "").trim();
+    if (defaultCourierParam && ["pathao", "steadfast", "redx", "carrybee", "bahok"].includes(defaultCourierParam)) {
+      updateSet.defaultCourier = defaultCourierParam;
     }
 
     await CourierConfig.findOneAndUpdate(
@@ -1061,9 +1066,7 @@ export default function CourierSettingsPage() {
   };
 
   // ==================== 3. REDX GATEWAY STATE ====================
-  const [redxEnvironment, setRedxEnvironment] = useState(
-    courierConfig.redxEnvironment || "production"
-  );
+  const redxEnvironment = "production";
   const [redxAccessToken, setRedxAccessToken] = useState(courierConfig.redxAccessToken || "");
   const [redxPickupStoreId, setRedxPickupStoreId] = useState(
     courierConfig.redxPickupStoreId || courierConfig.redxLocationId || ""
@@ -1077,6 +1080,8 @@ export default function CourierSettingsPage() {
   );
   const [showRedxToken, setShowRedxToken] = useState(false);
   const [redxStores, setRedxStores] = useState<RedxStore[]>([]);
+  const [redxDefaultWeight, setRedxDefaultWeight] = useState("0.5");
+  const [redxParcelNote, setRedxParcelNote] = useState("");
 
   const isRedxConnected = Boolean(
     ((courierConfig.hasRedxAccessToken || redxAccessToken.trim()) && redxPickupStoreId.trim()) ||
@@ -1094,7 +1099,7 @@ export default function CourierSettingsPage() {
   const handleFetchRedxStores = () => {
     const formData = new FormData();
     formData.append("actionType", "fetchRedxStores");
-    formData.append("redxEnvironment", redxEnvironment);
+    formData.append("redxEnvironment", "production");
     formData.append("redxAccessToken", redxAccessToken);
     submit(formData, { method: "post" });
   };
@@ -1102,12 +1107,15 @@ export default function CourierSettingsPage() {
   const handleSaveRedX = () => {
     const formData = new FormData();
     formData.append("actionType", "saveRedX");
-    formData.append("redxEnvironment", redxEnvironment);
+    formData.append("redxEnvironment", "production");
     formData.append("redxAccessToken", redxAccessToken);
     formData.append("redxPickupStoreId", redxPickupStoreId);
     formData.append("redxPickupStoreName", redxPickupStoreName);
     formData.append("redxProfileId", redxProfileId || redxPickupStoreName || redxPickupStoreId);
     formData.append("redxLocationId", redxLocationId || redxPickupStoreId);
+    formData.append("defaultCourier", defaultCourier);
+    formData.append("redxDefaultWeight", redxDefaultWeight);
+    formData.append("redxParcelNote", redxParcelNote);
     submit(formData, { method: "post" });
   };
 
@@ -1946,15 +1954,6 @@ export default function CourierSettingsPage() {
                           </BlockStack>
                           <Divider />
                           <BlockStack gap="300">
-                            <Select
-                              label="API Environment"
-                              options={[
-                                { label: "Production (OpenAPI Live)", value: "production" },
-                                { label: "Sandbox / Test API", value: "sandbox" },
-                              ]}
-                              value={redxEnvironment}
-                              onChange={(val) => setRedxEnvironment(val)}
-                            />
                             <TextField
                               label="API Access Token"
                               type={showRedxToken ? "text" : "password"}
@@ -1984,6 +1983,59 @@ export default function CourierSettingsPage() {
                                 Retrieve your active pickup stores directly from REDX API.
                               </Text>
                             </InlineStack>
+                            {redxStores.length > 0 ? (
+                              <Select
+                                label="Select Pickup Store"
+                                options={[
+                                  { label: "-- Select REDX Pickup Store --", value: "" },
+                                  ...redxStores.map((st) => ({
+                                    label: `${st.name} (ID: ${st.id})`,
+                                    value: String(st.id),
+                                  })),
+                                ]}
+                                value={redxPickupStoreId}
+                                onChange={(val) => {
+                                  setRedxPickupStoreId(val);
+                                  const found = redxStores.find((s) => String(s.id) === String(val));
+                                  if (found) {
+                                    setRedxPickupStoreName(found.name);
+                                    setRedxLocationId(String(val));
+                                    setRedxProfileId(found.name || String(val));
+                                  }
+                                }}
+                                helpText="Selected warehouse is used as origin for REDX pickup dispatches."
+                              />
+                            ) : (
+                              <TextField
+                                label="Pickup Store ID / Location ID"
+                                value={redxPickupStoreId}
+                                onChange={(val) => {
+                                  setRedxPickupStoreId(val);
+                                  setRedxLocationId(val);
+                                }}
+                                placeholder="e.g. 101"
+                                autoComplete="off"
+                                helpText="Your numeric REDX pickup store ID. Click 'Verify Credentials & Fetch Pickup Stores' above to auto-load."
+                              />
+                            )}
+                            <TextField
+                              label="Pickup Store Name / Label"
+                              value={redxPickupStoreName}
+                              onChange={(val) => {
+                                setRedxPickupStoreName(val);
+                                if (!redxProfileId) setRedxProfileId(val);
+                              }}
+                              placeholder="e.g. Dhanmondi Warehouse"
+                              autoComplete="off"
+                            />
+                            <TextField
+                              label="Profile ID"
+                              value={redxProfileId}
+                              onChange={(val) => setRedxProfileId(val)}
+                              placeholder="e.g. MyStore_Profile"
+                              autoComplete="off"
+                              helpText="Merchant Profile identifier used for REDX order tracking."
+                            />
                           </BlockStack>
                           <Divider />
                           <InlineStack align="end">
@@ -2024,16 +2076,16 @@ export default function CourierSettingsPage() {
                               }
                             />
                             <TextField
-                              label="Secret Token"
+                              label="Your Secret Key"
                               value={webhookSecret}
                               readOnly
                               autoComplete="off"
                               connectedRight={
                                 <Button onClick={() => copyToClipboard(webhookSecret, "redx_secret")}>
-                                  {copiedKey === "redx_secret" ? "Copied!" : "Copy Token"}
+                                  {copiedKey === "redx_secret" ? "Copied!" : "Copy Key"}
                                 </Button>
                               }
-                              helpText="Paste in REDX Webhook Secret Token field."
+                              helpText="Paste in REDX Webhook Secret field."
                             />
                             <InlineStack align="end">
                               <Button
@@ -2054,65 +2106,38 @@ export default function CourierSettingsPage() {
                       {activeSetupTab === "settings" && (
                         <BlockStack gap="400">
                           <BlockStack gap="100">
-                            <Text as="h3" variant="headingMd" fontWeight="bold">Default Pickup Store & Location IDs</Text>
+                            <Text as="h3" variant="headingMd" fontWeight="bold">REDX Fulfillment Defaults</Text>
                             <Text as="p" variant="bodySm" tone="subdued">
-                              Map your REDX pickup location and profile identifier.
+                              Configure default parcel preferences and automated dispatch parameters for REDX Delivery.
                             </Text>
                           </BlockStack>
                           <Divider />
-                          <BlockStack gap="300">
-                            {redxStores.length > 0 ? (
-                              <Select
-                                label="Select Pickup Store"
-                                options={[
-                                  { label: "-- Select REDX Pickup Store --", value: "" },
-                                  ...redxStores.map((st) => ({
-                                    label: `${st.name} (ID: ${st.id})`,
-                                    value: String(st.id),
-                                  })),
-                                ]}
-                                value={redxPickupStoreId}
-                                onChange={(val) => {
-                                  setRedxPickupStoreId(val);
-                                  const found = redxStores.find((s) => String(s.id) === String(val));
-                                  if (found) {
-                                    setRedxPickupStoreName(found.name);
-                                    setRedxLocationId(String(val));
-                                    setRedxProfileId(found.name || String(val));
-                                  }
-                                }}
-                                helpText="Selected warehouse is used as origin for REDX pickup dispatches."
-                              />
-                            ) : (
-                              <TextField
-                                label="Pickup Store ID / Location ID"
-                                value={redxPickupStoreId}
-                                onChange={(val) => {
-                                  setRedxPickupStoreId(val);
-                                  setRedxLocationId(val);
-                                }}
-                                placeholder="e.g. 101"
-                                autoComplete="off"
-                                helpText="Your numeric REDX pickup store ID. Click 'Verify Credentials & Fetch Pickup Stores' in Tab 1 to auto-load."
-                              />
-                            )}
-                            <TextField
-                              label="Pickup Store Name / Label"
-                              value={redxPickupStoreName}
-                              onChange={(val) => {
-                                setRedxPickupStoreName(val);
-                                if (!redxProfileId) setRedxProfileId(val);
+                          <BlockStack gap="400">
+                            <Checkbox
+                              label="Set Redx as default courier"
+                              checked={defaultCourier === "redx"}
+                              onChange={(newChecked) => {
+                                setDefaultCourier(newChecked ? "redx" : "pathao");
                               }}
-                              placeholder="e.g. Dhanmondi Warehouse"
-                              autoComplete="off"
                             />
                             <TextField
-                              label="Profile ID"
-                              value={redxProfileId}
-                              onChange={(val) => setRedxProfileId(val)}
-                              placeholder="e.g. MyStore_Profile"
+                              label="Default Parcel Weight (kg)"
+                              type="number"
+                              value={redxDefaultWeight}
+                              onChange={(val) => setRedxDefaultWeight(val)}
+                              placeholder="0.5"
                               autoComplete="off"
-                              helpText="Merchant Profile identifier used for REDX order tracking."
+                              min={0.1}
+                              step={0.1}
+                            />
+                            <TextField
+                              label="Default Parcel Note"
+                              value={redxParcelNote}
+                              onChange={(val) => setRedxParcelNote(val)}
+                              placeholder="e.g. Handle with care - fragile cosmetics"
+                              multiline={3}
+                              autoComplete="off"
+                              helpText="Don't use any special characters or emoji characters."
                             />
                           </BlockStack>
                           <Divider />
