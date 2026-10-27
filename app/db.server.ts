@@ -492,6 +492,52 @@ const courierConfigSchema = new mongoose.Schema(
       type: String,
       default: "",
     },
+    labelStyle: {
+      type: String,
+      default: "standard",
+      trim: true,
+    },
+    socialHandle: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+    warehouseWarning: {
+      type: String,
+      default: "FRAGILE / HANDLE WITH CARE",
+      trim: true,
+    },
+    // Default Courier Parcel Notes
+    pathaoParcelNote: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+    steadfastParcelNote: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+    redxParcelNote: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+    carrybeeParcelNote: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+    bahokParcelNote: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+    defaultParcelNote: {
+      type: String,
+      default: "",
+      trim: true,
+    },
     // Invoice Customization
     invoiceTemplate: {
       type: String,

@@ -1553,6 +1553,37 @@ async function dispatchSingleOrderToCourier(params: {
   const routedCourier = isInsideDhakaResolved ? "pathao" : "steadfast";
   const activeCourier = selectedCourier || routedCourier;
 
+  // ==================== NOTE PRIORITIZATION OVERRIDE LOGIC ====================
+  // 1. Resolve persistent "Default Parcel Note" for the active courier from storeConfig in database
+  let courierDefaultNote = "";
+  const normalizedActiveCourier = String(activeCourier || "").toLowerCase().trim();
+  if (normalizedActiveCourier === "pathao") {
+    courierDefaultNote = String(storeConfig?.pathaoParcelNote || storeConfig?.defaultParcelNote || "").trim();
+  } else if (normalizedActiveCourier === "steadfast") {
+    courierDefaultNote = String(storeConfig?.steadfastParcelNote || storeConfig?.defaultParcelNote || "").trim();
+  } else if (normalizedActiveCourier === "redx") {
+    courierDefaultNote = String(storeConfig?.redxParcelNote || storeConfig?.defaultParcelNote || "").trim();
+  } else if (normalizedActiveCourier === "carrybee") {
+    courierDefaultNote = String(storeConfig?.carrybeeParcelNote || storeConfig?.defaultParcelNote || "").trim();
+  } else if (normalizedActiveCourier === "bahok") {
+    courierDefaultNote = String(storeConfig?.bahokParcelNote || storeConfig?.defaultParcelNote || "").trim();
+  } else {
+    courierDefaultNote = String(storeConfig?.defaultParcelNote || "").trim();
+  }
+
+  // 2. Exact Condition Chain:
+  // 1st Priority (Absolute): Custom text instruction typed/saved directly inside individual order row's "Warehouse Note"
+  // 2nd Priority (Fallback): Persistent "Default Parcel Note" fetched from respective courier's configuration settings
+  const rawWarehouseNote = String(warehouseNote || "").trim();
+  const effectiveWarehouseNote = rawWarehouseNote
+    ? rawWarehouseNote
+    : courierDefaultNote
+      ? courierDefaultNote
+      : "";
+
+  // Courier API transmission instruction (fallback to Shopify Order name if both are completely empty)
+  const courierInstructionPayload = effectiveWarehouseNote || `Shopify Order ${orderName}`;
+
   const cleanPhone = formatBangladeshPhone(customerPhone);
   const cleanAddress =
     addressResolution.cleanAddress ||
@@ -1627,7 +1658,7 @@ async function dispatchSingleOrderToCourier(params: {
             recipient_zone: recipientZone,
             delivery_type: 48,
             item_type: 2,
-            special_instruction: warehouseNote || `Shopify Order ${orderName}`,
+            special_instruction: courierInstructionPayload,
             item_quantity: 1,
             item_weight: 0.5,
             amount_to_collect: amountToCollect,
@@ -1673,7 +1704,7 @@ async function dispatchSingleOrderToCourier(params: {
         recipient_phone: cleanPhone,
         recipient_address: cleanAddress,
         cod_amount: amountToCollect,
-        note: warehouseNote || `Shopify Order ${orderName}`,
+        note: courierInstructionPayload,
       };
 
       let sfResponse = await fetch("https://packzy.com/api/v1/create_order", {
@@ -1776,7 +1807,7 @@ async function dispatchSingleOrderToCourier(params: {
         merchant_invoice_id: String(orderName || orderId).replace("#", ""),
         cash_collection_amount: String(amountToCollect),
         parcel_weight: 500,
-        instruction: warehouseNote || `Shopify Order ${orderName}`,
+        instruction: courierInstructionPayload,
         value: amountToCollect || 100,
       };
 
@@ -1841,7 +1872,7 @@ async function dispatchSingleOrderToCourier(params: {
         recipient_phone: cleanPhone,
         recipient_address: cleanAddress,
         collectable_amount: amountToCollect,
-        notes: warehouseNote || `Shopify Order ${orderName}`,
+        notes: courierInstructionPayload,
       };
 
       const cbResponse = await fetch(`${baseUrl}/api/v1/orders`, {
@@ -1907,7 +1938,7 @@ async function dispatchSingleOrderToCourier(params: {
         recipient_phone: cleanPhone,
         recipient_address: cleanAddress,
         cod_amount: amountToCollect,
-        instructions: warehouseNote || `Shopify Order ${orderName}`,
+        instructions: courierInstructionPayload,
       };
 
       const bahokResponse = await fetch(`${baseUrl}/api/v1/orders/create`, {
@@ -2010,7 +2041,7 @@ async function dispatchSingleOrderToCourier(params: {
         shopifySyncedPaidFulfilled: shopifyFulfilledSuccessfully,
         shopifySyncedAt: shopifyFulfilledSuccessfully ? new Date() : undefined,
         currencyCode,
-        warehouseNote,
+        warehouseNote: effectiveWarehouseNote,
         bookedAt: new Date(bookedAtIso),
       },
     },
@@ -2071,7 +2102,7 @@ async function dispatchSingleOrderToCourier(params: {
       isInsideDhaka: isInsideDhakaResolved,
       codAmount,
       currencyCode,
-      warehouseNote,
+      warehouseNote: effectiveWarehouseNote,
       lineItems,
       bookedAt: bookedAtIso,
     },

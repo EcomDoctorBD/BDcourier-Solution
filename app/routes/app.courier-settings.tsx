@@ -109,6 +109,12 @@ export interface CourierCredentials {
   bahokWebhookSecret: string;
   hasBahokWebhookSecret?: boolean;
   webhookSecret: string;
+  pathaoParcelNote?: string;
+  steadfastParcelNote?: string;
+  redxParcelNote?: string;
+  carrybeeParcelNote?: string;
+  bahokParcelNote?: string;
+  defaultParcelNote?: string;
 }
 
 export interface AiConfig {
@@ -352,6 +358,12 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     bahokWebhookSecret: storeConfig?.bahokWebhookSecret ? MASKED_SECRET : "",
     hasBahokWebhookSecret: Boolean(storeConfig?.bahokWebhookSecret),
     webhookSecret,
+    pathaoParcelNote: storeConfig?.pathaoParcelNote || "",
+    steadfastParcelNote: storeConfig?.steadfastParcelNote || "",
+    redxParcelNote: storeConfig?.redxParcelNote || "",
+    carrybeeParcelNote: storeConfig?.carrybeeParcelNote || "",
+    bahokParcelNote: storeConfig?.bahokParcelNote || "",
+    defaultParcelNote: storeConfig?.defaultParcelNote || "",
   };
 
   let addressCacheCount = 0;
@@ -372,6 +384,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   const shippingLabelConfig = {
     labelSize: (storeConfig as any)?.labelSize || "4in x 6in",
+    labelStyle: (storeConfig as any)?.labelStyle || "standard",
+    socialHandle: (storeConfig as any)?.socialHandle || "",
+    warehouseWarning: (storeConfig as any)?.warehouseWarning || "FRAGILE / HANDLE WITH CARE",
     brandName: (storeConfig as any)?.brandName || "",
     brandPhone: (storeConfig as any)?.brandPhone || "",
     brandAddress: (storeConfig as any)?.brandAddress || "",
@@ -437,6 +452,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const defaultCourierParam = String(formData.get("defaultCourier") || "").trim();
     if (defaultCourierParam && ["pathao", "steadfast", "redx", "carrybee", "bahok"].includes(defaultCourierParam)) {
       updateSet.defaultCourier = defaultCourierParam;
+    }
+    const pathaoParcelNote = String(formData.get("pathaoParcelNote") || "").trim();
+    if (formData.has("pathaoParcelNote")) {
+      updateSet.pathaoParcelNote = pathaoParcelNote;
     }
     if (!isMaskedOrEmpty(pathaoSecret)) {
       updateSet.pathaoSecret = encryptSecret(pathaoSecret);
@@ -544,6 +563,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     if (defaultCourierParam && ["pathao", "steadfast", "redx", "carrybee", "bahok"].includes(defaultCourierParam)) {
       updateSet.defaultCourier = defaultCourierParam;
     }
+    const steadfastParcelNote = String(formData.get("steadfastParcelNote") || "").trim();
+    if (formData.has("steadfastParcelNote")) {
+      updateSet.steadfastParcelNote = steadfastParcelNote;
+    }
 
     await CourierConfig.findOneAndUpdate(
       { shopDomain },
@@ -593,6 +616,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const defaultCourierParam = String(formData.get("defaultCourier") || "").trim();
     if (defaultCourierParam && ["pathao", "steadfast", "redx", "carrybee", "bahok"].includes(defaultCourierParam)) {
       updateSet.defaultCourier = defaultCourierParam;
+    }
+    const redxParcelNote = String(formData.get("redxParcelNote") || "").trim();
+    if (formData.has("redxParcelNote")) {
+      updateSet.redxParcelNote = redxParcelNote;
     }
 
     await CourierConfig.findOneAndUpdate(
@@ -712,6 +739,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     if (defaultCourierParam && ["pathao", "steadfast", "redx", "carrybee", "bahok"].includes(defaultCourierParam)) {
       updateSet.defaultCourier = defaultCourierParam;
     }
+    const carrybeeParcelNote = String(formData.get("carrybeeParcelNote") || "").trim();
+    if (formData.has("carrybeeParcelNote")) {
+      updateSet.carrybeeParcelNote = carrybeeParcelNote;
+    }
 
     await CourierConfig.findOneAndUpdate(
       { shopDomain },
@@ -763,6 +794,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const defaultCourierParam = String(formData.get("defaultCourier") || "").trim();
     if (defaultCourierParam && ["pathao", "steadfast", "redx", "carrybee", "bahok"].includes(defaultCourierParam)) {
       updateSet.defaultCourier = defaultCourierParam;
+    }
+    const bahokParcelNote = String(formData.get("bahokParcelNote") || "").trim();
+    if (formData.has("bahokParcelNote")) {
+      updateSet.bahokParcelNote = bahokParcelNote;
     }
 
     await CourierConfig.findOneAndUpdate(
@@ -922,6 +957,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   // ==================== 8. SAVE SHIPPING LABEL SETTINGS ====================
   if (actionType === "saveShippingLabelSettings") {
     const labelSize = String(formData.get("labelSize") || "4in x 6in").trim();
+    const labelStyle = String(formData.get("labelStyle") || "standard").trim();
+    const socialHandle = String(formData.get("socialHandle") || "").trim();
+    const warehouseWarning = String(formData.get("warehouseWarning") || "FRAGILE / HANDLE WITH CARE").trim();
     const brandName = String(formData.get("brandName") || "").trim();
     const brandPhone = String(formData.get("brandPhone") || "").trim();
     const brandAddress = String(formData.get("brandAddress") || "").trim();
@@ -932,6 +970,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       {
         $set: {
           labelSize,
+          labelStyle,
+          socialHandle,
+          warehouseWarning,
           brandName,
           brandPhone,
           brandAddress,
@@ -1089,7 +1130,7 @@ export default function CourierSettingsPage() {
   const [showPathaoPassword, setShowPathaoPassword] = useState(false);
   const [pathaoStores, setPathaoStores] = useState<PathaoStore[]>([]);
   const [pathaoDefaultWeight, setPathaoDefaultWeight] = useState("0.5");
-  const [pathaoParcelNote, setPathaoParcelNote] = useState("");
+  const [pathaoParcelNote, setPathaoParcelNote] = useState(courierConfig.pathaoParcelNote || "");
   const [pathaoDeliveryType, setPathaoDeliveryType] = useState("regular");
 
   const handleResetPathao = () => {
@@ -1188,7 +1229,7 @@ export default function CourierSettingsPage() {
   const [steadfastSecretKey, setSteadfastSecretKey] = useState(courierConfig.steadfastSecretKey);
   const [showSteadfastSecret, setShowSteadfastSecret] = useState(false);
   const [steadfastDeliveryType, setSteadfastDeliveryType] = useState("home");
-  const [steadfastParcelNote, setSteadfastParcelNote] = useState("");
+  const [steadfastParcelNote, setSteadfastParcelNote] = useState(courierConfig.steadfastParcelNote || "");
 
   const isSteadfastConnected = Boolean(
     steadfastApiKey.trim() &&
@@ -1226,7 +1267,7 @@ export default function CourierSettingsPage() {
   const [showRedxToken, setShowRedxToken] = useState(false);
   const [redxStores, setRedxStores] = useState<RedxStore[]>([]);
   const [redxDefaultWeight, setRedxDefaultWeight] = useState("0.5");
-  const [redxParcelNote, setRedxParcelNote] = useState("");
+  const [redxParcelNote, setRedxParcelNote] = useState(courierConfig.redxParcelNote || "");
 
   const isRedxConnected = Boolean(
     ((courierConfig.hasRedxAccessToken || redxAccessToken.trim()) && redxPickupStoreId.trim()) ||
@@ -1275,7 +1316,7 @@ export default function CourierSettingsPage() {
   const [showCarrybeeContext, setShowCarrybeeContext] = useState(false);
   const [showCarrybeeWebhookSecret, setShowCarrybeeWebhookSecret] = useState(false);
   const [carrybeeDefaultWeight, setCarrybeeDefaultWeight] = useState("0.5");
-  const [carrybeeParcelNote, setCarrybeeParcelNote] = useState("");
+  const [carrybeeParcelNote, setCarrybeeParcelNote] = useState(courierConfig.carrybeeParcelNote || "");
   const [carrybeeDeliveryType, setCarrybeeDeliveryType] = useState("normal");
   const [carrybeeProductType, setCarrybeeProductType] = useState("parcel");
 
@@ -1313,7 +1354,7 @@ export default function CourierSettingsPage() {
   const [bahokWebhookSecret, setBahokWebhookSecret] = useState(courierConfig.bahokWebhookSecret || "");
   const [showBahokToken, setShowBahokToken] = useState(false);
   const [showBahokWebhookSecret, setShowBahokWebhookSecret] = useState(false);
-  const [bahokParcelNote, setBahokParcelNote] = useState("");
+  const [bahokParcelNote, setBahokParcelNote] = useState(courierConfig.bahokParcelNote || "");
 
   const isBahokConnected = Boolean(
     bahokApiKey.trim() &&
@@ -1528,6 +1569,15 @@ export default function CourierSettingsPage() {
   const [labelSize, setLabelSize] = useState<string>(
     shippingLabelConfig?.labelSize || "4in x 6in"
   );
+  const [labelStyle, setLabelStyle] = useState<string>(
+    shippingLabelConfig?.labelStyle || "standard"
+  );
+  const [socialHandle, setSocialHandle] = useState<string>(
+    shippingLabelConfig?.socialHandle || ""
+  );
+  const [warehouseWarning, setWarehouseWarning] = useState<string>(
+    shippingLabelConfig?.warehouseWarning || "FRAGILE / HANDLE WITH CARE"
+  );
   const [brandName, setBrandName] = useState<string>(
     shippingLabelConfig?.brandName || ""
   );
@@ -1600,6 +1650,9 @@ export default function CourierSettingsPage() {
     const formData = new FormData();
     formData.append("actionType", "saveShippingLabelSettings");
     formData.append("labelSize", labelSize);
+    formData.append("labelStyle", labelStyle);
+    formData.append("socialHandle", socialHandle);
+    formData.append("warehouseWarning", warehouseWarning);
     formData.append("brandName", brandName);
     formData.append("brandPhone", brandPhone);
     formData.append("brandAddress", brandAddress);
@@ -3603,6 +3656,107 @@ export default function CourierSettingsPage() {
                     onChange={(val) => setLabelSize(val)}
                   />
 
+                  {/* LABEL DESIGN TEMPLATE (CHOICELIST) WITH PLAN-TIER LOGIC */}
+                  <BlockStack gap="200">
+                    <Text as="span" variant="bodySm" fontWeight="medium">
+                      Label Design Template
+                    </Text>
+                    <ChoiceList
+                      title="Label Design Template"
+                      titleHidden
+                      choices={[
+                        {
+                          label: "Standard Courier Label",
+                          value: "standard",
+                          helpText: (
+                            <span className="flex items-center gap-1.5 text-xs text-gray-500 mt-0.5">
+                              <span className="inline-block px-1.5 py-0.5 bg-gray-100 text-gray-700 font-semibold rounded text-[10px]">
+                                Free & Starter
+                              </span>
+                              <span>Available on Free & Starter Plans</span>
+                            </span>
+                          ),
+                        },
+                        {
+                          label: "Brand-Centric Premium Label (Pro)",
+                          value: "brand_centric",
+                          helpText: (
+                            <span className="flex items-center gap-1.5 text-xs text-gray-500 mt-0.5">
+                              <span className="inline-block px-1.5 py-0.5 bg-blue-100 text-blue-700 font-semibold rounded text-[10px]">
+                                Requires Pro/Growth
+                              </span>
+                              <span>Requires Pro/Growth Plan upgrade</span>
+                            </span>
+                          ),
+                        },
+                        {
+                          label: "Smart Warehouse Slip (Enterprise)",
+                          value: "smart_warehouse",
+                          helpText: (
+                            <span className="flex items-center gap-1.5 text-xs text-gray-500 mt-0.5">
+                              <span className="inline-block px-1.5 py-0.5 bg-purple-100 text-purple-700 font-semibold rounded text-[10px]">
+                                Requires Enterprise
+                              </span>
+                              <span>Requires Advanced/Enterprise Plan upgrade</span>
+                            </span>
+                          ),
+                        },
+                      ]}
+                      selected={labelStyle ? [labelStyle] : ["standard"]}
+                      onChange={(selected) => setLabelStyle(selected[0] || "standard")}
+                    />
+                  </BlockStack>
+
+                  {/* PRO TIER FIELD: Social Media Handle */}
+                  {labelStyle === "brand_centric" && (
+                    <TextField
+                      label="Instagram / Facebook handle (@brand)"
+                      value={socialHandle}
+                      onChange={(val) => setSocialHandle(val)}
+                      placeholder="e.g. @safeparcelbd or fb.com/safeparcelbd"
+                      autoComplete="off"
+                      helpText="Printed on label header to encourage social media follows and customer engagement."
+                    />
+                  )}
+
+                  {/* ENTERPRISE TIER FIELD: Fallback Custom Warehouse Warning Label */}
+                  {labelStyle === "smart_warehouse" && (
+                    <BlockStack gap="200">
+                      <Select
+                        label="Fallback Warehouse Warning Label"
+                        options={[
+                          { label: "FRAGILE / HANDLE WITH CARE", value: "FRAGILE / HANDLE WITH CARE" },
+                          { label: "DO NOT BEND / WATERPROOF", value: "DO NOT BEND / WATERPROOF" },
+                          { label: "VERIFY CONTENTS BEFORE DELIVERY", value: "VERIFY CONTENTS BEFORE DELIVERY" },
+                          { label: "KEEP DRY / APPAREL GOODS", value: "KEEP DRY / APPAREL GOODS" },
+                          { label: "HIGH VALUE CONSIGNMENT", value: "HIGH VALUE CONSIGNMENT" },
+                          { label: "Custom Warning...", value: "custom" },
+                        ]}
+                        value={[
+                          "FRAGILE / HANDLE WITH CARE",
+                          "DO NOT BEND / WATERPROOF",
+                          "VERIFY CONTENTS BEFORE DELIVERY",
+                          "KEEP DRY / APPAREL GOODS",
+                          "HIGH VALUE CONSIGNMENT",
+                        ].includes(warehouseWarning) ? warehouseWarning : "custom"}
+                        onChange={(val) => {
+                          if (val !== "custom") {
+                            setWarehouseWarning(val);
+                          }
+                        }}
+                        helpText="Select preset handling instruction or customize text below."
+                      />
+                      <TextField
+                        label="Warning Label Text"
+                        labelHidden
+                        value={warehouseWarning}
+                        onChange={(val) => setWarehouseWarning(val)}
+                        placeholder="e.g. FRAGILE / HANDLE WITH CARE"
+                        autoComplete="off"
+                      />
+                    </BlockStack>
+                  )}
+
                   <TextField
                     label="Brand Name"
                     value={brandName}
@@ -3772,6 +3926,22 @@ export default function CourierSettingsPage() {
                             {brandName}
                           </div>
                         )}
+                        {labelStyle === "brand_centric" && socialHandle.trim() && (
+                          <div
+                            style={{
+                              fontSize: "10px",
+                              fontWeight: 700,
+                              color: "#1d4ed8",
+                              marginTop: "3px",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              gap: "4px",
+                            }}
+                          >
+                            <span>📱 {socialHandle.startsWith("@") ? socialHandle : `@${socialHandle}`}</span>
+                          </div>
+                        )}
                         {!isCompactLabel && (brandPhone.trim() || brandAddress.trim()) && (
                           <div
                             style={{
@@ -3860,6 +4030,143 @@ export default function CourierSettingsPage() {
                           DE0000000301BD
                         </div>
                       </div>
+
+                      {/* DYNAMIC TEMPLATE-SPECIFIC FOOTER / EXTRA SECTION */}
+                      {labelStyle === "standard" && (
+                        <div
+                          style={{
+                            borderTop: "1.5px dashed #000000",
+                            paddingTop: "6px",
+                            marginTop: "2px",
+                            fontSize: "10px",
+                            color: "#374151",
+                            lineHeight: 1.3,
+                          }}
+                        >
+                          <strong>Note:</strong> Please handle with care • Fragile (Standard Fallback)
+                        </div>
+                      )}
+
+                      {labelStyle === "brand_centric" && (
+                        <div
+                          style={{
+                            borderTop: "1.5px dashed #000000",
+                            paddingTop: "6px",
+                            marginTop: "2px",
+                            textAlign: "center",
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: "4px",
+                          }}
+                        >
+                          <div
+                            style={{
+                              backgroundColor: "#111827",
+                              color: "#ffffff",
+                              padding: "5px 8px",
+                              borderRadius: "3px",
+                              fontWeight: 800,
+                              fontSize: "10px",
+                              textTransform: "uppercase",
+                              letterSpacing: "0.5px",
+                            }}
+                          >
+                            Thank you for shopping with us!
+                          </div>
+                        </div>
+                      )}
+
+                      {labelStyle === "smart_warehouse" && (
+                        <div
+                          style={{
+                            borderTop: "2px solid #000000",
+                            paddingTop: "6px",
+                            marginTop: "2px",
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: "5px",
+                          }}
+                        >
+                          {/* Fallback Custom Warehouse Warning Label */}
+                          <div
+                            style={{
+                              border: "1.5px solid #000000",
+                              backgroundColor: "#fef3c7",
+                              color: "#92400e",
+                              padding: "3px 6px",
+                              borderRadius: "3px",
+                              fontSize: "9px",
+                              fontWeight: 800,
+                              textAlign: "center",
+                              textTransform: "uppercase",
+                              letterSpacing: "0.5px",
+                            }}
+                          >
+                            ⚠️ {warehouseWarning || "FRAGILE / HANDLE WITH CARE"}
+                          </div>
+
+                          {/* Clean Split-Line at Lower Margin */}
+                          <div
+                            style={{
+                              borderTop: "1px dashed #000000",
+                              paddingTop: "4px",
+                              display: "flex",
+                              justifyContent: "space-between",
+                              fontSize: "9px",
+                              fontWeight: 800,
+                              textTransform: "uppercase",
+                              color: "#000000",
+                            }}
+                          >
+                            <span>FULFILLMENT SLIP</span>
+                            <span>ITEMS: 2</span>
+                          </div>
+
+                          {/* Product Variant Arrays & SKU Lines */}
+                          <div
+                            style={{
+                              display: "flex",
+                              flexDirection: "column",
+                              gap: "3px",
+                              fontSize: "9px",
+                              color: "#111827",
+                            }}
+                          >
+                            <div
+                              style={{
+                                display: "flex",
+                                justifyContent: "space-between",
+                                alignItems: "baseline",
+                                borderBottom: "1px dotted #cccccc",
+                                paddingBottom: "2px",
+                              }}
+                            >
+                              <div>
+                                <div style={{ fontWeight: 700 }}>Item: Dunhill Desire Red - Variant: L</div>
+                                <div style={{ fontSize: "8px", fontFamily: "monospace", color: "#4b5563" }}>
+                                  SKU: DNH-RED-L-01 | Bin: A-04
+                                </div>
+                              </div>
+                              <span style={{ fontWeight: 800 }}>Qty: 1</span>
+                            </div>
+                            <div
+                              style={{
+                                display: "flex",
+                                justifyContent: "space-between",
+                                alignItems: "baseline",
+                              }}
+                            >
+                              <div>
+                                <div style={{ fontWeight: 700 }}>Item: Denim Indigo Jean - Variant: 32</div>
+                                <div style={{ fontSize: "8px", fontFamily: "monospace", color: "#4b5563" }}>
+                                  SKU: JNS-IND-32-04 | Bin: B-02
+                                </div>
+                              </div>
+                              <span style={{ fontWeight: 800 }}>Qty: 1</span>
+                            </div>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}
