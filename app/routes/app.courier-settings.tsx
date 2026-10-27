@@ -42,6 +42,7 @@ import {
 
 import { authenticate } from "../shopify.server";
 import { CourierLogo } from "../components/CourierLogo";
+import { DynamicBarcodeGraphic } from "./app.orders";
 import CourierConfig, {
   connectDB,
   AddressCache,
@@ -4010,40 +4011,11 @@ export default function CourierSettingsPage() {
                           gap: "4px",
                         }}
                       >
-                        <div
-                          style={{
-                            height: isCompactLabel ? "32px" : "42px",
-                            width: "90%",
-                            display: "flex",
-                            alignItems: "stretch",
-                            justifyContent: "center",
-                            gap: "2px",
-                            backgroundColor: "#FFFFFF",
-                            padding: "2px",
-                          }}
-                        >
-                          {[
-                            3, 1, 4, 1, 2, 1, 3, 2, 1, 4, 2, 1, 3, 1, 2, 4, 1, 2, 3, 1, 4, 1, 2, 1, 3, 2, 1, 4, 2, 1, 3,
-                          ].map((w, idx) => (
-                            <span
-                              key={idx}
-                              style={{
-                                width: `${w}px`,
-                                backgroundColor: idx % 2 === 0 ? "#000000" : "transparent",
-                              }}
-                            />
-                          ))}
-                        </div>
-                        <div
-                          style={{
-                            fontFamily: "monospace",
-                            fontSize: "11px",
-                            fontWeight: 700,
-                            letterSpacing: "3px",
-                          }}
-                        >
-                          DE0000000301BD
-                        </div>
+                        <DynamicBarcodeGraphic
+                          code="PREVIEW-TRACK-SAMPLE"
+                          height={isCompactLabel ? 28 : 38}
+                          showText={true}
+                        />
                       </div>
 
                       {/* DYNAMIC TEMPLATE-SPECIFIC FOOTER / EXTRA SECTION */}

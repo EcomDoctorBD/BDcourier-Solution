@@ -7,6 +7,7 @@ import {
   decryptCourierConfig,
 } from "../db.server";
 import { syncDeliveredBookingToShopify } from "../services/shopify-sync.server";
+import { validateWebhookRequest, safeCompare } from "../services/webhook-security.server";
 
 /**
  * Constant-time safe string comparison to prevent timing attacks
@@ -83,9 +84,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const pathaoSecret = String(config?.pathaoSecret || "").trim();
 
   // Parse payload safely
+  let rawText = "";
   let body: any = {};
   try {
-    const rawText = await request.text();
+    rawText = await request.text();
     if (rawText) {
       body = JSON.parse(rawText);
     }
@@ -109,14 +111,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     "";
   const queryToken = url.searchParams.get("token")?.trim() || "";
   const bodySecret = String(body?.webhook_integration_secret || "").trim();
-
-  const providedSecrets = [
-    integrationSecretHeader,
-    queryToken,
-    bearerToken,
-    signatureHeader,
-    bodySecret,
-  ].filter(Boolean);
 
   // 3. Handle Pathao Handshake Ping (event: webhook_integration or webhook_test)
   const event = String(body?.event || "").toLowerCase().trim();
@@ -153,16 +147,30 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     );
   }
 
-  // 4. Enforce strict authentication for live status events
-  const isSecretValid = providedSecrets.some(
-    (provided) =>
-      safeCompare(provided, expectedSecret) ||
-      (pathaoSecret && safeCompare(provided, pathaoSecret))
-  );
+  // 4. Master Audit Point 10: Enforce strict cryptographic HMAC signature and token verification
+  const validation = validateWebhookRequest({
+    rawBody: rawText,
+    candidateSecrets: [expectedSecret, pathaoSecret, config?.pathaoClientId, config?.pathaoClientSecret],
+    providedSignatures: [
+      signatureHeader,
+      request.headers.get("X-Signature"),
+      request.headers.get("x-signature"),
+    ],
+    providedTokens: [
+      integrationSecretHeader,
+      queryToken,
+      bearerToken,
+      bodySecret,
+      body?.secret,
+    ],
+  });
 
-  if (!isSecretValid) {
+  if (!validation.isValid) {
     return new Response(
-      JSON.stringify({ error: "Unauthorized: Invalid or missing webhook secret" }),
+      JSON.stringify({
+        error: "Unauthorized: Webhook signature or authorization token verification failed",
+        reason: validation.reason,
+      }),
       {
         status: 401,
         headers: { "Content-Type": "application/json" },

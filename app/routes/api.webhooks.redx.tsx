@@ -7,6 +7,7 @@ import {
   decryptCourierConfig,
 } from "../db.server";
 import { syncDeliveredBookingToShopify } from "../services/shopify-sync.server";
+import { validateWebhookRequest, safeCompare } from "../services/webhook-security.server";
 
 /**
  * Constant-time safe string comparison to prevent timing attacks
@@ -82,21 +83,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const webhookSecret = String(config?.webhookSecret || "").trim();
   const redxAccessToken = String(config?.redxAccessToken || "").trim();
 
-  // 3. Extract provided token from query, Authorization, or custom headers
-  const authHeader = request.headers.get("Authorization") || "";
-  const tokenMatch = authHeader.match(/Bearer\s+(.+)/i);
-  const bearerToken = tokenMatch ? tokenMatch[1].trim() : authHeader.trim();
-  const queryToken = url.searchParams.get("token")?.trim() || "";
-  const redxSignature =
-    request.headers.get("x-redx-signature") ||
-    request.headers.get("X-REDX-SIGNATURE") ||
-    request.headers.get("x-webhook-secret") ||
-    request.headers.get("api-access-token") ||
-    "";
-
+  let rawText = "";
   let body: any = {};
   try {
-    const rawText = await request.text();
+    rawText = await request.text();
     if (rawText) {
       body = JSON.parse(rawText);
     }
@@ -107,17 +97,42 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     });
   }
 
+  // 3. Extract provided token / signature from query, Authorization, or custom headers
+  const authHeader = request.headers.get("Authorization") || "";
+  const tokenMatch = authHeader.match(/Bearer\s+(.+)/i);
+  const bearerToken = tokenMatch ? tokenMatch[1].trim() : authHeader.trim();
+  const queryToken = url.searchParams.get("token")?.trim() || "";
+  const redxSignature =
+    request.headers.get("x-redx-signature") ||
+    request.headers.get("X-REDX-SIGNATURE") ||
+    "";
   const bodySecret = String(body?.token || body?.secret || "").trim();
-  const providedTokens = [queryToken, bearerToken, redxSignature, bodySecret].filter(Boolean);
-  const allowedSecrets = [webhookSecret, redxAccessToken].filter(Boolean);
 
-  const isAuthenticated = providedTokens.some((provided) =>
-    allowedSecrets.some((secret) => safeCompare(provided, secret))
-  );
+  // Master Audit Point 10: Enforce strict cryptographic signature & token verification gate
+  const validation = validateWebhookRequest({
+    rawBody: rawText,
+    candidateSecrets: [webhookSecret, redxAccessToken],
+    providedSignatures: [
+      redxSignature,
+      request.headers.get("X-Signature"),
+      request.headers.get("x-signature"),
+    ],
+    providedTokens: [
+      queryToken,
+      bearerToken,
+      request.headers.get("api-access-token"),
+      request.headers.get("API-ACCESS-TOKEN"),
+      request.headers.get("x-webhook-secret"),
+      bodySecret,
+    ],
+  });
 
-  if (!isAuthenticated) {
+  if (!validation.isValid) {
     return new Response(
-      JSON.stringify({ error: "Unauthorized: Invalid or missing webhook token" }),
+      JSON.stringify({
+        error: "Unauthorized: Invalid or missing webhook signature/token",
+        reason: validation.reason,
+      }),
       {
         status: 401,
         headers: { "Content-Type": "application/json" },

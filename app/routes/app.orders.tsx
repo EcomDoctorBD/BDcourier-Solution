@@ -3549,73 +3549,161 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   };
 };
 
-function DynamicBarcodeGraphic({
+// Standard ISO/IEC 15417 Code 128 (Subset B) Patterns for Values 0-106
+const CODE128_PATTERNS: string[] = [
+  "212222", "222122", "222221", "121223", "121322", "131222", "122213", "122312", "132212", "221213",
+  "221312", "231212", "112232", "122132", "122231", "113222", "123122", "123221", "223211", "221132",
+  "221231", "213212", "223112", "312131", "311222", "321122", "321221", "312212", "322112", "322211",
+  "212123", "212321", "232121", "111323", "131123", "131321", "112313", "132113", "132311", "211313",
+  "231113", "231311", "112133", "112331", "132131", "113123", "113321", "133121", "313121", "211331",
+  "231131", "213113", "213311", "213131", "311123", "311321", "331121", "312113", "312311", "332111",
+  "314111", "221411", "431111", "111224", "111422", "121124", "121421", "141122", "141221", "112214",
+  "112412", "122114", "122411", "142112", "142211", "241211", "221114", "413111", "241112", "134111",
+  "111242", "121142", "121241", "114212", "124112", "124211", "411212", "421112", "421211", "212141",
+  "214121", "412121", "111143", "111341", "131141", "114113", "114311", "411113", "411311", "113141",
+  "114131", "311141", "411131", "211412", "211214", "211232", "2331112"
+];
+
+function encodeCode128B(text: string): { widths: number[]; totalModules: number } | null {
+  const clean = (text || "").trim();
+  if (!clean) return null;
+
+  const startCode = 104; // Start Code B
+  const values = [startCode];
+  let checksum = startCode;
+
+  for (let i = 0; i < clean.length; i++) {
+    const charCode = clean.charCodeAt(i);
+    let val = charCode - 32;
+    if (val < 0 || val > 95) {
+      val = 0; // fallback to space
+    }
+    values.push(val);
+    checksum += val * (i + 1);
+  }
+
+  const checkDigit = checksum % 103;
+  values.push(checkDigit);
+  values.push(106); // Stop code
+
+  const widths: number[] = [];
+  let totalModules = 0;
+  for (const v of values) {
+    const pattern = CODE128_PATTERNS[v];
+    if (!pattern) continue;
+    for (let j = 0; j < pattern.length; j++) {
+      const w = parseInt(pattern[j], 10);
+      widths.push(w);
+      totalModules += w;
+    }
+  }
+
+  return { widths, totalModules };
+}
+
+export function DynamicBarcodeGraphic({
   code,
-  height = 46,
+  height = 42,
+  showText = false,
+  fontSize = "11px",
 }: {
   code?: string;
   height?: number;
+  showText?: boolean;
+  fontSize?: string;
 }) {
   const cleanCode = (code || "").trim();
   if (!cleanCode) {
     return (
-      <div style={{ display: "inline-block", textAlign: "center", padding: "6px" }}>
+      <div style={{ display: "inline-block", textAlign: "center", padding: "4px" }}>
         <div
           style={{
             fontFamily: "monospace",
-            fontSize: "11px",
-            fontWeight: 600,
+            fontSize: "10px",
+            fontWeight: 700,
             color: "#6b7280",
+            backgroundColor: "#f3f4f6",
+            padding: "2px 6px",
+            borderRadius: "3px",
+            border: "1px dashed #d1d5db",
           }}
         >
-          [ Consignment Pending Booking ]
+          [ PENDING COURIER BOOKING ]
         </div>
       </div>
     );
   }
-  const bars: number[] = [];
-  for (let i = 0; i < cleanCode.length; i++) {
-    const charCode = cleanCode.charCodeAt(i);
-    bars.push((charCode % 3) + 1);
-    bars.push(((charCode >> 2) % 2) + 1);
+
+  const encoded = encodeCode128B(cleanCode);
+  if (!encoded) return null;
+
+  const quietZoneModules = 10;
+  const fullModules = encoded.totalModules + quietZoneModules * 2;
+  const moduleWidth = 1.35;
+  const svgWidth = Math.round(fullModules * moduleWidth);
+
+  let currentX = quietZoneModules * moduleWidth;
+  const rects: { x: number; width: number }[] = [];
+
+  for (let i = 0; i < encoded.widths.length; i++) {
+    const barWidth = encoded.widths[i] * moduleWidth;
+    if (i % 2 === 0) {
+      rects.push({ x: currentX, width: barWidth });
+    }
+    currentX += barWidth;
   }
 
-  let currentX = 4;
   return (
-    <div style={{ display: "inline-block", textAlign: "center" }}>
+    <div
+      style={{
+        display: "inline-flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        flexShrink: 0,
+      }}
+    >
       <svg
-        width={Math.max(150, bars.length * 6 + 12)}
+        width={svgWidth}
         height={height}
-        viewBox={`0 0 ${Math.max(150, bars.length * 6 + 12)} ${height}`}
-        style={{ background: "#ffffff", display: "block" }}
-      >
-        {bars.map((barWidth, idx) => {
-          const xPos = currentX;
-          currentX += barWidth * 2 + 2;
-          return (
-            <rect
-              key={`${idx}-${xPos}`}
-              x={xPos}
-              y={4}
-              width={barWidth * 1.6}
-              height={height - 8}
-              fill="#111827"
-            />
-          );
-        })}
-      </svg>
-      <div
+        viewBox={`0 0 ${svgWidth} ${height}`}
         style={{
-          fontFamily: "monospace",
-          fontSize: "11px",
-          fontWeight: 700,
-          letterSpacing: "1.5px",
-          marginTop: "2px",
-          color: "#111827",
+          background: "#ffffff",
+          display: "block",
+          margin: "0 auto",
+          maxWidth: "100%",
+          shapeRendering: "crispEdges",
         }}
       >
-        *{cleanCode}*
-      </div>
+        <rect x={0} y={0} width={svgWidth} height={height} fill="#ffffff" />
+        {rects.map((r, idx) => (
+          <rect
+            key={idx}
+            x={r.x}
+            y={2}
+            width={r.width}
+            height={height - 4}
+            fill="#000000"
+          />
+        ))}
+      </svg>
+      {showText && (
+        <div
+          style={{
+            fontFamily: "monospace",
+            fontSize,
+            fontWeight: 700,
+            letterSpacing: "1px",
+            marginTop: "1px",
+            color: "#000000",
+            whiteSpace: "nowrap",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+          }}
+        >
+          {cleanCode}
+        </div>
+      )}
     </div>
   );
 }
@@ -6102,6 +6190,19 @@ export default function OrdersFulfillmentPage() {
                           displayedOrders.find((o) => o.id === slip.orderId) ||
                           orders.find((o) => o.id === slip.orderId);
 
+                        // Point 10 Unique Barcode Tracking Enforcement:
+                        // Strictly extract the authentic, live courier consignment tracking string for this exact order block.
+                        const distinctTrackingNumber =
+                          (slip.trackingNumber && slip.trackingNumber.trim() !== ""
+                            ? slip.trackingNumber.trim()
+                            : null) ||
+                          (slip.orderId && dispatchedOrders[slip.orderId]?.trackingNumber?.trim()) ||
+                          (matchingOrder?.id && dispatchedOrders[matchingOrder.id]?.trackingNumber?.trim()) ||
+                          (matchingOrder?.trackingNumber && matchingOrder.trackingNumber.trim() !== ""
+                            ? matchingOrder.trackingNumber.trim()
+                            : null) ||
+                          "";
+
                         const isCancelledOrder = Boolean(
                           slip.isCancelled ||
                           slip.cancelledAt ||
@@ -6638,8 +6739,9 @@ export default function OrdersFulfillmentPage() {
                                   }}
                                 >
                                   <DynamicBarcodeGraphic
-                                    code={slip.trackingNumber}
+                                    code={distinctTrackingNumber}
                                     height={thermalTypography.barcodeHeight}
+                                    showText={false}
                                   />
                                 </div>
                                 <div
@@ -6654,7 +6756,7 @@ export default function OrdersFulfillmentPage() {
                                     fontFamily: "monospace",
                                   }}
                                 >
-                                  {slip.trackingNumber || "PENDING BOOKING"}
+                                  {distinctTrackingNumber || "PENDING BOOKING"}
                                 </div>
                               </div>
 
@@ -7645,10 +7747,11 @@ export default function OrdersFulfillmentPage() {
 
                                     <div style={{ textAlign: "center" }}>
                                       <DynamicBarcodeGraphic
-                                        code={slip.trackingNumber}
+                                        code={distinctTrackingNumber}
                                         height={36}
+                                        showText={false}
                                       />
-                                      {slip.trackingNumber && (
+                                      {distinctTrackingNumber && (
                                         <div
                                           style={{
                                             fontSize: "10px",
@@ -7657,7 +7760,7 @@ export default function OrdersFulfillmentPage() {
                                             color: "#4b5563",
                                           }}
                                         >
-                                          {slip.courierName} • {slip.trackingNumber}
+                                          {slip.courierName} • {distinctTrackingNumber}
                                         </div>
                                       )}
                                     </div>
@@ -8570,8 +8673,9 @@ export default function OrdersFulfillmentPage() {
                               }}
                             >
                               <DynamicBarcodeGraphic
-                                code={slip.trackingNumber}
+                                code={distinctTrackingNumber}
                                 height={38}
+                                showText={false}
                               />
                               <div
                                 style={{
@@ -8581,7 +8685,7 @@ export default function OrdersFulfillmentPage() {
                                   marginTop: "2px",
                                 }}
                               >
-                                TRACKING MANIFEST REF: {slip.trackingNumber || "PENDING"}
+                                TRACKING MANIFEST REF: {distinctTrackingNumber || "PENDING"}
                               </div>
                             </div>
                           </div>

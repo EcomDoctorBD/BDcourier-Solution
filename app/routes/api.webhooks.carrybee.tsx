@@ -7,6 +7,7 @@ import {
   decryptCourierConfig,
 } from "../db.server";
 import { syncDeliveredBookingToShopify } from "../services/shopify-sync.server";
+import { validateWebhookRequest, safeCompare } from "../services/webhook-security.server";
 
 /**
  * Constant-time safe string comparison to prevent timing attacks
@@ -83,24 +84,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const carrybeeWebhookSecret = String(config?.carrybeeWebhookSecret || "").trim();
   const carrybeeClientSecret = String(config?.carrybeeClientSecret || "").trim();
 
-  // 3. Extract provided token from Authorization header, URL token parameter, or signature headers
-  const authHeader = request.headers.get("Authorization") || "";
-  const tokenMatch = authHeader.match(/Bearer\s+(.+)/i);
-  const bearerToken = tokenMatch ? tokenMatch[1].trim() : authHeader.trim();
-  const queryToken = url.searchParams.get("token")?.trim() || "";
-  const signatureHeader =
-    request.headers.get("X-Carrybee-Signature") ||
-    request.headers.get("x-carrybee-signature") ||
-    request.headers.get("X-Webhook-Secret") ||
-    request.headers.get("x-webhook-secret") ||
-    request.headers.get("X-Carrybee-Secret") ||
-    request.headers.get("x-carrybee-secret") ||
-    "";
-
-  // Parse payload safely
+  let rawText = "";
   let body: any = {};
   try {
-    const rawText = await request.text();
+    rawText = await request.text();
     if (rawText) {
       body = JSON.parse(rawText);
     }
@@ -111,34 +98,50 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     });
   }
 
+  // 3. Extract provided token / signature
+  const authHeader = request.headers.get("Authorization") || "";
+  const tokenMatch = authHeader.match(/Bearer\s+(.+)/i);
+  const bearerToken = tokenMatch ? tokenMatch[1].trim() : authHeader.trim();
+  const queryToken = url.searchParams.get("token")?.trim() || "";
+  const signatureHeader =
+    request.headers.get("X-Carrybee-Signature") ||
+    request.headers.get("x-carrybee-signature") ||
+    "";
   const bodySecret = String(
     body?.webhook_secret ||
     body?.secret ||
     body?.token ||
+    body?.client_secret ||
     body?.data?.webhook_secret ||
     ""
   ).trim();
 
-  const providedTokens = [
-    queryToken,
-    bearerToken,
-    signatureHeader,
-    bodySecret,
-  ].filter(Boolean);
+  // Master Audit Point 10: Enforce strict cryptographic signature & token verification gate
+  const validation = validateWebhookRequest({
+    rawBody: rawText,
+    candidateSecrets: [webhookSecret, carrybeeWebhookSecret, carrybeeClientSecret],
+    providedSignatures: [
+      signatureHeader,
+      request.headers.get("X-Signature"),
+      request.headers.get("x-signature"),
+    ],
+    providedTokens: [
+      queryToken,
+      bearerToken,
+      request.headers.get("X-Webhook-Secret"),
+      request.headers.get("x-webhook-secret"),
+      request.headers.get("X-Carrybee-Secret"),
+      request.headers.get("x-carrybee-secret"),
+      bodySecret,
+    ],
+  });
 
-  const allowedSecrets = [
-    webhookSecret,
-    carrybeeWebhookSecret,
-    carrybeeClientSecret,
-  ].filter(Boolean);
-
-  const isAuthenticated = providedTokens.some((provided) =>
-    allowedSecrets.some((allowed) => safeCompare(provided, allowed))
-  );
-
-  if (!isAuthenticated) {
+  if (!validation.isValid) {
     return new Response(
-      JSON.stringify({ error: "Unauthorized: Invalid or missing webhook credentials" }),
+      JSON.stringify({
+        error: "Unauthorized: Invalid or missing webhook signature/token",
+        reason: validation.reason,
+      }),
       {
         status: 401,
         headers: { "Content-Type": "application/json" },

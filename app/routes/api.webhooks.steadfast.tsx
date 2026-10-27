@@ -7,6 +7,7 @@ import {
   decryptCourierConfig,
 } from "../db.server";
 import { syncDeliveredBookingToShopify } from "../services/shopify-sync.server";
+import { validateWebhookRequest, safeCompare } from "../services/webhook-security.server";
 
 /**
  * Constant-time safe string comparison to prevent timing attacks
@@ -83,7 +84,21 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const steadfastApiKey = String(config?.steadfastApiKey || "").trim();
   const steadfastSecretKey = String(config?.steadfastSecretKey || "").trim();
 
-  // 3. Extract provided token from Authorization header or URL token parameter
+  let rawText = "";
+  let body: any = {};
+  try {
+    rawText = await request.text();
+    if (rawText) {
+      body = JSON.parse(rawText);
+    }
+  } catch {
+    return new Response(JSON.stringify({ error: "Invalid JSON payload" }), {
+      status: 400,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
+  // 3. Extract provided token / signature from headers, query params, or payload
   const authHeader = request.headers.get("Authorization") || "";
   const tokenMatch = authHeader.match(/Bearer\s+(.+)/i);
   const bearerToken = tokenMatch ? tokenMatch[1].trim() : authHeader.trim();
@@ -94,34 +109,41 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     request.headers.get("x-webhook-secret") ||
     "";
 
-  const providedTokens = [queryToken, bearerToken, headerToken].filter(Boolean);
-  const allowedSecrets = [webhookSecret, steadfastApiKey, steadfastSecretKey].filter(Boolean);
+  // Master Audit Point 10: Enforce strict cryptographic signature & token verification gate
+  const validation = validateWebhookRequest({
+    rawBody: rawText,
+    candidateSecrets: [webhookSecret, steadfastApiKey, steadfastSecretKey],
+    providedSignatures: [
+      request.headers.get("X-Steadfast-Signature"),
+      request.headers.get("x-steadfast-signature"),
+      request.headers.get("X-Signature"),
+      request.headers.get("x-signature"),
+    ],
+    providedTokens: [
+      queryToken,
+      bearerToken,
+      headerToken,
+      request.headers.get("Api-Key"),
+      request.headers.get("api-key"),
+      request.headers.get("Secret-Key"),
+      request.headers.get("secret-key"),
+      body?.token,
+      body?.secret,
+      body?.api_key,
+    ],
+  });
 
-  const isAuthenticated = providedTokens.some((provided) =>
-    allowedSecrets.some((secret) => safeCompare(provided, secret))
-  );
-
-  if (!isAuthenticated) {
+  if (!validation.isValid) {
     return new Response(
-      JSON.stringify({ error: "Unauthorized: Invalid or missing webhook token" }),
+      JSON.stringify({
+        error: "Unauthorized: Invalid or missing webhook signature/token",
+        reason: validation.reason,
+      }),
       {
         status: 401,
         headers: { "Content-Type": "application/json" },
       }
     );
-  }
-
-  let body: any = {};
-  try {
-    const rawText = await request.text();
-    if (rawText) {
-      body = JSON.parse(rawText);
-    }
-  } catch {
-    return new Response(JSON.stringify({ error: "Invalid JSON payload" }), {
-      status: 400,
-      headers: { "Content-Type": "application/json" },
-    });
   }
 
   const consignmentId = String(body?.consignment_id || "").trim();
