@@ -3084,6 +3084,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
               node.totalPriceSet?.shopMoney?.amount ||
               "0.00",
             imageUrl,
+            weight: item.variant?.weight !== undefined ? Number(item.variant?.weight) : undefined,
+            weightUnit: item.variant?.weightUnit ? String(item.variant?.weightUnit) : undefined,
           };
         });
 
@@ -3110,6 +3112,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
           codAmount,
           warehouseNote: node.note || "",
           lineItems,
+          totalWeight: node.totalWeight !== undefined ? Number(node.totalWeight) : undefined,
         };
       });
 
