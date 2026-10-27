@@ -2755,6 +2755,47 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     })
   );
 
+  const shippingLabelConfig = {
+    labelSize: (storeConfig as any)?.labelSize || "4in x 6in",
+    labelStyle: (storeConfig as any)?.labelStyle || "standard",
+    socialHandle: (storeConfig as any)?.socialHandle || "",
+    warehouseWarning:
+      (storeConfig as any)?.warehouseWarning || "FRAGILE / HANDLE WITH CARE",
+    brandName: (storeConfig as any)?.brandName || "",
+    brandPhone: (storeConfig as any)?.brandPhone || "",
+    brandAddress: (storeConfig as any)?.brandAddress || "",
+    brandLogo: (storeConfig as any)?.brandLogo || "",
+    defaultParcelNote: (storeConfig as any)?.defaultParcelNote || "",
+    pathaoParcelNote: (storeConfig as any)?.pathaoParcelNote || "",
+    steadfastParcelNote: (storeConfig as any)?.steadfastParcelNote || "",
+    redxParcelNote: (storeConfig as any)?.redxParcelNote || "",
+    carrybeeParcelNote: (storeConfig as any)?.carrybeeParcelNote || "",
+    bahokParcelNote: (storeConfig as any)?.bahokParcelNote || "",
+  };
+
+  const invoiceConfig = {
+    invoiceTemplate: (storeConfig as any)?.invoiceTemplate || "classic",
+    invoiceBrandName:
+      (storeConfig as any)?.invoiceBrandName ||
+      (storeConfig as any)?.brandName ||
+      "",
+    invoiceBrandPhone:
+      (storeConfig as any)?.invoiceBrandPhone ||
+      (storeConfig as any)?.brandPhone ||
+      "",
+    invoiceBrandAddress:
+      (storeConfig as any)?.invoiceBrandAddress ||
+      (storeConfig as any)?.brandAddress ||
+      "",
+    invoiceBrandEmail: (storeConfig as any)?.invoiceBrandEmail || "",
+    invoiceBrandWebsite: (storeConfig as any)?.invoiceBrandWebsite || "",
+    invoiceBrandLogo:
+      (storeConfig as any)?.invoiceBrandLogo ||
+      (storeConfig as any)?.brandLogo ||
+      "",
+    invoiceAccentColor: (storeConfig as any)?.invoiceAccentColor || "#2563eb",
+  };
+
   return {
     shopDomain,
     orders,
@@ -2777,6 +2818,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       startDate: startDateParam,
       endDate: endDateParam,
     },
+    shippingLabelConfig,
+    invoiceConfig,
   };
 };
 
@@ -3117,6 +3160,61 @@ const formatDateToYMD = (d: Date | null): string => {
   return `${year}-${month}-${day}`;
 };
 
+export const getPrintLabelDimensions = (size: string) => {
+  switch (size) {
+    case "4in x 6in":
+      return { width: "100mm", maxHeight: "148mm", padding: "6mm" };
+    case "4in x 2in":
+      return { width: "100mm", maxHeight: "48mm", padding: "3mm" };
+    case "3in x 4in":
+      return { width: "75mm", maxHeight: "98mm", padding: "4mm" };
+    case "3in x 3in":
+      return { width: "75mm", maxHeight: "73mm", padding: "4mm" };
+    case "3in x 2in":
+      return { width: "75mm", maxHeight: "48mm", padding: "3mm" };
+    case "2in x 1.5in":
+      return { width: "50mm", maxHeight: "36mm", padding: "2.5mm" };
+    case "1.5in x 1in":
+      return { width: "38mm", maxHeight: "23mm", padding: "2mm" };
+    case "2in x 1in":
+      return { width: "50mm", maxHeight: "23mm", padding: "2mm" };
+    case "2in x 1.15in":
+      return { width: "50mm", maxHeight: "27mm", padding: "2mm" };
+    case "2.2in x 1.4in":
+      return { width: "55mm", maxHeight: "33mm", padding: "2.5mm" };
+    case "2in x 2.95in":
+      return { width: "50mm", maxHeight: "72mm", padding: "3mm" };
+    default:
+      return { width: "100mm", maxHeight: "148mm", padding: "6mm" };
+  }
+};
+
+export const resolveEffectiveNote = (
+  slip: any,
+  labelConfig?: any
+): string => {
+  const rowNote = String(slip?.warehouseNote || "").trim();
+  if (rowNote) return rowNote;
+
+  const courierKey = String(slip?.courierName || "").toLowerCase();
+  let defaultNote = "";
+  if (courierKey.includes("pathao")) {
+    defaultNote = labelConfig?.pathaoParcelNote || "";
+  } else if (courierKey.includes("steadfast")) {
+    defaultNote = labelConfig?.steadfastParcelNote || "";
+  } else if (courierKey.includes("redx")) {
+    defaultNote = labelConfig?.redxParcelNote || "";
+  } else if (courierKey.includes("carrybee")) {
+    defaultNote = labelConfig?.carrybeeParcelNote || "";
+  } else if (courierKey.includes("bahok")) {
+    defaultNote = labelConfig?.bahokParcelNote || "";
+  }
+  if (!defaultNote) {
+    defaultNote = labelConfig?.defaultParcelNote || "";
+  }
+  return defaultNote || "Handle with care • Fragile";
+};
+
 interface DatePresetItem {
   id: string;
   title: string;
@@ -3142,6 +3240,8 @@ export default function OrdersFulfillmentPage() {
     initialDispatchedOrders,
     usageSummary,
     activeFilters,
+    shippingLabelConfig,
+    invoiceConfig,
   } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const submit = useSubmit();
@@ -3184,17 +3284,34 @@ export default function OrdersFulfillmentPage() {
   const isProOrEnterprise = usageSummary.isProOrEnterprise;
 
   const defaultTemplateByPlan = isEnterprisePlan
-    ? "tailored"
+    ? "warehouse"
     : isFreePlan
-    ? "standard"
-    : "branded";
+    ? "classic"
+    : "modern";
 
-  const [selectedSlipTemplate, setSelectedSlipTemplate] = useState<
-    "standard" | "branded" | "tailored"
-  >(defaultTemplateByPlan);
+  const [selectedSlipTemplate, setSelectedSlipTemplate] = useState<string>(
+    invoiceConfig?.invoiceTemplate || defaultTemplateByPlan
+  );
   const [customShopSlogan, setCustomShopSlogan] = useState(
     "100% Authentic Bangladeshi Products • Fast Nationwide Delivery"
   );
+
+  const brandName =
+    invoiceConfig?.invoiceBrandName ||
+    shippingLabelConfig?.brandName ||
+    "";
+  const brandPhone =
+    invoiceConfig?.invoiceBrandPhone ||
+    shippingLabelConfig?.brandPhone ||
+    "";
+  const brandAddress =
+    invoiceConfig?.invoiceBrandAddress ||
+    shippingLabelConfig?.brandAddress ||
+    "";
+  const brandLogo =
+    invoiceConfig?.invoiceBrandLogo ||
+    shippingLabelConfig?.brandLogo ||
+    "";
 
   // Standalone printing configuration error banner states
   const [showLabelConfigError, setShowLabelConfigError] = useState(false);
@@ -3233,10 +3350,16 @@ export default function OrdersFulfillmentPage() {
   }, []);
 
   useEffect(() => {
+    if (invoiceConfig?.invoiceTemplate) {
+      setSelectedSlipTemplate(invoiceConfig.invoiceTemplate);
+    }
+  }, [invoiceConfig?.invoiceTemplate]);
+
+  useEffect(() => {
     if (isFreePlan) {
-      setSelectedSlipTemplate("standard");
-    } else if (!isEnterprisePlan && selectedSlipTemplate === "tailored") {
-      setSelectedSlipTemplate("branded");
+      setSelectedSlipTemplate("classic");
+    } else if (!isEnterprisePlan && selectedSlipTemplate === "warehouse") {
+      setSelectedSlipTemplate("modern");
     }
   }, [isFreePlan, isEnterprisePlan, selectedSlipTemplate]);
 
@@ -3768,21 +3891,21 @@ export default function OrdersFulfillmentPage() {
 
   const templateSelectorOptions = [
     {
-      label: "1. Standard Layout (Free Tier Mode — Minimalist B&W)",
-      value: "standard",
+      label: "1. Classic Minimalist (Standard Clean Invoice)",
+      value: "classic",
     },
     {
       label: isFreePlan
-        ? "2. Custom Branded Layout (🔒 Upgrade to Growth / Pro)"
-        : "2. Custom Branded Layout (Growth & Pro Mode — Logo & Slogan Grid)",
-      value: "branded",
+        ? "2. Modern Pro (🔒 Upgrade to Growth / Pro)"
+        : "2. Modern Pro (Dynamic Accent & Visual Product Table)",
+      value: "modern",
       disabled: isFreePlan,
     },
     {
       label: isEnterprisePlan
-        ? "3. Tailored Warehouse Layout (Enterprise Mode — Dual-Column Industrial)"
-        : "3. Tailored Warehouse Layout (🔒 Upgrade to Enterprise)",
-      value: "tailored",
+        ? "3. Warehouse Fulfillment (Enterprise Mode — Industrial Pick/Pack)"
+        : "3. Warehouse Fulfillment (🔒 Upgrade to Enterprise)",
+      value: "warehouse",
       disabled: !isEnterprisePlan,
     },
   ];
@@ -3985,7 +4108,7 @@ export default function OrdersFulfillmentPage() {
             orderId: order.id,
             orderName: order.name,
             courierName,
-            trackingNumber: "",
+            trackingNumber: order.trackingNumber || "",
             bookingDate: new Date().toLocaleDateString("en-GB"),
             customerName: order.customerName,
             customerPhone: order.customerPhone,
@@ -4848,6 +4971,17 @@ export default function OrdersFulfillmentPage() {
     <>
       <style>{`
         @media print {
+          @page {
+            size: auto;
+            margin: 0mm;
+          }
+          html, body {
+            margin: 0 !important;
+            padding: 0 !important;
+            height: auto !important;
+            overflow: visible !important;
+            background: #ffffff !important;
+          }
           body * {
             visibility: hidden;
           }
@@ -4856,10 +4990,31 @@ export default function OrdersFulfillmentPage() {
             visibility: visible;
           }
           #printable-packing-slips-zone {
-            position: absolute;
-            left: 0;
-            top: 0;
-            width: 100%;
+            position: static !important;
+            width: 100% !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            background: #ffffff !important;
+            display: block !important;
+          }
+          #printable-packing-slips-zone .Polaris-BlockStack,
+          #printable-packing-slips-zone [class*="BlockStack"] {
+            gap: 0 !important;
+          }
+          .Polaris-Page,
+          .Polaris-Page__Content,
+          .Polaris-Layout,
+          .Polaris-Layout__Section,
+          .Polaris-Card,
+          .Polaris-Box {
+            margin: 0 !important;
+            padding: 0 !important;
+            border: none !important;
+            box-shadow: none !important;
+            background: transparent !important;
+          }
+          .no-print {
+            display: none !important;
           }
         }
         .orders-tabs-nowrap-container [role="tablist"],
@@ -5144,9 +5299,9 @@ export default function OrdersFulfillmentPage() {
                         columnSpan={{
                           xs: 6,
                           sm: 6,
-                          md: selectedSlipTemplate === "branded" ? 4 : 8,
-                          lg: selectedSlipTemplate === "branded" ? 4 : 8,
-                          xl: selectedSlipTemplate === "branded" ? 4 : 8,
+                          md: selectedSlipTemplate === "modern" ? 4 : 8,
+                          lg: selectedSlipTemplate === "modern" ? 4 : 8,
+                          xl: selectedSlipTemplate === "modern" ? 4 : 8,
                         }}
                       >
                         <Select
@@ -5154,21 +5309,17 @@ export default function OrdersFulfillmentPage() {
                           options={templateSelectorOptions}
                           value={selectedSlipTemplate}
                           disabled={isFreePlan}
-                          onChange={(val) =>
-                            setSelectedSlipTemplate(
-                              val as "standard" | "branded" | "tailored"
-                            )
-                          }
+                          onChange={(val) => setSelectedSlipTemplate(val)}
                           helpText={
                             isFreePlan
-                              ? "Locked to Standard Layout on Free Plan."
+                              ? "Locked to Classic Minimalist on Free Plan."
                               : "Instantly switch printable slip layouts."
                           }
                         />
                       </Grid.Cell>
                     )}
                     {printDocumentMode === "invoices_a4" &&
-                      selectedSlipTemplate === "branded" && (
+                      selectedSlipTemplate === "modern" && (
                         <Grid.Cell
                           columnSpan={{ xs: 6, sm: 6, md: 4, lg: 4, xl: 4 }}
                         >
@@ -5187,33 +5338,61 @@ export default function OrdersFulfillmentPage() {
 
                   <div id="printable-packing-slips-zone">
                     <BlockStack gap="400">
-                      {bookedSlipsList.map((slip) => {
+                      {bookedSlipsList.map((slip, index) => {
+                        const isLastSlip = index === bookedSlipsList.length - 1;
+                        const effectiveNote = resolveEffectiveNote(slip, shippingLabelConfig);
+
                         if (printDocumentMode === "labels_4x6") {
+                          const dimensions = getPrintLabelDimensions(
+                            shippingLabelConfig?.labelSize || "4in x 6in"
+                          );
+                          const isCompact = [
+                            "4in x 2in",
+                            "3in x 2in",
+                            "2in x 1.5in",
+                            "1.5in x 1in",
+                            "2in x 1in",
+                            "2in x 1.15in",
+                            "2.2in x 1.4in",
+                          ].includes(shippingLabelConfig?.labelSize || "4in x 6in");
+                          const activeLabelStyle =
+                            shippingLabelConfig?.labelStyle || "standard";
+                          const totalItemsCount = slip.lineItems.reduce(
+                            (acc, it) => acc + (it.quantity || 1),
+                            0
+                          );
+
                           return (
                             <div
-                              key={`${slip.orderId}-4x6`}
+                              key={`${slip.orderId}-${index}-label`}
                               style={{
-                                width: "100mm",
-                                height: "150mm",
+                                width: dimensions.width,
+                                maxHeight: dimensions.maxHeight,
+                                minHeight: isCompact ? "auto" : "135mm",
+                                height: "auto",
                                 boxSizing: "border-box",
                                 border: "2px solid #000000",
                                 borderRadius: "4px",
-                                padding: "8mm",
-                                margin: "0 auto 8mm auto",
+                                padding: dimensions.padding,
+                                margin: "0 auto",
                                 background: "#ffffff",
                                 color: "#000000",
-                                fontFamily: "sans-serif",
-                                pageBreakAfter: "always",
+                                fontFamily: "system-ui, -apple-system, sans-serif",
+                                pageBreakAfter: isLastSlip ? "auto" : "always",
+                                breakAfter: isLastSlip ? "auto" : "page",
+                                pageBreakInside: "avoid",
+                                breakInside: "avoid",
                                 display: "flex",
                                 flexDirection: "column",
                                 justifyContent: "space-between",
+                                overflow: "hidden",
                               }}
                             >
                               {/* Header */}
                               <div
                                 style={{
-                                  borderBottom: "2px solid #000000",
-                                  paddingBottom: "6px",
+                                  borderBottom: "1.5px solid #000000",
+                                  paddingBottom: isCompact ? "3px" : "6px",
                                 }}
                               >
                                 <div
@@ -5223,70 +5402,146 @@ export default function OrdersFulfillmentPage() {
                                     alignItems: "center",
                                   }}
                                 >
-                                  <span
-                                    style={{
-                                      fontSize: "16px",
-                                      fontWeight: "900",
-                                      letterSpacing: "1px",
-                                    }}
-                                  >
-                                    {slip.courierName.toUpperCase()}
-                                  </span>
-                                  <span
-                                    style={{
-                                      fontSize: "14px",
-                                      fontWeight: "800",
-                                    }}
-                                  >
-                                    {slip.orderName}
-                                  </span>
+                                  <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                                    {brandLogo ? (
+                                      <img
+                                        src={brandLogo}
+                                        alt={brandName || "Logo"}
+                                        style={{
+                                          maxHeight: isCompact ? "18px" : "28px",
+                                          maxWidth: "100px",
+                                          objectFit: "contain",
+                                        }}
+                                      />
+                                    ) : brandName ? (
+                                      <span
+                                        style={{
+                                          fontSize: isCompact ? "11px" : "13px",
+                                          fontWeight: "900",
+                                          textTransform: "uppercase",
+                                        }}
+                                      >
+                                        {brandName}
+                                      </span>
+                                    ) : (
+                                      <span
+                                        style={{
+                                          fontSize: isCompact ? "11px" : "14px",
+                                          fontWeight: "900",
+                                          letterSpacing: "0.5px",
+                                        }}
+                                      >
+                                        {slip.courierName.toUpperCase()}
+                                      </span>
+                                    )}
+                                    {brandLogo && brandName && (
+                                      <span
+                                        style={{
+                                          fontSize: isCompact ? "10px" : "12px",
+                                          fontWeight: "800",
+                                          textTransform: "uppercase",
+                                        }}
+                                      >
+                                        {brandName}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div style={{ textAlign: "right" }}>
+                                    <span
+                                      style={{
+                                        fontSize: isCompact ? "11px" : "13px",
+                                        fontWeight: "900",
+                                      }}
+                                    >
+                                      {slip.orderName}
+                                    </span>
+                                    {brandLogo && (
+                                      <div
+                                        style={{
+                                          fontSize: "9px",
+                                          fontWeight: "700",
+                                          color: "#374151",
+                                        }}
+                                      >
+                                        {slip.courierName.toUpperCase()}
+                                      </div>
+                                    )}
+                                  </div>
                                 </div>
+
                                 <div
                                   style={{
-                                    fontSize: "11px",
-                                    color: "#444444",
+                                    fontSize: isCompact ? "9px" : "10px",
+                                    color: "#4b5563",
                                     marginTop: "2px",
+                                    display: "flex",
+                                    justifyContent: "space-between",
+                                    alignItems: "center",
                                   }}
                                 >
-                                  Date: {slip.bookingDate} • Mode: Cash on
-                                  Delivery (COD)
+                                  <span>Date: {slip.bookingDate}</span>
+                                  <span>
+                                    {Number(slip.codAmount) === 0
+                                      ? "PREPAID"
+                                      : "Mode: COD"}
+                                  </span>
                                 </div>
+
+                                {activeLabelStyle === "brand_centric" &&
+                                  shippingLabelConfig?.socialHandle && (
+                                    <div
+                                      style={{
+                                        fontSize: "9px",
+                                        fontWeight: 700,
+                                        color: "#1d4ed8",
+                                        textAlign: "center",
+                                        marginTop: "2px",
+                                      }}
+                                    >
+                                      📱{" "}
+                                      {shippingLabelConfig.socialHandle.startsWith(
+                                        "@"
+                                      )
+                                        ? shippingLabelConfig.socialHandle
+                                        : `@${shippingLabelConfig.socialHandle}`}
+                                    </div>
+                                  )}
                               </div>
 
                               {/* Barcode & Tracking */}
                               <div
                                 style={{
                                   textAlign: "center",
-                                  padding: "8px 0",
+                                  padding: isCompact ? "3px 0" : "5px 0",
                                   borderBottom: "1px solid #000000",
                                 }}
                               >
                                 <DynamicBarcodeGraphic
                                   code={slip.trackingNumber}
-                                  height={46}
+                                  height={isCompact ? 28 : 40}
                                 />
                                 <div
                                   style={{
-                                    fontSize: "14px",
+                                    fontSize: isCompact ? "10px" : "12px",
                                     fontWeight: "800",
-                                    letterSpacing: "2px",
-                                    marginTop: "4px",
+                                    letterSpacing: "1.5px",
+                                    marginTop: "2px",
                                   }}
                                 >
-                                  {slip.trackingNumber}
+                                  {slip.trackingNumber || "PENDING BOOKING"}
                                 </div>
                               </div>
 
                               {/* Customer Address */}
                               <div
                                 style={{
-                                  borderBottom: "2px solid #000000",
-                                  padding: "8px 0",
+                                  borderBottom: "1.5px solid #000000",
+                                  padding: isCompact ? "3px 0" : "5px 0",
                                 }}
                               >
                                 <div
                                   style={{
-                                    fontSize: "10px",
+                                    fontSize: "8.5px",
                                     fontWeight: "700",
                                     textTransform: "uppercase",
                                     color: "#555555",
@@ -5296,27 +5551,27 @@ export default function OrdersFulfillmentPage() {
                                 </div>
                                 <div
                                   style={{
-                                    fontSize: "15px",
+                                    fontSize: isCompact ? "11px" : "13px",
                                     fontWeight: "800",
-                                    marginTop: "2px",
+                                    marginTop: "1px",
                                   }}
                                 >
                                   {slip.customerName}
                                 </div>
                                 <div
                                   style={{
-                                    fontSize: "13px",
+                                    fontSize: isCompact ? "10px" : "12px",
                                     fontWeight: "700",
-                                    marginTop: "2px",
+                                    marginTop: "1px",
                                   }}
                                 >
                                   📞 {slip.customerPhone}
                                 </div>
                                 <div
                                   style={{
-                                    fontSize: "12px",
-                                    marginTop: "4px",
-                                    lineHeight: "1.3",
+                                    fontSize: isCompact ? "9.5px" : "11px",
+                                    marginTop: "2px",
+                                    lineHeight: "1.2",
                                   }}
                                 >
                                   {slip.shippingAddress}
@@ -5329,14 +5584,14 @@ export default function OrdersFulfillmentPage() {
                                   display: "flex",
                                   justifyContent: "space-between",
                                   alignItems: "center",
-                                  padding: "6px 0",
+                                  padding: isCompact ? "2px 0" : "4px 0",
                                   borderBottom: "1px solid #000000",
                                 }}
                               >
                                 <div>
                                   <div
                                     style={{
-                                      fontSize: "10px",
+                                      fontSize: "8.5px",
                                       fontWeight: "700",
                                       textTransform: "uppercase",
                                       color: "#555555",
@@ -5346,7 +5601,7 @@ export default function OrdersFulfillmentPage() {
                                   </div>
                                   <div
                                     style={{
-                                      fontSize: "20px",
+                                      fontSize: isCompact ? "13px" : "17px",
                                       fontWeight: "900",
                                       color:
                                         Number(slip.codAmount) === 0
@@ -5362,7 +5617,7 @@ export default function OrdersFulfillmentPage() {
                                 <div style={{ textAlign: "right" }}>
                                   <div
                                     style={{
-                                      fontSize: "10px",
+                                      fontSize: "8.5px",
                                       fontWeight: "700",
                                       textTransform: "uppercase",
                                       color: "#555555",
@@ -5372,272 +5627,1499 @@ export default function OrdersFulfillmentPage() {
                                   </div>
                                   <div
                                     style={{
-                                      fontSize: "16px",
+                                      fontSize: isCompact ? "12px" : "14px",
                                       fontWeight: "800",
                                     }}
                                   >
-                                    {slip.lineItems.reduce(
-                                      (acc, it) => acc + (it.quantity || 1),
-                                      0
-                                    )}{" "}
-                                    Pcs
+                                    {totalItemsCount} Pcs
                                   </div>
                                 </div>
                               </div>
 
-                              {/* Instructions */}
+                              {/* Tier-Specific Footer Section */}
+                              {activeLabelStyle === "brand_centric" && (
+                                <div style={{ marginTop: "2px" }}>
+                                  <div
+                                    style={{
+                                      backgroundColor: "#111827",
+                                      color: "#ffffff",
+                                      padding: isCompact ? "2px 4px" : "4px 6px",
+                                      borderRadius: "2px",
+                                      fontWeight: 800,
+                                      fontSize: isCompact ? "8px" : "9px",
+                                      textAlign: "center",
+                                      textTransform: "uppercase",
+                                      letterSpacing: "0.5px",
+                                    }}
+                                  >
+                                    Thank you for shopping with us!
+                                  </div>
+                                  <div
+                                    style={{
+                                      fontSize: "8.5px",
+                                      color: "#444444",
+                                      marginTop: "2px",
+                                    }}
+                                  >
+                                    <strong>Note:</strong> {effectiveNote}
+                                  </div>
+                                </div>
+                              )}
+
+                              {activeLabelStyle === "smart_warehouse" && (
+                                <div
+                                  style={{
+                                    display: "flex",
+                                    flexDirection: "column",
+                                    gap: "2px",
+                                    marginTop: "2px",
+                                  }}
+                                >
+                                  <div
+                                    style={{
+                                      border: "1px solid #000000",
+                                      backgroundColor: "#fef3c7",
+                                      color: "#92400e",
+                                      padding: "1px 4px",
+                                      borderRadius: "2px",
+                                      fontSize: "8px",
+                                      fontWeight: 800,
+                                      textAlign: "center",
+                                      textTransform: "uppercase",
+                                      letterSpacing: "0.5px",
+                                    }}
+                                  >
+                                    ⚠️{" "}
+                                    {shippingLabelConfig?.warehouseWarning ||
+                                      "FRAGILE / HANDLE WITH CARE"}
+                                  </div>
+                                  <div
+                                    style={{
+                                      borderTop: "1px dashed #000000",
+                                      paddingTop: "1px",
+                                      display: "flex",
+                                      justifyContent: "space-between",
+                                      fontSize: "8px",
+                                      fontWeight: 800,
+                                      textTransform: "uppercase",
+                                    }}
+                                  >
+                                    <span>FULFILLMENT MANIFEST</span>
+                                    <span>ITEMS: {totalItemsCount}</span>
+                                  </div>
+                                  <div
+                                    style={{
+                                      display: "flex",
+                                      flexDirection: "column",
+                                      gap: "1px",
+                                      fontSize: "8px",
+                                    }}
+                                  >
+                                    {slip.lineItems
+                                      .slice(0, isCompact ? 2 : 3)
+                                      .map((it, idx) => (
+                                        <div
+                                          key={idx}
+                                          style={{
+                                            display: "flex",
+                                            justifyContent: "space-between",
+                                            borderBottom: "1px dotted #ccc",
+                                            paddingBottom: "1px",
+                                          }}
+                                        >
+                                          <div>
+                                            <span style={{ fontWeight: 700 }}>
+                                              {it.title}
+                                            </span>
+                                            {it.variantTitle && (
+                                              <span
+                                                style={{
+                                                  color: "#4b5563",
+                                                  marginLeft: "3px",
+                                                }}
+                                              >
+                                                ({it.variantTitle})
+                                              </span>
+                                            )}
+                                            {it.sku && (
+                                              <span
+                                                style={{
+                                                  fontFamily: "monospace",
+                                                  fontSize: "7px",
+                                                  color: "#6b7280",
+                                                  marginLeft: "3px",
+                                                }}
+                                              >
+                                                SKU: {it.sku}
+                                              </span>
+                                            )}
+                                          </div>
+                                          <span style={{ fontWeight: 800 }}>
+                                            x{it.quantity || 1}
+                                          </span>
+                                        </div>
+                                      ))}
+                                  </div>
+                                  <div
+                                    style={{
+                                      fontSize: "8px",
+                                      color: "#444444",
+                                      paddingTop: "1px",
+                                    }}
+                                  >
+                                    <strong>Instruction:</strong> {effectiveNote}
+                                  </div>
+                                </div>
+                              )}
+
+                              {activeLabelStyle === "standard" && (
+                                <div
+                                  style={{
+                                    fontSize: isCompact ? "8.5px" : "9.5px",
+                                    color: "#444444",
+                                    paddingTop: "2px",
+                                  }}
+                                >
+                                  <strong>Note:</strong> {effectiveNote}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        }
+
+                        // INVOICE PRINTING TIERS (A4)
+                        const activeInvoiceTemplate = (
+                          selectedSlipTemplate ||
+                          invoiceConfig?.invoiceTemplate ||
+                          "classic"
+                        ).toLowerCase();
+
+                        // A. CLASSIC MINIMALIST INVOICE
+                        if (
+                          activeInvoiceTemplate === "classic" ||
+                          activeInvoiceTemplate === "standard"
+                        ) {
+                          return (
+                            <div
+                              key={`${slip.orderId}-${index}-classic`}
+                              style={{
+                                width: "100%",
+                                maxWidth: "210mm",
+                                minHeight: "270mm",
+                                boxSizing: "border-box",
+                                border: "1px solid #d1d5db",
+                                borderRadius: "4px",
+                                padding: "16mm 14mm",
+                                margin: "0 auto",
+                                background: "#ffffff",
+                                color: "#111827",
+                                fontFamily: "system-ui, -apple-system, sans-serif",
+                                pageBreakAfter: isLastSlip ? "auto" : "always",
+                                breakAfter: isLastSlip ? "auto" : "page",
+                                pageBreakInside: "avoid",
+                                breakInside: "avoid",
+                                display: "flex",
+                                flexDirection: "column",
+                                justifyContent: "space-between",
+                              }}
+                            >
+                              <div>
+                                {/* Header */}
+                                <div
+                                  style={{
+                                    display: "flex",
+                                    justifyContent: "space-between",
+                                    alignItems: "flex-start",
+                                    borderBottom: "1.5px solid #111827",
+                                    paddingBottom: "12px",
+                                    marginBottom: "16px",
+                                  }}
+                                >
+                                  <div>
+                                    {invoiceConfig?.invoiceBrandLogo ? (
+                                      <img
+                                        src={invoiceConfig.invoiceBrandLogo}
+                                        alt={
+                                          invoiceConfig.invoiceBrandName ||
+                                          "Brand Logo"
+                                        }
+                                        style={{
+                                          maxHeight: "44px",
+                                          maxWidth: "160px",
+                                          objectFit: "contain",
+                                          marginBottom: "4px",
+                                        }}
+                                      />
+                                    ) : (
+                                      <div
+                                        style={{
+                                          fontSize: "20px",
+                                          fontWeight: 800,
+                                          textTransform: "uppercase",
+                                        }}
+                                      >
+                                        {invoiceConfig?.invoiceBrandName ||
+                                          brandName ||
+                                          shopDomain}
+                                      </div>
+                                    )}
+                                    <div
+                                      style={{
+                                        fontSize: "11px",
+                                        color: "#4b5563",
+                                        lineHeight: 1.4,
+                                      }}
+                                    >
+                                      {invoiceConfig?.invoiceBrandAddress && (
+                                        <div>
+                                          {invoiceConfig.invoiceBrandAddress}
+                                        </div>
+                                      )}
+                                      {invoiceConfig?.invoiceBrandPhone && (
+                                        <div>
+                                          Phone: {invoiceConfig.invoiceBrandPhone}
+                                        </div>
+                                      )}
+                                      {invoiceConfig?.invoiceBrandEmail && (
+                                        <div>
+                                          Email: {invoiceConfig.invoiceBrandEmail}
+                                        </div>
+                                      )}
+                                      {invoiceConfig?.invoiceBrandWebsite && (
+                                        <div>
+                                          Web: {invoiceConfig.invoiceBrandWebsite}
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                  <div style={{ textAlign: "right" }}>
+                                    <div
+                                      style={{
+                                        fontSize: "24px",
+                                        fontWeight: 900,
+                                        letterSpacing: "1px",
+                                      }}
+                                    >
+                                      INVOICE
+                                    </div>
+                                    <div
+                                      style={{
+                                        fontSize: "11px",
+                                        color: "#4b5563",
+                                        marginTop: "4px",
+                                        lineHeight: 1.4,
+                                      }}
+                                    >
+                                      <div>
+                                        <strong>Order:</strong> {slip.orderName}
+                                      </div>
+                                      <div>
+                                        <strong>Date:</strong> {slip.bookingDate}
+                                      </div>
+                                      <div>
+                                        <strong>Courier:</strong>{" "}
+                                        {slip.courierName}
+                                      </div>
+                                      {slip.trackingNumber && (
+                                        <div>
+                                          <strong>Consignment:</strong>{" "}
+                                          {slip.trackingNumber}
+                                        </div>
+                                      )}
+                                      <div>
+                                        <strong>Payment:</strong>{" "}
+                                        {Number(slip.codAmount) === 0
+                                          ? "PREPAID"
+                                          : "Cash On Delivery (COD)"}
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+
+                                {/* Bill From / Bill To */}
+                                <div
+                                  style={{
+                                    display: "grid",
+                                    gridTemplateColumns: "1fr 1fr",
+                                    gap: "16px",
+                                    padding: "12px 0",
+                                    borderBottom: "1px solid #e5e7eb",
+                                    fontSize: "12px",
+                                  }}
+                                >
+                                  <div>
+                                    <div
+                                      style={{
+                                        fontSize: "10px",
+                                        fontWeight: 800,
+                                        textTransform: "uppercase",
+                                        color: "#6b7280",
+                                        marginBottom: "3px",
+                                      }}
+                                    >
+                                      Bill From
+                                    </div>
+                                    <div
+                                      style={{
+                                        fontWeight: 700,
+                                        fontSize: "13px",
+                                      }}
+                                    >
+                                      {invoiceConfig?.invoiceBrandName ||
+                                        brandName ||
+                                        shopDomain}
+                                    </div>
+                                    <div
+                                      style={{
+                                        color: "#4b5563",
+                                        marginTop: "2px",
+                                        lineHeight: 1.3,
+                                      }}
+                                    >
+                                      {invoiceConfig?.invoiceBrandAddress ||
+                                        "Dhaka, Bangladesh"}
+                                      <br />
+                                      Phone:{" "}
+                                      {invoiceConfig?.invoiceBrandPhone ||
+                                        "+880 1711-000000"}
+                                    </div>
+                                  </div>
+                                  <div>
+                                    <div
+                                      style={{
+                                        fontSize: "10px",
+                                        fontWeight: 800,
+                                        textTransform: "uppercase",
+                                        color: "#6b7280",
+                                        marginBottom: "3px",
+                                      }}
+                                    >
+                                      Bill To (Recipient)
+                                    </div>
+                                    <div
+                                      style={{
+                                        fontWeight: 700,
+                                        fontSize: "13px",
+                                      }}
+                                    >
+                                      {slip.customerName}
+                                    </div>
+                                    <div
+                                      style={{
+                                        color: "#4b5563",
+                                        marginTop: "2px",
+                                        lineHeight: 1.3,
+                                      }}
+                                    >
+                                      {slip.shippingAddress}
+                                      <br />
+                                      Phone: {slip.customerPhone}
+                                    </div>
+                                  </div>
+                                </div>
+
+                                {/* Line Items Table */}
+                                <div style={{ marginTop: "16px" }}>
+                                  <table
+                                    style={{
+                                      width: "100%",
+                                      borderCollapse: "collapse",
+                                      fontSize: "12px",
+                                    }}
+                                  >
+                                    <thead>
+                                      <tr
+                                        style={{
+                                          backgroundColor: "#111827",
+                                          color: "#ffffff",
+                                          textAlign: "left",
+                                        }}
+                                      >
+                                        <th style={{ padding: "8px 10px" }}>
+                                          Item Description
+                                        </th>
+                                        <th style={{ padding: "8px 10px" }}>SKU</th>
+                                        <th
+                                          style={{
+                                            padding: "8px 10px",
+                                            textAlign: "center",
+                                          }}
+                                        >
+                                          Qty
+                                        </th>
+                                        <th
+                                          style={{
+                                            padding: "8px 10px",
+                                            textAlign: "right",
+                                          }}
+                                        >
+                                          Price
+                                        </th>
+                                        <th
+                                          style={{
+                                            padding: "8px 10px",
+                                            textAlign: "right",
+                                          }}
+                                        >
+                                          Total
+                                        </th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {slip.lineItems.map((item, i) => {
+                                        const itemQty = item.quantity || 1;
+                                        const itemUnitPrice =
+                                          Number(item.unitPrice) || 0;
+                                        const itemTotal =
+                                          itemUnitPrice * itemQty;
+                                        return (
+                                          <tr
+                                            key={`${slip.orderId}-classic-item-${i}`}
+                                            style={{
+                                              borderBottom:
+                                                "1px solid #e5e7eb",
+                                            }}
+                                          >
+                                            <td
+                                              style={{
+                                                padding: "8px 10px",
+                                                fontWeight: 600,
+                                              }}
+                                            >
+                                              {item.title}
+                                              {item.variantTitle && (
+                                                <span
+                                                  style={{
+                                                    color: "#6b7280",
+                                                    fontWeight: 400,
+                                                    marginLeft: "4px",
+                                                  }}
+                                                >
+                                                  ({item.variantTitle})
+                                                </span>
+                                              )}
+                                            </td>
+                                            <td
+                                              style={{
+                                                padding: "8px 10px",
+                                                fontFamily: "monospace",
+                                                color: "#4b5563",
+                                              }}
+                                            >
+                                              {item.sku || "N/A"}
+                                            </td>
+                                            <td
+                                              style={{
+                                                padding: "8px 10px",
+                                                textAlign: "center",
+                                                fontWeight: 700,
+                                              }}
+                                            >
+                                              {itemQty}
+                                            </td>
+                                            <td
+                                              style={{
+                                                padding: "8px 10px",
+                                                textAlign: "right",
+                                              }}
+                                            >
+                                              ৳{itemUnitPrice.toLocaleString()}
+                                            </td>
+                                            <td
+                                              style={{
+                                                padding: "8px 10px",
+                                                textAlign: "right",
+                                                fontWeight: 700,
+                                              }}
+                                            >
+                                              ৳{itemTotal.toLocaleString()}
+                                            </td>
+                                          </tr>
+                                        );
+                                      })}
+                                    </tbody>
+                                  </table>
+                                </div>
+
+                                {/* Totals & Notes */}
+                                <div
+                                  style={{
+                                    display: "flex",
+                                    justifyContent: "space-between",
+                                    alignItems: "flex-start",
+                                    marginTop: "16px",
+                                  }}
+                                >
+                                  <div
+                                    style={{
+                                      maxWidth: "55%",
+                                      fontSize: "11px",
+                                      color: "#4b5563",
+                                    }}
+                                  >
+                                    <strong>Note / Instructions:</strong>{" "}
+                                    {effectiveNote}
+                                  </div>
+                                  <div style={{ width: "220px", fontSize: "12px" }}>
+                                    <div
+                                      style={{
+                                        display: "flex",
+                                        justifyContent: "space-between",
+                                        padding: "3px 0",
+                                        color: "#4b5563",
+                                      }}
+                                    >
+                                      <span>Items Total:</span>
+                                      <span>
+                                        {slip.lineItems.reduce(
+                                          (acc, it) =>
+                                            acc + (it.quantity || 1),
+                                          0
+                                        )}{" "}
+                                        Pcs
+                                      </span>
+                                    </div>
+                                    <div
+                                      style={{
+                                        display: "flex",
+                                        justifyContent: "space-between",
+                                        padding: "6px 0",
+                                        borderTop: "2px solid #111827",
+                                        fontSize: "14px",
+                                        fontWeight: 800,
+                                      }}
+                                    >
+                                      <span>Total Collectible:</span>
+                                      <span>
+                                        {Number(slip.codAmount) === 0
+                                          ? "৳0 (PREPAID)"
+                                          : `${slip.currencyCode} ৳${slip.codAmount}`}
+                                      </span>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Footer */}
                               <div
                                 style={{
+                                  borderTop: "1px solid #e5e7eb",
+                                  paddingTop: "12px",
+                                  marginTop: "20px",
+                                  textAlign: "center",
                                   fontSize: "10px",
-                                  color: "#444444",
-                                  paddingTop: "4px",
+                                  color: "#6b7280",
                                 }}
                               >
-                                <strong>Note:</strong>{" "}
-                                {slip.warehouseNote ||
-                                  "Handle with care • Fragile"}
+                                <p
+                                  style={{
+                                    fontWeight: 700,
+                                    color: "#111827",
+                                    marginBottom: "2px",
+                                  }}
+                                >
+                                  Thank you for shopping with{" "}
+                                  {invoiceConfig?.invoiceBrandName ||
+                                    brandName ||
+                                    shopDomain}
+                                  !
+                                </p>
+                                <p>
+                                  For inquiries or order support, please contact{" "}
+                                  {invoiceConfig?.invoiceBrandPhone ||
+                                    brandPhone ||
+                                    "+880 1711-000000"}
+                                  .
+                                </p>
                               </div>
                             </div>
                           );
                         }
-                        if (selectedSlipTemplate === "standard") {
+
+                        // B. MODERN PRO INVOICE
+                        if (
+                          activeInvoiceTemplate === "modern" ||
+                          activeInvoiceTemplate === "branded"
+                        ) {
+                          const accent =
+                            invoiceConfig?.invoiceAccentColor || "#2563eb";
                           return (
                             <div
-                              key={slip.orderId}
+                              key={`${slip.orderId}-${index}-modern`}
                               style={{
-                                border: "1px solid #000000",
-                                padding: "16px",
+                                width: "100%",
+                                maxWidth: "210mm",
+                                minHeight: "270mm",
+                                boxSizing: "border-box",
+                                border: `1px solid ${accent}33`,
+                                borderRadius: "6px",
+                                padding: "0",
+                                margin: "0 auto",
                                 background: "#ffffff",
-                                color: "#000000",
-                                fontFamily: "sans-serif",
+                                color: "#111827",
+                                fontFamily: "system-ui, -apple-system, sans-serif",
+                                pageBreakAfter: isLastSlip ? "auto" : "always",
+                                breakAfter: isLastSlip ? "auto" : "page",
+                                pageBreakInside: "avoid",
+                                breakInside: "avoid",
+                                display: "flex",
+                                flexDirection: "column",
+                                justifyContent: "space-between",
+                                overflow: "hidden",
                               }}
                             >
+                              {/* Top Accent Color Bar */}
+                              <div
+                                style={{
+                                  width: "100%",
+                                  height: "6px",
+                                  backgroundColor: accent,
+                                }}
+                              />
+
+                              <div
+                                style={{
+                                  padding: "16mm 14mm",
+                                  flex: 1,
+                                  display: "flex",
+                                  flexDirection: "column",
+                                  justifyContent: "space-between",
+                                }}
+                              >
+                                <div>
+                                  {/* Header */}
+                                  <div
+                                    style={{
+                                      display: "flex",
+                                      justifyContent: "space-between",
+                                      alignItems: "flex-start",
+                                      borderBottom: `2px solid ${accent}`,
+                                      paddingBottom: "14px",
+                                      marginBottom: "16px",
+                                    }}
+                                  >
+                                    <div>
+                                      <div
+                                        style={{
+                                          fontSize: "28px",
+                                          fontWeight: 900,
+                                          color: accent,
+                                          letterSpacing: "0.5px",
+                                        }}
+                                      >
+                                        INVOICE
+                                      </div>
+                                      <div
+                                        style={{
+                                          fontSize: "11px",
+                                          color: "#4b5563",
+                                          marginTop: "4px",
+                                          lineHeight: 1.4,
+                                        }}
+                                      >
+                                        <div>
+                                          <strong>Order ID:</strong>{" "}
+                                          {slip.orderName}
+                                        </div>
+                                        <div>
+                                          <strong>Date:</strong>{" "}
+                                          {slip.bookingDate}
+                                        </div>
+                                        <div style={{ marginTop: "4px" }}>
+                                          <span
+                                            style={{
+                                              display: "inline-block",
+                                              backgroundColor: accent,
+                                              color: "#ffffff",
+                                              padding: "2px 8px",
+                                              borderRadius: "4px",
+                                              fontSize: "10px",
+                                              fontWeight: 700,
+                                              textTransform: "uppercase",
+                                              letterSpacing: "0.5px",
+                                            }}
+                                          >
+                                            {Number(slip.codAmount) === 0
+                                              ? "PREPAID · ৳0 COD"
+                                              : "COD · Due on Delivery"}
+                                          </span>
+                                        </div>
+                                      </div>
+                                    </div>
+
+                                    <div style={{ textAlign: "center" }}>
+                                      <DynamicBarcodeGraphic
+                                        code={slip.trackingNumber}
+                                        height={36}
+                                      />
+                                      {slip.trackingNumber && (
+                                        <div
+                                          style={{
+                                            fontSize: "10px",
+                                            fontWeight: 700,
+                                            fontFamily: "monospace",
+                                            color: "#4b5563",
+                                          }}
+                                        >
+                                          {slip.courierName} • {slip.trackingNumber}
+                                        </div>
+                                      )}
+                                    </div>
+
+                                    <div style={{ textAlign: "right" }}>
+                                      {invoiceConfig?.invoiceBrandLogo ? (
+                                        <img
+                                          src={invoiceConfig.invoiceBrandLogo}
+                                          alt={
+                                            invoiceConfig.invoiceBrandName ||
+                                            "Brand Logo"
+                                          }
+                                          style={{
+                                            maxHeight: "44px",
+                                            maxWidth: "150px",
+                                            objectFit: "contain",
+                                            marginLeft: "auto",
+                                            marginBottom: "4px",
+                                          }}
+                                        />
+                                      ) : (
+                                        <div
+                                          style={{
+                                            fontSize: "18px",
+                                            fontWeight: 800,
+                                            color: "#111827",
+                                          }}
+                                        >
+                                          {invoiceConfig?.invoiceBrandName ||
+                                            brandName ||
+                                            shopDomain}
+                                        </div>
+                                      )}
+                                      <div
+                                        style={{
+                                          fontSize: "11px",
+                                          color: "#4b5563",
+                                          lineHeight: 1.35,
+                                        }}
+                                      >
+                                        {invoiceConfig?.invoiceBrandAddress && (
+                                          <div>
+                                            {invoiceConfig.invoiceBrandAddress}
+                                          </div>
+                                        )}
+                                        {invoiceConfig?.invoiceBrandPhone && (
+                                          <div>
+                                            Tel: {invoiceConfig.invoiceBrandPhone}
+                                          </div>
+                                        )}
+                                        {invoiceConfig?.invoiceBrandEmail && (
+                                          <div>
+                                            {invoiceConfig.invoiceBrandEmail}
+                                          </div>
+                                        )}
+                                        {invoiceConfig?.invoiceBrandWebsite && (
+                                          <div
+                                            style={{
+                                              color: accent,
+                                              fontWeight: 600,
+                                            }}
+                                          >
+                                            {invoiceConfig.invoiceBrandWebsite}
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  {/* Dual-Box Container Layout */}
+                                  <div
+                                    style={{
+                                      display: "grid",
+                                      gridTemplateColumns: "1fr 1fr",
+                                      gap: "14px",
+                                      marginBottom: "16px",
+                                    }}
+                                  >
+                                    {/* Box 1: Bill From */}
+                                    <div
+                                      style={{
+                                        padding: "10px 14px",
+                                        borderRadius: "6px",
+                                        border: "1px solid #e5e7eb",
+                                        backgroundColor: "#f9fafb",
+                                        fontSize: "11px",
+                                      }}
+                                    >
+                                      <div
+                                        style={{
+                                          display: "flex",
+                                          alignItems: "center",
+                                          gap: "6px",
+                                          fontWeight: 800,
+                                          fontSize: "10px",
+                                          textTransform: "uppercase",
+                                          color: "#4b5563",
+                                          marginBottom: "4px",
+                                        }}
+                                      >
+                                        <span
+                                          style={{
+                                            width: "7px",
+                                            height: "7px",
+                                            borderRadius: "50%",
+                                            backgroundColor: accent,
+                                            display: "inline-block",
+                                          }}
+                                        />
+                                        Bill From
+                                      </div>
+                                      <div
+                                        style={{
+                                          fontWeight: 700,
+                                          fontSize: "12px",
+                                          color: "#111827",
+                                        }}
+                                      >
+                                        {invoiceConfig?.invoiceBrandName ||
+                                          brandName ||
+                                          shopDomain}
+                                      </div>
+                                      <div
+                                        style={{
+                                          color: "#4b5563",
+                                          marginTop: "2px",
+                                          lineHeight: 1.35,
+                                        }}
+                                      >
+                                        {invoiceConfig?.invoiceBrandAddress ||
+                                          "Dhaka, Bangladesh"}
+                                        <br />
+                                        Tel:{" "}
+                                        {invoiceConfig?.invoiceBrandPhone ||
+                                          "+880 1711-000000"}
+                                      </div>
+                                    </div>
+
+                                    {/* Box 2: Bill To */}
+                                    <div
+                                      style={{
+                                        padding: "10px 14px",
+                                        borderRadius: "6px",
+                                        border: "1px solid #e5e7eb",
+                                        backgroundColor: "#f9fafb",
+                                        fontSize: "11px",
+                                      }}
+                                    >
+                                      <div
+                                        style={{
+                                          display: "flex",
+                                          justifyContent: "space-between",
+                                          alignItems: "center",
+                                          marginBottom: "4px",
+                                        }}
+                                      >
+                                        <div
+                                          style={{
+                                            display: "flex",
+                                            alignItems: "center",
+                                            gap: "6px",
+                                            fontWeight: 800,
+                                            fontSize: "10px",
+                                            textTransform: "uppercase",
+                                            color: "#4b5563",
+                                          }}
+                                        >
+                                          <span
+                                            style={{
+                                              width: "7px",
+                                              height: "7px",
+                                              borderRadius: "50%",
+                                              backgroundColor: "#10b981",
+                                              display: "inline-block",
+                                            }}
+                                          />
+                                          Bill To (Customer)
+                                        </div>
+                                        <span
+                                          style={{
+                                            fontSize: "9px",
+                                            fontWeight: 700,
+                                            color: "#047857",
+                                            backgroundColor: "#d1fae5",
+                                            padding: "1px 5px",
+                                            borderRadius: "3px",
+                                          }}
+                                        >
+                                          Verified Delivery
+                                        </span>
+                                      </div>
+                                      <div
+                                        style={{
+                                          fontWeight: 700,
+                                          fontSize: "12px",
+                                          color: "#111827",
+                                        }}
+                                      >
+                                        {slip.customerName}
+                                      </div>
+                                      <div
+                                        style={{
+                                          color: "#4b5563",
+                                          marginTop: "2px",
+                                          lineHeight: 1.35,
+                                        }}
+                                      >
+                                        {slip.shippingAddress}
+                                        <br />
+                                        Phone: {slip.customerPhone}
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  {/* Table */}
+                                  <table
+                                    style={{
+                                      width: "100%",
+                                      borderCollapse: "collapse",
+                                      fontSize: "12px",
+                                    }}
+                                  >
+                                    <thead>
+                                      <tr
+                                        style={{
+                                          borderBottom: `2px solid ${accent}`,
+                                          color: "#111827",
+                                          textAlign: "left",
+                                          fontSize: "11px",
+                                          textTransform: "uppercase",
+                                          letterSpacing: "0.5px",
+                                        }}
+                                      >
+                                        <th style={{ padding: "8px 6px" }}>
+                                          Product Description
+                                        </th>
+                                        <th style={{ padding: "8px 6px" }}>
+                                          Internal SKU
+                                        </th>
+                                        <th
+                                          style={{
+                                            padding: "8px 6px",
+                                            textAlign: "center",
+                                          }}
+                                        >
+                                          Qty
+                                        </th>
+                                        <th
+                                          style={{
+                                            padding: "8px 6px",
+                                            textAlign: "right",
+                                          }}
+                                        >
+                                          Price
+                                        </th>
+                                        <th
+                                          style={{
+                                            padding: "8px 6px",
+                                            textAlign: "right",
+                                          }}
+                                        >
+                                          Total
+                                        </th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {slip.lineItems.map((item, i) => {
+                                        const itemQty = item.quantity || 1;
+                                        const itemUnitPrice =
+                                          Number(item.unitPrice) || 0;
+                                        const itemTotal =
+                                          itemUnitPrice * itemQty;
+                                        return (
+                                          <tr
+                                            key={`${slip.orderId}-modern-item-${i}`}
+                                            style={{
+                                              borderBottom:
+                                                "1px solid #f3f4f6",
+                                            }}
+                                          >
+                                            <td
+                                              style={{
+                                                padding: "8px 6px",
+                                                fontWeight: 600,
+                                              }}
+                                            >
+                                              {item.title}
+                                              {item.variantTitle && (
+                                                <span
+                                                  style={{
+                                                    display: "inline-block",
+                                                    backgroundColor: `${accent}15`,
+                                                    color: accent,
+                                                    padding: "1px 6px",
+                                                    borderRadius: "3px",
+                                                    fontSize: "10px",
+                                                    fontWeight: 700,
+                                                    marginLeft: "6px",
+                                                  }}
+                                                >
+                                                  {item.variantTitle}
+                                                </span>
+                                              )}
+                                            </td>
+                                            <td
+                                              style={{
+                                                padding: "8px 6px",
+                                                fontFamily: "monospace",
+                                                fontWeight: 700,
+                                                color: "#4b5563",
+                                              }}
+                                            >
+                                              {item.sku || "N/A"}
+                                            </td>
+                                            <td
+                                              style={{
+                                                padding: "8px 6px",
+                                                textAlign: "center",
+                                                fontWeight: 700,
+                                              }}
+                                            >
+                                              {itemQty}
+                                            </td>
+                                            <td
+                                              style={{
+                                                padding: "8px 6px",
+                                                textAlign: "right",
+                                              }}
+                                            >
+                                              ৳{itemUnitPrice.toLocaleString()}
+                                            </td>
+                                            <td
+                                              style={{
+                                                padding: "8px 6px",
+                                                textAlign: "right",
+                                                fontWeight: 800,
+                                              }}
+                                            >
+                                              ৳{itemTotal.toLocaleString()}
+                                            </td>
+                                          </tr>
+                                        );
+                                      })}
+                                    </tbody>
+                                  </table>
+
+                                  {/* Financial Summary */}
+                                  <div
+                                    style={{
+                                      display: "flex",
+                                      justifyContent: "space-between",
+                                      alignItems: "flex-start",
+                                      marginTop: "16px",
+                                    }}
+                                  >
+                                    <div
+                                      style={{
+                                        maxWidth: "50%",
+                                        fontSize: "11px",
+                                        color: "#4b5563",
+                                      }}
+                                    >
+                                      <strong>Note:</strong> {effectiveNote}
+                                    </div>
+                                    <div
+                                      style={{
+                                        width: "230px",
+                                        padding: "10px 14px",
+                                        borderRadius: "6px",
+                                        border: "1px solid #e5e7eb",
+                                        backgroundColor: "#f9fafb",
+                                        fontSize: "11px",
+                                      }}
+                                    >
+                                      <div
+                                        style={{
+                                          display: "flex",
+                                          justifyContent: "space-between",
+                                          padding: "3px 0",
+                                          color: "#4b5563",
+                                        }}
+                                      >
+                                        <span>Total Items:</span>
+                                        <span>
+                                          {slip.lineItems.reduce(
+                                            (acc, it) =>
+                                              acc + (it.quantity || 1),
+                                            0
+                                          )}{" "}
+                                          Pcs
+                                        </span>
+                                      </div>
+                                      <div
+                                        style={{
+                                          display: "flex",
+                                          justifyContent: "space-between",
+                                          padding: "6px 0",
+                                          borderTop: `2px solid ${accent}`,
+                                          fontSize: "14px",
+                                          fontWeight: 900,
+                                          color: accent,
+                                        }}
+                                      >
+                                        <span>Total Payable:</span>
+                                        <span>
+                                          {Number(slip.codAmount) === 0
+                                            ? "৳0 (PREPAID)"
+                                            : `${slip.currencyCode} ৳${slip.codAmount}`}
+                                        </span>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+
+                                {/* Modern Footer */}
+                                <div
+                                  style={{
+                                    borderTop: "1px solid #f3f4f6",
+                                    paddingTop: "12px",
+                                    marginTop: "20px",
+                                    display: "flex",
+                                    justifyContent: "space-between",
+                                    alignItems: "center",
+                                    fontSize: "10px",
+                                    color: "#6b7280",
+                                  }}
+                                >
+                                  <div>
+                                    <span
+                                      style={{
+                                        fontWeight: 700,
+                                        color: "#111827",
+                                      }}
+                                    >
+                                      {invoiceConfig?.invoiceBrandName ||
+                                        brandName ||
+                                        shopDomain}
+                                    </span>{" "}
+                                    • Official Store Invoice
+                                  </div>
+                                  <div
+                                    style={{
+                                      fontWeight: 700,
+                                      color: accent,
+                                    }}
+                                  >
+                                    Verified E-Commerce Dispatch
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        }
+
+                        // C. WAREHOUSE FULFILLMENT (ENTERPRISE) MANIFEST INVOICE
+                        return (
+                          <div
+                            key={`${slip.orderId}-${index}-warehouse`}
+                            style={{
+                              width: "100%",
+                              maxWidth: "210mm",
+                              minHeight: "270mm",
+                              boxSizing: "border-box",
+                              border: "2px solid #111827",
+                              borderRadius: "6px",
+                              padding: "16mm 14mm",
+                              margin: "0 auto",
+                              background: "#ffffff",
+                              color: "#111827",
+                              fontFamily: "system-ui, -apple-system, sans-serif",
+                              pageBreakAfter: isLastSlip ? "auto" : "always",
+                              breakAfter: isLastSlip ? "auto" : "page",
+                              pageBreakInside: "avoid",
+                              breakInside: "avoid",
+                              display: "flex",
+                              flexDirection: "column",
+                              justifyContent: "space-between",
+                            }}
+                          >
+                            <div>
+                              {/* Warehouse Dual-Identity Banner Header */}
+                              <div
+                                style={{
+                                  border: "2px solid #111827",
+                                  padding: "10px 14px",
+                                  borderRadius: "4px",
+                                  backgroundColor: "#f8fafc",
+                                  display: "flex",
+                                  justifyContent: "space-between",
+                                  alignItems: "center",
+                                  marginBottom: "16px",
+                                }}
+                              >
+                                <div>
+                                  <div
+                                    style={{
+                                      fontSize: "18px",
+                                      fontWeight: 900,
+                                      letterSpacing: "1.5px",
+                                      textTransform: "uppercase",
+                                    }}
+                                  >
+                                    INVOICE / PACKING MANIFEST
+                                  </div>
+                                  <div
+                                    style={{
+                                      fontSize: "10px",
+                                      fontWeight: 700,
+                                      color: "#4b5563",
+                                      letterSpacing: "0.5px",
+                                    }}
+                                  >
+                                    ENTERPRISE WAREHOUSE DISPATCH • HUB:
+                                    DAC-NORTH
+                                  </div>
+                                </div>
+                                <div style={{ textAlign: "right" }}>
+                                  <div
+                                    style={{
+                                      fontSize: "16px",
+                                      fontWeight: 900,
+                                    }}
+                                  >
+                                    ORDER {slip.orderName}
+                                  </div>
+                                  <div
+                                    style={{
+                                      fontSize: "10px",
+                                      color: "#6b7280",
+                                    }}
+                                  >
+                                    {slip.bookingDate}
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Brand & Warehouse Dispatch Row */}
                               <div
                                 style={{
                                   display: "flex",
                                   justifyContent: "space-between",
-                                  borderBottom: "1px solid #000000",
-                                  paddingBottom: "8px",
-                                  marginBottom: "12px",
+                                  alignItems: "flex-start",
+                                  paddingBottom: "12px",
+                                  borderBottom: "1.5px solid #d1d5db",
+                                  fontSize: "11px",
                                 }}
                               >
                                 <div>
-                                  <strong>STANDARD PACKING SLIP</strong> • Order{" "}
-                                  <strong>{slip.orderName}</strong>
-                                </div>
-                                <div>
-                                  Courier: <strong>{slip.courierName}</strong> |
-                                  Consignment: <strong>{slip.trackingNumber}</strong>
-                                </div>
-                              </div>
-
-                              <div style={{ marginBottom: "12px" }}>
-                                <div>
-                                  <strong>Customer:</strong> {slip.customerName} (
-                                  {slip.customerPhone})
-                                </div>
-                                <div>
-                                  <strong>Shipping Address:</strong>{" "}
-                                  {slip.shippingAddress}
-                                </div>
-                                <div>
-                                  <strong>COD Amount:</strong>{" "}
-                                  {Number(slip.codAmount) === 0
-                                    ? "PREPAID (৳0 COD)"
-                                    : `${slip.currencyCode} ${slip.codAmount}`}
-                                </div>
-                              </div>
-
-                              <table
-                                style={{
-                                  width: "100%",
-                                  borderCollapse: "collapse",
-                                  fontSize: "13px",
-                                }}
-                              >
-                                <thead>
-                                  <tr
+                                  {invoiceConfig?.invoiceBrandLogo ? (
+                                    <img
+                                      src={invoiceConfig.invoiceBrandLogo}
+                                      alt={
+                                        invoiceConfig.invoiceBrandName ||
+                                        "Brand Logo"
+                                      }
+                                      style={{
+                                        maxHeight: "36px",
+                                        maxWidth: "140px",
+                                        objectFit: "contain",
+                                        marginBottom: "4px",
+                                      }}
+                                    />
+                                  ) : (
+                                    <div
+                                      style={{
+                                        fontSize: "16px",
+                                        fontWeight: 800,
+                                      }}
+                                    >
+                                      {invoiceConfig?.invoiceBrandName ||
+                                        brandName ||
+                                        shopDomain}
+                                    </div>
+                                  )}
+                                  <div
                                     style={{
-                                      borderBottom: "1px solid #000000",
-                                      textAlign: "left",
+                                      color: "#4b5563",
+                                      lineHeight: 1.35,
                                     }}
                                   >
-                                    <th style={{ padding: "4px 0" }}>Item Title</th>
-                                    <th style={{ padding: "4px 0" }}>SKU</th>
-                                    <th style={{ padding: "4px 0" }}>Qty</th>
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {slip.lineItems.map((item, i) => (
-                                    <tr
-                                      key={`${slip.orderId}-std-${i}`}
-                                      style={{ borderBottom: "1px dotted #999999" }}
-                                    >
-                                      <td style={{ padding: "6px 0" }}>
-                                        {item.title}
-                                      </td>
-                                      <td style={{ padding: "6px 0" }}>
-                                        {item.sku}
-                                      </td>
-                                      <td style={{ padding: "6px 0" }}>
-                                        {item.quantity}
-                                      </td>
-                                    </tr>
-                                  ))}
-                                </tbody>
-                              </table>
-                            </div>
-                          );
-                        }
+                                    {invoiceConfig?.invoiceBrandAddress && (
+                                      <div>
+                                        {invoiceConfig.invoiceBrandAddress}
+                                      </div>
+                                    )}
+                                    <div>
+                                      Dispatch Hotline:{" "}
+                                      {invoiceConfig?.invoiceBrandPhone ||
+                                        brandPhone ||
+                                        "+880 1711-000000"}
+                                    </div>
+                                  </div>
+                                </div>
 
-                        if (selectedSlipTemplate === "branded") {
-                          return (
-                            <div
-                              key={slip.orderId}
-                              style={{
-                                border: "2px solid #1f2937",
-                                borderRadius: "8px",
-                                padding: "20px",
-                                background: "#ffffff",
-                                color: "#111827",
-                              }}
-                            >
-                              <div
-                                style={{
-                                  display: "grid",
-                                  gridTemplateColumns: "140px 1fr auto",
-                                  gap: "16px",
-                                  alignItems: "center",
-                                  borderBottom: "2px solid #111827",
-                                  paddingBottom: "14px",
-                                  marginBottom: "16px",
-                                }}
-                              >
                                 <div
                                   style={{
-                                    border: "2px dashed #4b5563",
-                                    borderRadius: "6px",
-                                    height: "64px",
-                                    display: "flex",
-                                    alignItems: "center",
-                                    justifyContent: "center",
-                                    fontWeight: 700,
-                                    fontSize: "12px",
-                                    background: "#f9fafb",
-                                    textAlign: "center",
+                                    textAlign: "right",
+                                    color: "#4b5563",
+                                    lineHeight: 1.4,
                                   }}
                                 >
-                                  [STORE LOGO]
-                                  <br />
-                                  {shopDomain.split(".")[0].toUpperCase()}
-                                </div>
-
-                                <div>
-                                  <div style={{ fontSize: "18px", fontWeight: 800 }}>
-                                    {shopDomain} — BRANDED COD INVOICE
+                                  <div>
+                                    <strong>Fulfillment:</strong> Auto-Routing
                                   </div>
-                                  <div
-                                    style={{
-                                      fontSize: "12px",
-                                      color: "#4b5563",
-                                      fontStyle: "italic",
-                                      marginTop: "4px",
-                                    }}
-                                  >
-                                    &ldquo;{customShopSlogan}&rdquo;
+                                  <div>
+                                    <strong>Courier Partner:</strong>{" "}
+                                    {slip.courierName}
                                   </div>
-                                </div>
-
-                                <div>
-                                  <DynamicBarcodeGraphic
-                                    code={slip.trackingNumber}
-                                    height={42}
-                                  />
+                                  <div>
+                                    <strong>Consignment:</strong>{" "}
+                                    {slip.trackingNumber || "PENDING"}
+                                  </div>
                                 </div>
                               </div>
 
+                              {/* Consignee Recipient Block */}
                               <div
                                 style={{
+                                  margin: "12px 0",
+                                  padding: "10px 14px",
+                                  backgroundColor: "#f3f4f6",
+                                  borderRadius: "4px",
+                                  border: "1px solid #d1d5db",
                                   display: "grid",
                                   gridTemplateColumns: "1fr 1fr",
-                                  gap: "16px",
-                                  marginBottom: "16px",
-                                  background: "#f3f4f6",
-                                  padding: "12px",
-                                  borderRadius: "6px",
+                                  gap: "14px",
+                                  fontSize: "11px",
                                 }}
                               >
                                 <div>
                                   <div
                                     style={{
-                                      fontSize: "11px",
-                                      fontWeight: 700,
+                                      fontSize: "10px",
+                                      fontWeight: 800,
                                       textTransform: "uppercase",
-                                      color: "#6b7280",
+                                      color: "#4b5563",
                                     }}
                                   >
-                                    Deliver To Customer
-                                  </div>
-                                  <div style={{ fontSize: "15px", fontWeight: 700 }}>
-                                    {slip.customerName} • {slip.customerPhone}
-                                  </div>
-                                  <div style={{ fontSize: "13px" }}>
-                                    {slip.shippingAddress}
-                                  </div>
-                                </div>
-
-                                <div style={{ textAlign: "right" }}>
-                                  <div style={{ fontSize: "13px", fontWeight: 700 }}>
-                                    Order: {slip.orderName} | Courier:{" "}
-                                    {slip.courierName}
+                                    Ship To (Consignee)
                                   </div>
                                   <div
                                     style={{
-                                      fontSize: "16px",
+                                      fontSize: "13px",
                                       fontWeight: 800,
+                                      marginTop: "2px",
+                                    }}
+                                  >
+                                    {slip.customerName}
+                                  </div>
+                                  <div
+                                    style={{
+                                      color: "#374151",
+                                      marginTop: "2px",
+                                      lineHeight: 1.3,
+                                    }}
+                                  >
+                                    {slip.shippingAddress}
+                                    <br />
+                                    Phone: {slip.customerPhone}
+                                  </div>
+                                </div>
+
+                                <div
+                                  style={{
+                                    borderLeft: "1px solid #d1d5db",
+                                    paddingLeft: "14px",
+                                  }}
+                                >
+                                  <div
+                                    style={{
+                                      fontSize: "10px",
+                                      fontWeight: 800,
+                                      textTransform: "uppercase",
+                                      color: "#4b5563",
+                                    }}
+                                  >
+                                    Payment Instructions
+                                  </div>
+                                  <div
+                                    style={{
+                                      fontSize: "14px",
+                                      fontWeight: 900,
                                       color:
                                         Number(slip.codAmount) === 0
                                           ? "#047857"
-                                          : "#b45309",
-                                      marginTop: "4px",
+                                          : "#dc2626",
+                                      marginTop: "2px",
                                     }}
                                   >
-                                    COD Collectible:{" "}
                                     {Number(slip.codAmount) === 0
                                       ? "PREPAID (৳0 COD)"
-                                      : `${slip.currencyCode} ${slip.codAmount}`}
+                                      : `COLLECT CASH: ${slip.currencyCode} ৳${slip.codAmount}`}
                                   </div>
-                                  <div style={{ fontSize: "12px", color: "#374151" }}>
-                                    Note: {slip.warehouseNote}
+                                  <div
+                                    style={{
+                                      fontSize: "10px",
+                                      color: "#6b7280",
+                                      marginTop: "2px",
+                                    }}
+                                  >
+                                    Courier: {slip.courierName}
                                   </div>
                                 </div>
                               </div>
 
+                              {/* Packaging Staff Instruction Banner */}
+                              <div
+                                style={{
+                                  border: "1.5px solid #dc2626",
+                                  backgroundColor: "#fef2f2",
+                                  color: "#991b1b",
+                                  padding: "8px 12px",
+                                  borderRadius: "4px",
+                                  fontWeight: 800,
+                                  fontSize: "12px",
+                                  marginBottom: "12px",
+                                }}
+                              >
+                                ⚠️ PACKAGING STAFF INSTRUCTION: {effectiveNote}
+                              </div>
+
+                              {/* Order Table with Barcoding Metadata */}
                               <table
                                 style={{
                                   width: "100%",
                                   borderCollapse: "collapse",
-                                  fontSize: "13px",
+                                  fontSize: "12px",
                                 }}
                               >
                                 <thead>
                                   <tr
                                     style={{
-                                      background: "#111827",
+                                      backgroundColor: "#1f2937",
                                       color: "#ffffff",
                                       textAlign: "left",
+                                      fontSize: "10px",
+                                      textTransform: "uppercase",
                                     }}
                                   >
-                                    <th style={{ padding: "8px" }}>
-                                      Product Description
+                                    <th style={{ padding: "8px 10px" }}>
+                                      Internal SKU & Barcode
                                     </th>
-                                    <th style={{ padding: "8px" }}>
-                                      Variant Breakdown (Size / Color)
+                                    <th style={{ padding: "8px 10px" }}>
+                                      Item & Variant Description
                                     </th>
-                                    <th style={{ padding: "8px" }}>Internal SKU</th>
-                                    <th style={{ padding: "8px" }}>Qty</th>
                                     <th
-                                      style={{ padding: "8px", textAlign: "right" }}
+                                      style={{
+                                        padding: "8px 10px",
+                                        textAlign: "center",
+                                      }}
+                                    >
+                                      Pick Qty
+                                    </th>
+                                    <th
+                                      style={{
+                                        padding: "8px 10px",
+                                        textAlign: "right",
+                                      }}
                                     >
                                       Price
                                     </th>
@@ -5646,246 +7128,100 @@ export default function OrdersFulfillmentPage() {
                                 <tbody>
                                   {slip.lineItems.map((item, i) => (
                                     <tr
-                                      key={`${slip.orderId}-brand-${i}`}
-                                      style={{ borderBottom: "1px solid #e5e7eb" }}
+                                      key={`${slip.orderId}-warehouse-item-${i}`}
+                                      style={{
+                                        borderBottom: "1px solid #e5e7eb",
+                                      }}
                                     >
-                                      <td style={{ padding: "8px", fontWeight: 600 }}>
-                                        {item.title}
-                                      </td>
-                                      <td style={{ padding: "8px" }}>
-                                        <span
+                                      <td
+                                        style={{
+                                          padding: "8px 10px",
+                                          fontFamily: "monospace",
+                                          fontWeight: 800,
+                                          fontSize: "13px",
+                                        }}
+                                      >
+                                        <div>{item.sku || "N/A"}</div>
+                                        <div
                                           style={{
-                                            background: "#dbeafe",
-                                            color: "#1e40af",
-                                            padding: "3px 8px",
-                                            borderRadius: "4px",
-                                            fontWeight: 700,
-                                            fontSize: "12px",
+                                            fontSize: "8px",
+                                            color: "#6b7280",
+                                            marginTop: "1px",
                                           }}
                                         >
-                                          {item.variantTitle}
-                                        </span>
+                                          BIN: A-04
+                                        </div>
+                                      </td>
+                                      <td style={{ padding: "8px 10px" }}>
+                                        <div style={{ fontWeight: 700 }}>
+                                          {item.title}
+                                        </div>
+                                        {item.variantTitle && (
+                                          <div
+                                            style={{
+                                              display: "inline-block",
+                                              marginTop: "2px",
+                                              backgroundColor: "#fef3c7",
+                                              border: "1px solid #f59e0b",
+                                              padding: "1px 6px",
+                                              fontWeight: 700,
+                                              fontSize: "10px",
+                                            }}
+                                          >
+                                            {item.variantTitle}
+                                          </div>
+                                        )}
                                       </td>
                                       <td
                                         style={{
-                                          padding: "8px",
-                                          fontFamily: "monospace",
+                                          padding: "8px 10px",
+                                          textAlign: "center",
+                                          fontWeight: 800,
+                                          fontSize: "14px",
+                                        }}
+                                      >
+                                        x{item.quantity || 1}
+                                      </td>
+                                      <td
+                                        style={{
+                                          padding: "8px 10px",
+                                          textAlign: "right",
                                           fontWeight: 700,
                                         }}
                                       >
-                                        {item.sku}
-                                      </td>
-                                      <td style={{ padding: "8px", fontWeight: 700 }}>
-                                        {item.quantity}
-                                      </td>
-                                      <td
-                                        style={{ padding: "8px", textAlign: "right" }}
-                                      >
-                                        {slip.currencyCode} {item.unitPrice}
+                                        ৳
+                                        {(
+                                          Number(item.unitPrice) || 0
+                                        ).toLocaleString()}
                                       </td>
                                     </tr>
                                   ))}
                                 </tbody>
                               </table>
                             </div>
-                          );
-                        }
 
-                        return (
-                          <div
-                            key={slip.orderId}
-                            style={{
-                              border: "3px solid #111827",
-                              borderRadius: "6px",
-                              padding: "18px",
-                              background: "#ffffff",
-                              color: "#111827",
-                            }}
-                          >
+                            {/* Manifest Bottom Barcode */}
                             <div
                               style={{
-                                display: "grid",
-                                gridTemplateColumns: "38% 62%",
-                                gap: "18px",
+                                textAlign: "center",
+                                borderTop: "2px dashed #111827",
+                                paddingTop: "12px",
+                                marginTop: "16px",
                               }}
                             >
+                              <DynamicBarcodeGraphic
+                                code={slip.trackingNumber}
+                                height={38}
+                              />
                               <div
                                 style={{
-                                  borderRight: "2px dashed #111827",
-                                  paddingRight: "16px",
+                                  fontSize: "10px",
+                                  fontWeight: 700,
+                                  color: "#6b7280",
+                                  marginTop: "2px",
                                 }}
                               >
-                                <div
-                                  style={{
-                                    background: "#111827",
-                                    color: "#ffffff",
-                                    padding: "6px 10px",
-                                    fontWeight: 800,
-                                    fontSize: "13px",
-                                    marginBottom: "10px",
-                                  }}
-                                >
-                                  COL 1 • CARRIER ROUTING &amp; BARCODE
-                                </div>
-
-                                <div style={{ marginBottom: "10px" }}>
-                                  <DynamicBarcodeGraphic
-                                    code={slip.trackingNumber}
-                                    height={52}
-                                  />
-                                </div>
-
-                                <div
-                                  style={{
-                                    border: "2px solid #111827",
-                                    padding: "8px",
-                                    marginBottom: "10px",
-                                    fontWeight: 800,
-                                    fontSize: "14px",
-                                    textAlign: "center",
-                                    background: "#f3f4f6",
-                                  }}
-                                >
-                                  {slip.courierName.toUpperCase()} •{" "}
-                                  {slip.isInsideDhaka
-                                    ? "INSIDE DHAKA HUB"
-                                    : "OUTSIDE DHAKA LINEHAUL"}
-                                </div>
-
-                                <div style={{ fontSize: "13px", lineHeight: 1.4 }}>
-                                  <div>
-                                    <strong>Order ID:</strong> {slip.orderName}
-                                  </div>
-                                  <div>
-                                    <strong>Recipient:</strong> {slip.customerName}
-                                  </div>
-                                  <div>
-                                    <strong>Phone:</strong> {slip.customerPhone}
-                                  </div>
-                                  <div>
-                                    <strong>Address:</strong> {slip.shippingAddress}
-                                  </div>
-                                  <div
-                                    style={{
-                                      marginTop: "8px",
-                                      fontSize: "15px",
-                                      fontWeight: 800,
-                                      color:
-                                        Number(slip.codAmount) === 0
-                                          ? "#047857"
-                                          : "#111827",
-                                    }}
-                                  >
-                                    COD TO COLLECT:{" "}
-                                    {Number(slip.codAmount) === 0
-                                      ? "PREPAID (৳0 COD)"
-                                      : `${slip.currencyCode} ${slip.codAmount}`}
-                                  </div>
-                                </div>
-                              </div>
-
-                              <div>
-                                <div
-                                  style={{
-                                    background: "#1e293b",
-                                    color: "#ffffff",
-                                    padding: "6px 10px",
-                                    fontWeight: 800,
-                                    fontSize: "13px",
-                                    marginBottom: "10px",
-                                  }}
-                                >
-                                  COL 2 • INDUSTRIAL PICK/PACK SKU &amp; VARIANT
-                                  MANIFEST
-                                </div>
-
-                                <div
-                                  style={{
-                                    border: "2px solid #dc2626",
-                                    background: "#fef2f2",
-                                    color: "#991b1b",
-                                    padding: "10px 12px",
-                                    borderRadius: "4px",
-                                    fontWeight: 800,
-                                    fontSize: "14px",
-                                    marginBottom: "12px",
-                                  }}
-                                >
-                                  PACKAGING STAFF INSTRUCTION: {slip.warehouseNote}
-                                </div>
-
-                                <table
-                                  style={{
-                                    width: "100%",
-                                    borderCollapse: "collapse",
-                                    fontSize: "13px",
-                                  }}
-                                >
-                                  <thead>
-                                    <tr
-                                      style={{
-                                        borderBottom: "2px solid #111827",
-                                        textAlign: "left",
-                                      }}
-                                    >
-                                      <th style={{ padding: "6px" }}>
-                                        Internal SKU
-                                      </th>
-                                      <th style={{ padding: "6px" }}>
-                                        Item &amp; Variant (Size / Color)
-                                      </th>
-                                      <th style={{ padding: "6px" }}>Qty</th>
-                                    </tr>
-                                  </thead>
-                                  <tbody>
-                                    {slip.lineItems.map((item, i) => (
-                                      <tr
-                                        key={`${slip.orderId}-ent-${i}`}
-                                        style={{
-                                          borderBottom: "1px solid #d1d5db",
-                                        }}
-                                      >
-                                        <td
-                                          style={{
-                                            padding: "8px 6px",
-                                            fontFamily: "monospace",
-                                            fontWeight: 800,
-                                            fontSize: "14px",
-                                          }}
-                                        >
-                                          {item.sku}
-                                        </td>
-                                        <td style={{ padding: "8px 6px" }}>
-                                          <div style={{ fontWeight: 700 }}>
-                                            {item.title}
-                                          </div>
-                                          <div
-                                            style={{
-                                              display: "inline-block",
-                                              marginTop: "3px",
-                                              background: "#fef3c7",
-                                              border: "1px solid #f59e0b",
-                                              padding: "2px 6px",
-                                              fontWeight: 700,
-                                              fontSize: "12px",
-                                            }}
-                                          >
-                                            {item.variantTitle}
-                                          </div>
-                                        </td>
-                                        <td
-                                          style={{
-                                            padding: "8px 6px",
-                                            fontWeight: 800,
-                                            fontSize: "16px",
-                                          }}
-                                        >
-                                          x{item.quantity}
-                                        </td>
-                                      </tr>
-                                    ))}
-                                  </tbody>
-                                </table>
+                                TRACKING MANIFEST REF: {slip.trackingNumber || "PENDING"}
                               </div>
                             </div>
                           </div>
