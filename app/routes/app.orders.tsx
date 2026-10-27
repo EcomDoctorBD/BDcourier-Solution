@@ -6209,21 +6209,40 @@ export default function OrdersFulfillmentPage() {
                                     fontSize: isCompact ? "9px" : "11.5px",
                                     lineHeight: 1.4,
                                     color: "#1f2937",
+                                    overflow: "hidden",
                                   }}
                                 >
-                                  <div style={{ fontWeight: 800, fontSize: isCompact ? "11px" : "13px", marginBottom: "4px", color: "#111827" }}>
+                                  <div
+                                    style={{
+                                      fontWeight: 800,
+                                      fontSize: isCompact ? "11px" : "13px",
+                                      marginBottom: "4px",
+                                      color: "#111827",
+                                      whiteSpace: "nowrap",
+                                      overflow: "hidden",
+                                      textOverflow: "ellipsis",
+                                    }}
+                                  >
                                     Order: {slip.orderName}
                                   </div>
-                                  <div>
+                                  <div style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                                     <strong>Customer:</strong> {slip.customerName || matchingOrder?.customerName || "N/A"}
                                   </div>
-                                  <div>
+                                  <div style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                                     <strong>Phone:</strong> {slip.customerPhone || matchingOrder?.customerPhone || "N/A"}
                                   </div>
-                                  <div>
+                                  <div style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                                     <strong>Cancelled At:</strong> {cancelDateText ? new Date(cancelDateText).toLocaleString("en-GB") : "Recently"}
                                   </div>
-                                  <div>
+                                  <div
+                                    style={{
+                                      display: "-webkit-box",
+                                      WebkitLineClamp: 2,
+                                      WebkitBoxOrient: "vertical",
+                                      overflow: "hidden",
+                                      wordBreak: "break-word",
+                                    }}
+                                  >
                                     <strong>Reason:</strong> {cancelReasonText}
                                   </div>
                                 </div>
@@ -6367,15 +6386,40 @@ export default function OrdersFulfillmentPage() {
                           const dimensions = getPrintLabelDimensions(
                             shippingLabelConfig?.labelSize || "4in x 6in"
                           );
-                          const isCompact = [
-                            "4in x 2in",
-                            "3in x 2in",
-                            "2in x 1.5in",
+                          const labelSize = shippingLabelConfig?.labelSize || "4in x 6in";
+                          const isMicro = [
                             "1.5in x 1in",
                             "2in x 1in",
                             "2in x 1.15in",
                             "2.2in x 1.4in",
-                          ].includes(shippingLabelConfig?.labelSize || "4in x 6in");
+                          ].includes(labelSize);
+                          const isCompact =
+                            isMicro ||
+                            [
+                              "4in x 2in",
+                              "3in x 2in",
+                              "2in x 1.5in",
+                              "2in x 2.95in",
+                            ].includes(labelSize);
+
+                          // Master Audit Point 9: Compact Thermal Conditional Font-Scaling & Overflow Engine
+                          const thermalTypography = {
+                            headerTitle: isMicro ? "9px" : isCompact ? "11px" : "14px",
+                            orderTitle: isMicro ? "9px" : isCompact ? "11px" : "13px",
+                            trackingNumber: isMicro ? "8.5px" : isCompact ? "10px" : "12px",
+                            customerHeader: isMicro ? "7.5px" : isCompact ? "8.5px" : "9.5px",
+                            customerName: isMicro ? "9.5px" : isCompact ? "11.5px" : "14px",
+                            customerPhone: isMicro ? "8.5px" : isCompact ? "10px" : "12px",
+                            addressText: isMicro ? "8px" : isCompact ? "9.5px" : "11.5px",
+                            codLabel: isMicro ? "7.5px" : isCompact ? "8.5px" : "9.5px",
+                            codAmount: isMicro ? "11px" : isCompact ? "13px" : "17px",
+                            itemsTotal: isMicro ? "9px" : isCompact ? "11px" : "13px",
+                            footerText: isMicro ? "7px" : isCompact ? "8px" : "9.5px",
+                            barcodeHeight: isMicro ? 22 : isCompact ? 28 : 42,
+                            addressLineClamp: isMicro ? 1 : isCompact ? 2 : 3,
+                            noteLineClamp: isMicro ? 1 : isCompact ? 1 : 2,
+                          };
+
                           const activeLabelStyle =
                             shippingLabelConfig?.labelStyle || "standard";
                           const totalItemsCount = slip.lineItems.reduce(
@@ -6413,7 +6457,9 @@ export default function OrdersFulfillmentPage() {
                               <div
                                 style={{
                                   borderBottom: "1.5px solid #000000",
-                                  paddingBottom: isCompact ? "3px" : "6px",
+                                  paddingBottom: isCompact ? "2px" : "5px",
+                                  flexShrink: 0,
+                                  overflow: "hidden",
                                 }}
                               >
                                 <div
@@ -6421,35 +6467,53 @@ export default function OrdersFulfillmentPage() {
                                     display: "flex",
                                     justifyContent: "space-between",
                                     alignItems: "center",
+                                    gap: "4px",
                                   }}
                                 >
-                                  <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                                  <div
+                                    style={{
+                                      display: "flex",
+                                      alignItems: "center",
+                                      gap: "6px",
+                                      minWidth: 0,
+                                      flex: "1 1 auto",
+                                      overflow: "hidden",
+                                    }}
+                                  >
                                     {brandLogo ? (
                                       <img
                                         src={brandLogo}
                                         alt={brandName || "Logo"}
                                         style={{
-                                          maxHeight: isCompact ? "18px" : "28px",
-                                          maxWidth: "100px",
+                                          maxHeight: isMicro ? "14px" : isCompact ? "18px" : "28px",
+                                          maxWidth: isMicro ? "60px" : "100px",
                                           objectFit: "contain",
+                                          flexShrink: 0,
                                         }}
                                       />
                                     ) : brandName ? (
                                       <span
                                         style={{
-                                          fontSize: isCompact ? "11px" : "13px",
+                                          fontSize: thermalTypography.headerTitle,
                                           fontWeight: "900",
                                           textTransform: "uppercase",
+                                          whiteSpace: "nowrap",
+                                          overflow: "hidden",
+                                          textOverflow: "ellipsis",
                                         }}
+                                        title={brandName}
                                       >
                                         {brandName}
                                       </span>
                                     ) : (
                                       <span
                                         style={{
-                                          fontSize: isCompact ? "11px" : "14px",
+                                          fontSize: thermalTypography.headerTitle,
                                           fontWeight: "900",
                                           letterSpacing: "0.5px",
+                                          whiteSpace: "nowrap",
+                                          overflow: "hidden",
+                                          textOverflow: "ellipsis",
                                         }}
                                       >
                                         {slip.courierName.toUpperCase()}
@@ -6458,30 +6522,49 @@ export default function OrdersFulfillmentPage() {
                                     {brandLogo && brandName && (
                                       <span
                                         style={{
-                                          fontSize: isCompact ? "10px" : "12px",
+                                          fontSize: isMicro ? "8px" : isCompact ? "10px" : "12px",
                                           fontWeight: "800",
                                           textTransform: "uppercase",
+                                          whiteSpace: "nowrap",
+                                          overflow: "hidden",
+                                          textOverflow: "ellipsis",
                                         }}
+                                        title={brandName}
                                       >
                                         {brandName}
                                       </span>
                                     )}
                                   </div>
-                                  <div style={{ textAlign: "right" }}>
+                                  <div
+                                    style={{
+                                      textAlign: "right",
+                                      flexShrink: 0,
+                                      maxWidth: "50%",
+                                      overflow: "hidden",
+                                    }}
+                                  >
                                     <span
                                       style={{
-                                        fontSize: isCompact ? "11px" : "13px",
+                                        fontSize: thermalTypography.orderTitle,
                                         fontWeight: "900",
+                                        whiteSpace: "nowrap",
+                                        overflow: "hidden",
+                                        textOverflow: "ellipsis",
+                                        display: "block",
                                       }}
+                                      title={slip.orderName}
                                     >
                                       {slip.orderName}
                                     </span>
                                     {brandLogo && (
                                       <div
                                         style={{
-                                          fontSize: "9px",
+                                          fontSize: isMicro ? "7px" : "9px",
                                           fontWeight: "700",
                                           color: "#374151",
+                                          whiteSpace: "nowrap",
+                                          overflow: "hidden",
+                                          textOverflow: "ellipsis",
                                         }}
                                       >
                                         {slip.courierName.toUpperCase()}
@@ -6492,16 +6575,20 @@ export default function OrdersFulfillmentPage() {
 
                                 <div
                                   style={{
-                                    fontSize: isCompact ? "9px" : "10px",
+                                    fontSize: isMicro ? "7.5px" : isCompact ? "8.5px" : "10px",
                                     color: "#4b5563",
                                     marginTop: "2px",
                                     display: "flex",
                                     justifyContent: "space-between",
                                     alignItems: "center",
+                                    whiteSpace: "nowrap",
+                                    overflow: "hidden",
                                   }}
                                 >
-                                  <span>Date: {slip.bookingDate}</span>
-                                  <span>
+                                  <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>
+                                    Date: {slip.bookingDate}
+                                  </span>
+                                  <span style={{ fontWeight: 700, flexShrink: 0 }}>
                                     {Number(slip.codAmount) === 0
                                       ? "PREPAID"
                                       : "Mode: COD"}
@@ -6512,11 +6599,14 @@ export default function OrdersFulfillmentPage() {
                                   shippingLabelConfig?.socialHandle && (
                                     <div
                                       style={{
-                                        fontSize: "9px",
+                                        fontSize: isMicro ? "7.5px" : "8.5px",
                                         fontWeight: 700,
                                         color: "#1d4ed8",
                                         textAlign: "center",
-                                        marginTop: "2px",
+                                        marginTop: "1px",
+                                        whiteSpace: "nowrap",
+                                        overflow: "hidden",
+                                        textOverflow: "ellipsis",
                                       }}
                                     >
                                       📱{" "}
@@ -6529,100 +6619,139 @@ export default function OrdersFulfillmentPage() {
                                   )}
                               </div>
 
-                              {/* Barcode & Tracking */}
+                              {/* Barcode & Tracking with protected geometry */}
                               <div
                                 style={{
                                   textAlign: "center",
-                                  padding: isCompact ? "3px 0" : "5px 0",
+                                  padding: isMicro ? "1px 0" : isCompact ? "2px 0" : "5px 0",
                                   borderBottom: "1px solid #000000",
+                                  flexShrink: 0,
+                                  overflow: "hidden",
                                 }}
                               >
-                                <DynamicBarcodeGraphic
-                                  code={slip.trackingNumber}
-                                  height={isCompact ? 28 : 40}
-                                />
                                 <div
                                   style={{
-                                    fontSize: isCompact ? "10px" : "12px",
+                                    display: "flex",
+                                    justifyContent: "center",
+                                    alignItems: "center",
+                                    overflow: "hidden",
+                                  }}
+                                >
+                                  <DynamicBarcodeGraphic
+                                    code={slip.trackingNumber}
+                                    height={thermalTypography.barcodeHeight}
+                                  />
+                                </div>
+                                <div
+                                  style={{
+                                    fontSize: thermalTypography.trackingNumber,
                                     fontWeight: "800",
-                                    letterSpacing: "1.5px",
-                                    marginTop: "2px",
+                                    letterSpacing: isCompact ? "0.5px" : "1.5px",
+                                    marginTop: "1px",
+                                    whiteSpace: "nowrap",
+                                    overflow: "hidden",
+                                    textOverflow: "ellipsis",
+                                    fontFamily: "monospace",
                                   }}
                                 >
                                   {slip.trackingNumber || "PENDING BOOKING"}
                                 </div>
                               </div>
 
-                              {/* Customer Address */}
+                              {/* Customer Address & Recipient Details with Character Clipping */}
                               <div
                                 style={{
                                   borderBottom: "1.5px solid #000000",
-                                  padding: isCompact ? "3px 0" : "5px 0",
+                                  padding: isMicro ? "2px 0" : isCompact ? "3px 0" : "5px 0",
+                                  overflow: "hidden",
                                 }}
                               >
                                 <div
                                   style={{
-                                    fontSize: "8.5px",
+                                    fontSize: thermalTypography.customerHeader,
                                     fontWeight: "700",
                                     textTransform: "uppercase",
                                     color: "#555555",
+                                    whiteSpace: "nowrap",
+                                    overflow: "hidden",
+                                    textOverflow: "ellipsis",
                                   }}
                                 >
                                   Deliver To Customer:
                                 </div>
                                 <div
                                   style={{
-                                    fontSize: isCompact ? "11px" : "13px",
+                                    fontSize: thermalTypography.customerName,
                                     fontWeight: "800",
                                     marginTop: "1px",
+                                    whiteSpace: "nowrap",
+                                    overflow: "hidden",
+                                    textOverflow: "ellipsis",
+                                    lineHeight: "1.2",
                                   }}
+                                  title={slip.customerName}
                                 >
                                   {slip.customerName}
                                 </div>
                                 <div
                                   style={{
-                                    fontSize: isCompact ? "10px" : "12px",
+                                    fontSize: thermalTypography.customerPhone,
                                     fontWeight: "700",
                                     marginTop: "1px",
+                                    whiteSpace: "nowrap",
+                                    overflow: "hidden",
+                                    textOverflow: "ellipsis",
+                                    lineHeight: "1.2",
                                   }}
                                 >
                                   📞 {slip.customerPhone}
                                 </div>
                                 <div
                                   style={{
-                                    fontSize: isCompact ? "9.5px" : "11px",
+                                    fontSize: thermalTypography.addressText,
                                     marginTop: "2px",
                                     lineHeight: "1.2",
+                                    display: "-webkit-box",
+                                    WebkitLineClamp: thermalTypography.addressLineClamp,
+                                    WebkitBoxOrient: "vertical",
+                                    overflow: "hidden",
+                                    wordBreak: "break-word",
                                   }}
+                                  title={slip.shippingAddress}
                                 >
                                   {slip.shippingAddress}
                                 </div>
                               </div>
 
-                              {/* COD & Items */}
+                              {/* COD & Items Total Row */}
                               <div
                                 style={{
                                   display: "flex",
                                   justifyContent: "space-between",
                                   alignItems: "center",
-                                  padding: isCompact ? "2px 0" : "4px 0",
+                                  padding: isMicro ? "1px 0" : isCompact ? "2px 0" : "4px 0",
                                   borderBottom: "1px solid #000000",
+                                  flexShrink: 0,
+                                  overflow: "hidden",
                                 }}
                               >
-                                <div>
+                                <div style={{ overflow: "hidden", maxWidth: "60%" }}>
                                   <div
                                     style={{
-                                      fontSize: "8.5px",
+                                      fontSize: thermalTypography.codLabel,
                                       fontWeight: "700",
                                       textTransform: "uppercase",
                                       color: "#555555",
+                                      whiteSpace: "nowrap",
+                                      overflow: "hidden",
+                                      textOverflow: "ellipsis",
                                     }}
                                   >
                                     Total COD Amount
                                   </div>
                                   <div
                                     style={{
-                                      fontSize: isCompact ? "13px" : "17px",
+                                      fontSize: thermalTypography.codAmount,
                                       fontWeight: "900",
                                       color:
                                         Number(slip.codAmount) === 0
@@ -6630,6 +6759,8 @@ export default function OrdersFulfillmentPage() {
                                           : "#000000",
                                       whiteSpace: "nowrap",
                                       fontVariantNumeric: "tabular-nums",
+                                      overflow: "hidden",
+                                      textOverflow: "ellipsis",
                                     }}
                                   >
                                     {Number(slip.codAmount) === 0
@@ -6637,21 +6768,23 @@ export default function OrdersFulfillmentPage() {
                                       : formatTakaCurrency(slip.codAmount, { symbol: shippingLabelConfig?.currencySymbol || "৳" })}
                                   </div>
                                 </div>
-                                <div style={{ textAlign: "right" }}>
+                                <div style={{ textAlign: "right", flexShrink: 0 }}>
                                   <div
                                     style={{
-                                      fontSize: "8.5px",
+                                      fontSize: thermalTypography.codLabel,
                                       fontWeight: "700",
                                       textTransform: "uppercase",
                                       color: "#555555",
+                                      whiteSpace: "nowrap",
                                     }}
                                   >
                                     Items Total
                                   </div>
                                   <div
                                     style={{
-                                      fontSize: isCompact ? "12px" : "14px",
+                                      fontSize: thermalTypography.itemsTotal,
                                       fontWeight: "800",
+                                      whiteSpace: "nowrap",
                                     }}
                                   >
                                     {totalItemsCount} Pcs
@@ -6659,30 +6792,40 @@ export default function OrdersFulfillmentPage() {
                                 </div>
                               </div>
 
-                              {/* Tier-Specific Footer Section */}
+                              {/* Tier-Specific Footer Section with Guardrails */}
                               {activeLabelStyle === "brand_centric" && (
-                                <div style={{ marginTop: "2px" }}>
+                                <div style={{ marginTop: "2px", flexShrink: 0, overflow: "hidden" }}>
                                   <div
                                     style={{
                                       backgroundColor: "#111827",
                                       color: "#ffffff",
-                                      padding: isCompact ? "2px 4px" : "4px 6px",
+                                      padding: isMicro ? "1px 4px" : isCompact ? "2px 4px" : "4px 6px",
                                       borderRadius: "2px",
                                       fontWeight: 800,
-                                      fontSize: isCompact ? "8px" : "9px",
+                                      fontSize: isMicro ? "7px" : isCompact ? "8px" : "9px",
                                       textAlign: "center",
                                       textTransform: "uppercase",
                                       letterSpacing: "0.5px",
+                                      whiteSpace: "nowrap",
+                                      overflow: "hidden",
+                                      textOverflow: "ellipsis",
                                     }}
                                   >
                                     Thank you for shopping with us!
                                   </div>
                                   <div
                                     style={{
-                                      fontSize: "8.5px",
+                                      fontSize: thermalTypography.footerText,
                                       color: "#444444",
                                       marginTop: "2px",
+                                      display: "-webkit-box",
+                                      WebkitLineClamp: thermalTypography.noteLineClamp,
+                                      WebkitBoxOrient: "vertical",
+                                      overflow: "hidden",
+                                      wordBreak: "break-word",
+                                      lineHeight: "1.15",
                                     }}
+                                    title={effectiveNote}
                                   >
                                     <strong>Note:</strong> {effectiveNote}
                                   </div>
@@ -6694,8 +6837,10 @@ export default function OrdersFulfillmentPage() {
                                   style={{
                                     display: "flex",
                                     flexDirection: "column",
-                                    gap: "2px",
+                                    gap: "1px",
                                     marginTop: "2px",
+                                    flexShrink: 0,
+                                    overflow: "hidden",
                                   }}
                                 >
                                   <div
@@ -6705,11 +6850,14 @@ export default function OrdersFulfillmentPage() {
                                       color: "#92400e",
                                       padding: "1px 4px",
                                       borderRadius: "2px",
-                                      fontSize: "8px",
+                                      fontSize: isMicro ? "6.5px" : "7.5px",
                                       fontWeight: 800,
                                       textAlign: "center",
                                       textTransform: "uppercase",
                                       letterSpacing: "0.5px",
+                                      whiteSpace: "nowrap",
+                                      overflow: "hidden",
+                                      textOverflow: "ellipsis",
                                     }}
                                   >
                                     ⚠️{" "}
@@ -6722,9 +6870,11 @@ export default function OrdersFulfillmentPage() {
                                       paddingTop: "1px",
                                       display: "flex",
                                       justifyContent: "space-between",
-                                      fontSize: "8px",
+                                      fontSize: isMicro ? "6.5px" : "7.5px",
                                       fontWeight: 800,
                                       textTransform: "uppercase",
+                                      whiteSpace: "nowrap",
+                                      overflow: "hidden",
                                     }}
                                   >
                                     <span>FULFILLMENT MANIFEST</span>
@@ -6735,11 +6885,12 @@ export default function OrdersFulfillmentPage() {
                                       display: "flex",
                                       flexDirection: "column",
                                       gap: "1px",
-                                      fontSize: "8px",
+                                      fontSize: isMicro ? "6.5px" : "7.5px",
+                                      overflow: "hidden",
                                     }}
                                   >
                                     {slip.lineItems
-                                      .slice(0, isCompact ? 2 : 3)
+                                      .slice(0, isMicro ? 1 : isCompact ? 2 : 3)
                                       .map((it, idx) => (
                                         <div
                                           key={idx}
@@ -6748,9 +6899,18 @@ export default function OrdersFulfillmentPage() {
                                             justifyContent: "space-between",
                                             borderBottom: "1px dotted #ccc",
                                             paddingBottom: "1px",
+                                            overflow: "hidden",
                                           }}
                                         >
-                                          <div>
+                                          <div
+                                            style={{
+                                              whiteSpace: "nowrap",
+                                              overflow: "hidden",
+                                              textOverflow: "ellipsis",
+                                              maxWidth: "80%",
+                                            }}
+                                            title={it.title}
+                                          >
                                             <span style={{ fontWeight: 700 }}>
                                               {it.title}
                                             </span>
@@ -6768,7 +6928,7 @@ export default function OrdersFulfillmentPage() {
                                               <span
                                                 style={{
                                                   fontFamily: "monospace",
-                                                  fontSize: "7px",
+                                                  fontSize: "6.5px",
                                                   color: "#6b7280",
                                                   marginLeft: "3px",
                                                 }}
@@ -6777,7 +6937,7 @@ export default function OrdersFulfillmentPage() {
                                               </span>
                                             )}
                                           </div>
-                                          <span style={{ fontWeight: 800 }}>
+                                          <span style={{ fontWeight: 800, flexShrink: 0 }}>
                                             x{it.quantity || 1}
                                           </span>
                                         </div>
@@ -6785,10 +6945,17 @@ export default function OrdersFulfillmentPage() {
                                   </div>
                                   <div
                                     style={{
-                                      fontSize: "8px",
+                                      fontSize: isMicro ? "6.5px" : "7.5px",
                                       color: "#444444",
                                       paddingTop: "1px",
+                                      display: "-webkit-box",
+                                      WebkitLineClamp: thermalTypography.noteLineClamp,
+                                      WebkitBoxOrient: "vertical",
+                                      overflow: "hidden",
+                                      wordBreak: "break-word",
+                                      lineHeight: "1.15",
                                     }}
+                                    title={effectiveNote}
                                   >
                                     <strong>Instruction:</strong> {effectiveNote}
                                   </div>
@@ -6798,10 +6965,18 @@ export default function OrdersFulfillmentPage() {
                               {activeLabelStyle === "standard" && (
                                 <div
                                   style={{
-                                    fontSize: isCompact ? "8.5px" : "9.5px",
+                                    fontSize: thermalTypography.footerText,
                                     color: "#444444",
                                     paddingTop: "2px",
+                                    flexShrink: 0,
+                                    display: "-webkit-box",
+                                    WebkitLineClamp: thermalTypography.noteLineClamp,
+                                    WebkitBoxOrient: "vertical",
+                                    overflow: "hidden",
+                                    wordBreak: "break-word",
+                                    lineHeight: "1.15",
                                   }}
+                                  title={effectiveNote}
                                 >
                                   <strong>Note:</strong> {effectiveNote}
                                 </div>
