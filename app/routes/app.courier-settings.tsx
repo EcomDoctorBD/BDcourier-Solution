@@ -35,6 +35,8 @@ import {
   Icon,
   RadioButton,
   Tabs,
+  DropZone,
+  Thumbnail,
 } from "@shopify/polaris";
 
 import { authenticate } from "../shopify.server";
@@ -367,6 +369,14 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     ),
   };
 
+  const shippingLabelConfig = {
+    labelSize: (storeConfig as any)?.labelSize || "4in x 6in",
+    brandName: (storeConfig as any)?.brandName || "",
+    brandPhone: (storeConfig as any)?.brandPhone || "",
+    brandAddress: (storeConfig as any)?.brandAddress || "",
+    brandLogo: (storeConfig as any)?.brandLogo || "",
+  };
+
   return json({
     shopDomain,
     currentPlan,
@@ -375,6 +385,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     routingConfig,
     aiConfig,
     appUrl,
+    shippingLabelConfig,
   });
 };
 
@@ -895,6 +906,35 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     });
   }
 
+  // ==================== 8. SAVE SHIPPING LABEL SETTINGS ====================
+  if (actionType === "saveShippingLabelSettings") {
+    const labelSize = String(formData.get("labelSize") || "4in x 6in").trim();
+    const brandName = String(formData.get("brandName") || "").trim();
+    const brandPhone = String(formData.get("brandPhone") || "").trim();
+    const brandAddress = String(formData.get("brandAddress") || "").trim();
+    const brandLogo = String(formData.get("brandLogo") || "").trim();
+
+    await CourierConfig.findOneAndUpdate(
+      { shopDomain },
+      {
+        $set: {
+          labelSize,
+          brandName,
+          brandPhone,
+          brandAddress,
+          brandLogo,
+        },
+      },
+      { upsert: true, new: true, setDefaultsOnInsert: true }
+    );
+
+    return json({
+      success: true,
+      actionType: "saveShippingLabelSettings",
+      message: "Shipping Label configuration saved successfully.",
+    });
+  }
+
   return json({
     success: false,
     actionType,
@@ -910,6 +950,7 @@ export default function CourierSettingsPage() {
     routingConfig,
     aiConfig,
     appUrl,
+    shippingLabelConfig,
   } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const submit = useSubmit();
@@ -1433,6 +1474,51 @@ export default function CourierSettingsPage() {
   const [selectedSettingsTab, setSelectedSettingsTab] = useState<
     "courier_integration" | "shipping_label" | "invoice"
   >("courier_integration");
+
+  // ==================== 7. SHIPPING LABEL SETTINGS STATE ====================
+  const [labelSize, setLabelSize] = useState<string>(
+    shippingLabelConfig?.labelSize || "4in x 6in"
+  );
+  const [brandName, setBrandName] = useState<string>(
+    shippingLabelConfig?.brandName || ""
+  );
+  const [brandPhone, setBrandPhone] = useState<string>(
+    shippingLabelConfig?.brandPhone || ""
+  );
+  const [brandAddress, setBrandAddress] = useState<string>(
+    shippingLabelConfig?.brandAddress || ""
+  );
+  const [brandLogo, setBrandLogo] = useState<string>(
+    shippingLabelConfig?.brandLogo || ""
+  );
+
+  const isCompactLabel = ["3in x 2in", "2in x 1.5in", "2in x 1in"].includes(labelSize);
+
+  const isSubmittingShippingLabel =
+    navigation.state === "submitting" &&
+    navigation.formData?.get("actionType") === "saveShippingLabelSettings";
+
+  const handleLogoDrop = (_files: File[], acceptedFiles: File[]) => {
+    if (acceptedFiles.length > 0) {
+      const file = acceptedFiles[0];
+      const reader = new FileReader();
+      reader.onload = () => {
+        setBrandLogo(String(reader.result || ""));
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleSaveShippingLabelSettings = () => {
+    const formData = new FormData();
+    formData.append("actionType", "saveShippingLabelSettings");
+    formData.append("labelSize", labelSize);
+    formData.append("brandName", brandName);
+    formData.append("brandPhone", brandPhone);
+    formData.append("brandAddress", brandAddress);
+    formData.append("brandLogo", brandLogo);
+    submit(formData, { method: "post" });
+  };
 
   const selectedSettingsTabIndex = Math.max(
     0,
@@ -3329,22 +3415,308 @@ export default function CourierSettingsPage() {
         </div>
 
         {/* ==================================================================== */}
-        {/* SCENARIO B: SHIPPING LABEL & INVOICE PLACEHOLDERS                     */}
+        {/* SCENARIO B: SHIPPING LABEL INTERACTIVE DUAL-PANE VIEW                */}
         {/* ==================================================================== */}
         {selectedSettingsTab === "shipping_label" && (
-          <Card padding="600">
-            <BlockStack gap="300" inlineAlign="center">
-              <Text as="h2" variant="headingLg" alignment="center">
-                Shipping Label Settings
-              </Text>
-              <Text as="p" variant="bodyMd" tone="subdued" alignment="center">
-                Shipping Label Customization Settings Template
-              </Text>
-              <Text as="p" variant="bodySm" tone="subdued" alignment="center">
-                Configure thermal barcode label dimensions (4x6 / 100x150mm), custom merchant branding, barcode formats, and return policy notes.
-              </Text>
-            </BlockStack>
-          </Card>
+          <div
+            className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start"
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
+              gap: "24px",
+              alignItems: "start",
+            }}
+          >
+            {/* LEFT PANEL: UPDATE SETTINGS FORM CONTROLS */}
+            <Card padding="500">
+              <BlockStack gap="400">
+                <BlockStack gap="100">
+                  <Text as="h3" variant="headingMd" fontWeight="bold">
+                    Update Settings
+                  </Text>
+                  <Text as="p" variant="bodySm" tone="subdued">
+                    Customize your thermal shipping label dimensions, store branding, and dispatch information.
+                  </Text>
+                </BlockStack>
+
+                <Divider />
+
+                <BlockStack gap="300">
+                  <Select
+                    label="Label Size *"
+                    options={[
+                      { label: "4in x 6in (Standard Thermal)", value: "4in x 6in" },
+                      { label: "4in x 2in", value: "4in x 2in" },
+                      { label: "3in x 4in", value: "3in x 4in" },
+                      { label: "3in x 3in", value: "3in x 3in" },
+                      { label: "3in x 2in (Compact Thermal)", value: "3in x 2in" },
+                      { label: "2in x 1.5in (Mini)", value: "2in x 1.5in" },
+                      { label: "2in x 1in (Micro)", value: "2in x 1in" },
+                    ]}
+                    value={labelSize}
+                    onChange={(val) => setLabelSize(val)}
+                  />
+
+                  <TextField
+                    label="Brand Name"
+                    value={brandName}
+                    onChange={(val) => setBrandName(val)}
+                    placeholder="e.g. My Awesome Shop"
+                    autoComplete="off"
+                    helpText="Required for generating the shipping label header."
+                  />
+
+                  {/* CRITICAL CONDITIONAL FORM LOGIC: Hidden on compact sizes */}
+                  {!isCompactLabel && (
+                    <>
+                      <TextField
+                        label="Brand Phone"
+                        value={brandPhone}
+                        onChange={(val) => setBrandPhone(val)}
+                        placeholder="e.g. 01700000000"
+                        autoComplete="off"
+                      />
+                      <TextField
+                        label="Brand Address"
+                        value={brandAddress}
+                        onChange={(val) => setBrandAddress(val)}
+                        placeholder="e.g. House 12, Road 4, Dhanmondi, Dhaka"
+                        autoComplete="off"
+                      />
+                    </>
+                  )}
+
+                  <BlockStack gap="100">
+                    <Text as="p" variant="bodyMd" fontWeight="medium">
+                      Brand Logo
+                    </Text>
+                    {brandLogo ? (
+                      <div
+                        style={{
+                          border: "1px solid var(--p-color-border, #E2E8F0)",
+                          borderRadius: "8px",
+                          padding: "12px",
+                          backgroundColor: "#F8FAFC",
+                        }}
+                      >
+                        <InlineStack align="space-between" blockAlign="center">
+                          <InlineStack gap="300" blockAlign="center">
+                            <Thumbnail size="small" source={brandLogo} alt={brandName || "Brand Logo"} />
+                            <Text as="span" variant="bodySm">
+                              Logo uploaded
+                            </Text>
+                          </InlineStack>
+                          <Button variant="plain" tone="critical" onClick={() => setBrandLogo("")}>
+                            Remove
+                          </Button>
+                        </InlineStack>
+                      </div>
+                    ) : (
+                      <DropZone
+                        allowMultiple={false}
+                        accept="image/*"
+                        type="image"
+                        onDrop={handleLogoDrop}
+                      >
+                        <DropZone.FileUpload actionHint="Accepts .png, .jpg, .svg up to 2MB" />
+                      </DropZone>
+                    )}
+                  </BlockStack>
+                </BlockStack>
+
+                <Divider />
+
+                <InlineStack align="end">
+                  <Button
+                    variant="primary"
+                    loading={isSubmittingShippingLabel}
+                    onClick={handleSaveShippingLabelSettings}
+                  >
+                    Save Settings
+                  </Button>
+                </InlineStack>
+              </BlockStack>
+            </Card>
+
+            {/* RIGHT PANEL: PREVIEW (DEMO DATA) LIVE REACT ENGINE */}
+            <Card padding="500">
+              <BlockStack gap="400">
+                <BlockStack gap="100">
+                  <Text as="h3" variant="headingMd" fontWeight="bold">
+                    {`Preview (Demo Data) (${labelSize})`}
+                  </Text>
+                  <Text as="p" variant="bodySm" tone="subdued">
+                    Live dynamic preview of your thermal shipping label as it will be printed.
+                  </Text>
+                </BlockStack>
+
+                <Divider />
+
+                {/* EMPTY / BLANK STATE HANDLING */}
+                {!brandName.trim() && !brandLogo ? (
+                  <div
+                    style={{
+                      border: "1px dashed var(--p-color-border, #CBD5E1)",
+                      borderRadius: "12px",
+                      padding: "48px 20px",
+                      textAlign: "center",
+                      backgroundColor: "#F8FAFC",
+                    }}
+                  >
+                    <Text as="p" variant="bodyMd" tone="subdued">
+                      ⚠️ Brand name or logo is required
+                    </Text>
+                  </div>
+                ) : (
+                  /* ACTIVE LIVE LABEL GENERATION */
+                  <div
+                    style={{
+                      backgroundColor: "#F1F5F9",
+                      padding: "24px 16px",
+                      borderRadius: "12px",
+                      display: "flex",
+                      justifyContent: "center",
+                      alignItems: "center",
+                      minHeight: "360px",
+                    }}
+                  >
+                    <div
+                      style={{
+                        backgroundColor: "#FFFFFF",
+                        color: "#000000",
+                        border: "2px solid #000000",
+                        borderRadius: "4px",
+                        padding: isCompactLabel ? "12px 14px" : "18px 20px",
+                        boxShadow: "0 4px 16px rgba(0, 0, 0, 0.12)",
+                        fontFamily: "'Courier New', Courier, monospace, sans-serif",
+                        maxWidth: isCompactLabel ? "300px" : "340px",
+                        width: "100%",
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: "10px",
+                      }}
+                    >
+                      {/* TOP HEADER SECTION */}
+                      <div style={{ textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center" }}>
+                        {brandLogo && (
+                          <img
+                            src={brandLogo}
+                            alt={brandName}
+                            style={{
+                              maxHeight: isCompactLabel ? "32px" : "44px",
+                              maxWidth: "180px",
+                              objectFit: "contain",
+                              marginBottom: "6px",
+                            }}
+                          />
+                        )}
+                        {brandName.trim() && (
+                          <div
+                            style={{
+                              fontWeight: 800,
+                              fontSize: isCompactLabel ? "14px" : "17px",
+                              textTransform: "uppercase",
+                              letterSpacing: "0.5px",
+                              lineHeight: 1.2,
+                            }}
+                          >
+                            {brandName}
+                          </div>
+                        )}
+                        {!isCompactLabel && (brandPhone.trim() || brandAddress.trim()) && (
+                          <div
+                            style={{
+                              fontSize: "10px",
+                              color: "#333333",
+                              marginTop: "4px",
+                              lineHeight: 1.3,
+                            }}
+                          >
+                            {brandPhone.trim() && <div>📞 {brandPhone}</div>}
+                            {brandAddress.trim() && <div>📍 {brandAddress}</div>}
+                          </div>
+                        )}
+                      </div>
+
+                      <div style={{ borderBottom: "1.5px dashed #000000", width: "100%" }} />
+
+                      {/* MIDDLE DEMO DATA SECTION */}
+                      <div
+                        style={{
+                          fontSize: isCompactLabel ? "11px" : "12px",
+                          lineHeight: 1.45,
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: "3px",
+                        }}
+                      >
+                        <div style={{ display: "flex", justifyContent: "space-between" }}>
+                          <span style={{ fontWeight: 700 }}>Order No:</span>
+                          <span style={{ fontWeight: 800 }}>#DD0001</span>
+                        </div>
+                        <div style={{ display: "flex", justifyContent: "space-between" }}>
+                          <span style={{ fontWeight: 700 }}>Name:</span>
+                          <span>নাফিস / Nahid</span>
+                        </div>
+                        <div style={{ display: "flex", justifyContent: "space-between" }}>
+                          <span style={{ fontWeight: 700 }}>Phone:</span>
+                          <span>01334455667</span>
+                        </div>
+                      </div>
+
+                      <div style={{ borderBottom: "1.5px dashed #000000", width: "100%" }} />
+
+                      {/* BOTTOM BARCODE GRAPHIC SECTION */}
+                      <div
+                        style={{
+                          textAlign: "center",
+                          display: "flex",
+                          flexDirection: "column",
+                          alignItems: "center",
+                          gap: "4px",
+                        }}
+                      >
+                        <div
+                          style={{
+                            height: isCompactLabel ? "32px" : "42px",
+                            width: "90%",
+                            display: "flex",
+                            alignItems: "stretch",
+                            justifyContent: "center",
+                            gap: "2px",
+                            backgroundColor: "#FFFFFF",
+                            padding: "2px",
+                          }}
+                        >
+                          {[
+                            3, 1, 4, 1, 2, 1, 3, 2, 1, 4, 2, 1, 3, 1, 2, 4, 1, 2, 3, 1, 4, 1, 2, 1, 3, 2, 1, 4, 2, 1, 3,
+                          ].map((w, idx) => (
+                            <span
+                              key={idx}
+                              style={{
+                                width: `${w}px`,
+                                backgroundColor: idx % 2 === 0 ? "#000000" : "transparent",
+                              }}
+                            />
+                          ))}
+                        </div>
+                        <div
+                          style={{
+                            fontFamily: "monospace",
+                            fontSize: "11px",
+                            fontWeight: 700,
+                            letterSpacing: "3px",
+                          }}
+                        >
+                          DE0000000301BD
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </BlockStack>
+            </Card>
+          </div>
         )}
 
         {selectedSettingsTab === "invoice" && (
