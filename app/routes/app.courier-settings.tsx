@@ -1492,7 +1492,45 @@ export default function CourierSettingsPage() {
     shippingLabelConfig?.brandLogo || ""
   );
 
-  const isCompactLabel = ["3in x 2in", "2in x 1.5in", "2in x 1in"].includes(labelSize);
+  const isCompactLabel = [
+    "4in x 2in",
+    "3in x 2in",
+    "2in x 1.5in",
+    "1.5in x 1in",
+    "2in x 1in",
+    "2in x 1.15in",
+    "2.2in x 1.4in",
+    "2in x 2.95in",
+  ].includes(labelSize);
+
+  const getLabelDimensions = (size: string) => {
+    switch (size) {
+      case "4in x 6in":
+        return { maxWidth: "320px", minHeight: "440px", padding: "18px 20px" };
+      case "4in x 2in":
+        return { maxWidth: "340px", minHeight: "190px", padding: "12px 16px" };
+      case "3in x 4in":
+        return { maxWidth: "290px", minHeight: "360px", padding: "16px 18px" };
+      case "3in x 3in":
+        return { maxWidth: "280px", minHeight: "280px", padding: "14px 16px" };
+      case "3in x 2in":
+        return { maxWidth: "280px", minHeight: "200px", padding: "12px 14px" };
+      case "2in x 1.5in":
+        return { maxWidth: "260px", minHeight: "195px", padding: "10px 12px" };
+      case "1.5in x 1in":
+        return { maxWidth: "230px", minHeight: "160px", padding: "8px 10px" };
+      case "2in x 1in":
+        return { maxWidth: "250px", minHeight: "150px", padding: "8px 12px" };
+      case "2in x 1.15in":
+        return { maxWidth: "250px", minHeight: "160px", padding: "9px 12px" };
+      case "2.2in x 1.4in":
+        return { maxWidth: "260px", minHeight: "175px", padding: "10px 12px" };
+      case "2in x 2.95in":
+        return { maxWidth: "220px", minHeight: "320px", padding: "12px 12px" };
+      default:
+        return { maxWidth: "320px", minHeight: "440px", padding: "18px 20px" };
+    }
+  };
 
   const isSubmittingShippingLabel =
     navigation.state === "submitting" &&
@@ -3445,13 +3483,17 @@ export default function CourierSettingsPage() {
                   <Select
                     label="Label Size *"
                     options={[
-                      { label: "4in x 6in (Standard Thermal)", value: "4in x 6in" },
+                      { label: "4in x 6in", value: "4in x 6in" },
                       { label: "4in x 2in", value: "4in x 2in" },
                       { label: "3in x 4in", value: "3in x 4in" },
                       { label: "3in x 3in", value: "3in x 3in" },
-                      { label: "3in x 2in (Compact Thermal)", value: "3in x 2in" },
-                      { label: "2in x 1.5in (Mini)", value: "2in x 1.5in" },
-                      { label: "2in x 1in (Micro)", value: "2in x 1in" },
+                      { label: "3in x 2in", value: "3in x 2in" },
+                      { label: "2in x 1.5in", value: "2in x 1.5in" },
+                      { label: "1.5in x 1in", value: "1.5in x 1in" },
+                      { label: "2in x 1in", value: "2in x 1in" },
+                      { label: "2in x 1.15in", value: "2in x 1.15in" },
+                      { label: "2.2in x 1.4in", value: "2.2in x 1.4in" },
+                      { label: "2in x 2.95in", value: "2in x 2.95in" },
                     ]}
                     value={labelSize}
                     onChange={(val) => setLabelSize(val)}
@@ -3586,14 +3628,17 @@ export default function CourierSettingsPage() {
                         color: "#000000",
                         border: "2px solid #000000",
                         borderRadius: "4px",
-                        padding: isCompactLabel ? "12px 14px" : "18px 20px",
+                        padding: getLabelDimensions(labelSize).padding,
                         boxShadow: "0 4px 16px rgba(0, 0, 0, 0.12)",
                         fontFamily: "'Courier New', Courier, monospace, sans-serif",
-                        maxWidth: isCompactLabel ? "300px" : "340px",
+                        maxWidth: getLabelDimensions(labelSize).maxWidth,
+                        minHeight: getLabelDimensions(labelSize).minHeight,
                         width: "100%",
                         display: "flex",
                         flexDirection: "column",
+                        justifyContent: "space-between",
                         gap: "10px",
+                        transition: "all 0.2s ease-in-out",
                       }}
                     >
                       {/* TOP HEADER SECTION */}
