@@ -1676,6 +1676,17 @@ export default function CourierSettingsPage() {
     submit(formData, { method: "post" });
   };
 
+  const handleResetShippingLabel = () => {
+    setLabelSize(shippingLabelConfig?.labelSize || "4in x 6in");
+    setLabelStyle(shippingLabelConfig?.labelStyle || "standard");
+    setSocialHandle(shippingLabelConfig?.socialHandle || "");
+    setWarehouseWarning(shippingLabelConfig?.warehouseWarning || "FRAGILE / HANDLE WITH CARE");
+    setBrandName(shippingLabelConfig?.brandName || "");
+    setBrandPhone(shippingLabelConfig?.brandPhone || "");
+    setBrandAddress(shippingLabelConfig?.brandAddress || "");
+    setBrandLogo(shippingLabelConfig?.brandLogo || "");
+  };
+
   // ==================== 8. INVOICE SETTINGS STATE ====================
   const [invoiceTemplate, setInvoiceTemplate] = useState<string>(
     invoiceConfig?.invoiceTemplate ?? "classic"
@@ -1729,6 +1740,17 @@ export default function CourierSettingsPage() {
     formData.append("invoiceBrandLogo", invoiceBrandLogo);
     formData.append("invoiceAccentColor", invoiceAccentColor);
     submit(formData, { method: "post" });
+  };
+
+  const handleResetInvoice = () => {
+    setInvoiceTemplate(invoiceConfig?.invoiceTemplate ?? "classic");
+    setInvoiceBrandName(invoiceConfig?.invoiceBrandName || brandName || "SafeParcel Store");
+    setInvoiceBrandPhone(invoiceConfig?.invoiceBrandPhone || brandPhone || "+880 1711-000000");
+    setInvoiceBrandAddress(invoiceConfig?.invoiceBrandAddress || brandAddress || "House 42, Road 11, Banani, Dhaka");
+    setInvoiceBrandEmail(invoiceConfig?.invoiceBrandEmail || "support@safeparcelbd.com");
+    setInvoiceBrandWebsite(invoiceConfig?.invoiceBrandWebsite || "www.safeparcelbd.com");
+    setInvoiceBrandLogo(invoiceConfig?.invoiceBrandLogo || brandLogo || "");
+    setInvoiceAccentColor(invoiceConfig?.invoiceAccentColor || "#2563eb");
   };
 
   const selectedSettingsTabIndex = Math.max(
@@ -2226,8 +2248,12 @@ export default function CourierSettingsPage() {
                               )}
                             </BlockStack>
                             <Divider />
-                            <InlineStack align="end" gap="300">
-                              <Button variant="secondary" onClick={handleResetPathao}>
+                            <InlineStack align="space-between" blockAlign="center">
+                              <Button
+                                variant="plain"
+                                tone="critical"
+                                onClick={handleResetPathao}
+                              >
                                 Reset
                               </Button>
                               <Button
@@ -2398,8 +2424,12 @@ export default function CourierSettingsPage() {
                               />
                             </BlockStack>
                             <Divider />
-                            <InlineStack align="end" gap="300">
-                              <Button variant="secondary" onClick={handleResetSteadfast}>
+                            <InlineStack align="space-between" blockAlign="center">
+                              <Button
+                                variant="plain"
+                                tone="critical"
+                                onClick={handleResetSteadfast}
+                              >
                                 Reset
                               </Button>
                               <Button
@@ -2618,8 +2648,12 @@ export default function CourierSettingsPage() {
                               />
                             </BlockStack>
                             <Divider />
-                            <InlineStack align="end" gap="300">
-                              <Button variant="secondary" onClick={handleResetRedX}>
+                            <InlineStack align="space-between" blockAlign="center">
+                              <Button
+                                variant="plain"
+                                tone="critical"
+                                onClick={handleResetRedX}
+                              >
                                 Reset
                               </Button>
                               <Button
@@ -2873,8 +2907,12 @@ export default function CourierSettingsPage() {
                               </BlockStack>
                             </BlockStack>
                             <Divider />
-                            <InlineStack align="end" gap="300">
-                              <Button variant="secondary" onClick={handleResetCarrybee}>
+                            <InlineStack align="space-between" blockAlign="center">
+                              <Button
+                                variant="plain"
+                                tone="critical"
+                                onClick={handleResetCarrybee}
+                              >
                                 Reset
                               </Button>
                               <Button
@@ -3047,8 +3085,12 @@ export default function CourierSettingsPage() {
                               />
                             </BlockStack>
                             <Divider />
-                            <InlineStack align="end" gap="300">
-                              <Button variant="secondary" onClick={handleResetBahok}>
+                            <InlineStack align="space-between" blockAlign="center">
+                              <Button
+                                variant="plain"
+                                tone="critical"
+                                onClick={handleResetBahok}
+                              >
                                 Reset
                               </Button>
                               <Button
@@ -3846,7 +3888,14 @@ export default function CourierSettingsPage() {
 
                 <Divider />
 
-                <InlineStack align="end">
+                <InlineStack align="space-between" blockAlign="center">
+                  <Button
+                    variant="plain"
+                    tone="critical"
+                    onClick={handleResetShippingLabel}
+                  >
+                    Reset
+                  </Button>
                   <Button
                     variant="primary"
                     loading={isSubmittingShippingLabel}
@@ -4405,16 +4454,25 @@ export default function CourierSettingsPage() {
 
                   <Divider />
 
-                  {/* Primary Save Settings Button */}
-                  <Button
-                    variant="primary"
-                    size="large"
-                    onClick={handleSaveInvoiceSettings}
-                    loading={isSubmittingInvoice}
-                    disabled={!invoiceBrandName.trim()}
-                  >
-                    Save Settings
-                  </Button>
+                  {/* Primary Action Row with Separated Reset and Save Settings Buttons */}
+                  <InlineStack align="space-between" blockAlign="center">
+                    <Button
+                      variant="plain"
+                      tone="critical"
+                      onClick={handleResetInvoice}
+                    >
+                      Reset
+                    </Button>
+                    <Button
+                      variant="primary"
+                      size="large"
+                      onClick={handleSaveInvoiceSettings}
+                      loading={isSubmittingInvoice}
+                      disabled={!invoiceBrandName.trim()}
+                    >
+                      Save Settings
+                    </Button>
+                  </InlineStack>
                 </BlockStack>
               </Card>
             </div>
