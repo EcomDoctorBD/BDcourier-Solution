@@ -961,9 +961,7 @@ export default function CourierSettingsPage() {
   };
 
   // ==================== 1. PATHAO GATEWAY STATE ====================
-  const [pathaoEnvironment, setPathaoEnvironment] = useState(
-    courierConfig.pathaoEnvironment || "production"
-  );
+  const pathaoEnvironment = "production";
   const [pathaoClientId, setPathaoClientId] = useState(courierConfig.pathaoClientId);
   const [pathaoSecret, setPathaoSecret] = useState(courierConfig.pathaoSecret);
   const [pathaoUsername, setPathaoUsername] = useState(courierConfig.pathaoUsername || "");
@@ -1550,15 +1548,6 @@ export default function CourierSettingsPage() {
                           </BlockStack>
                           <Divider />
                           <BlockStack gap="300">
-                            <Select
-                              label="API Environment"
-                              options={[
-                                { label: "Production (Hermes Live)", value: "production" },
-                                { label: "Sandbox / Test API", value: "sandbox" },
-                              ]}
-                              value={pathaoEnvironment}
-                              onChange={(val) => setPathaoEnvironment(val)}
-                            />
                             <TextField
                               label="Client ID"
                               value={pathaoClientId}
@@ -1620,6 +1609,41 @@ export default function CourierSettingsPage() {
                                 Authenticate and load pickup stores directly from Pathao API.
                               </Text>
                             </InlineStack>
+                            {pathaoStores.length > 0 ? (
+                              <Select
+                                label="Default Pickup Store"
+                                options={[
+                                  { label: "-- Select Active Pathao Store --", value: "" },
+                                  ...pathaoStores.map((st) => ({
+                                    label: `${st.store_name} (ID: ${st.store_id})`,
+                                    value: String(st.store_id),
+                                  })),
+                                ]}
+                                value={pathaoStoreId}
+                                onChange={(val) => {
+                                  setPathaoStoreId(val);
+                                  const found = pathaoStores.find((s) => String(s.store_id) === String(val));
+                                  if (found) setPathaoStoreName(found.store_name);
+                                }}
+                                helpText="Selected pickup warehouse used for all one-click parcel dispatches."
+                              />
+                            ) : (
+                              <TextField
+                                label="Pathao Store ID"
+                                value={pathaoStoreId}
+                                onChange={(val) => setPathaoStoreId(val)}
+                                placeholder="e.g. 12345"
+                                autoComplete="off"
+                                helpText="Numeric store ID from Pathao. Click 'Verify Credentials & Fetch Stores' above to auto-detect."
+                              />
+                            )}
+                            <TextField
+                              label="Store Name"
+                              value={pathaoStoreName}
+                              onChange={(val) => setPathaoStoreName(val)}
+                              placeholder="e.g. Main Warehouse"
+                              autoComplete="off"
+                            />
                           </BlockStack>
                           <Divider />
                           <InlineStack align="end">
@@ -1689,53 +1713,34 @@ export default function CourierSettingsPage() {
 
                       {/* Tab 3: Default Settings */}
                       {activeSetupTab === "settings" && (
-                        <BlockStack gap="400">
-                          <BlockStack gap="100">
-                            <Text as="h3" variant="headingMd" fontWeight="bold">Default Settings & Pickup Store</Text>
-                            <Text as="p" variant="bodySm" tone="subdued">
-                              Select your default Pathao dispatch warehouse and localized parcel booking defaults.
-                            </Text>
-                          </BlockStack>
+                        <BlockStack gap="500">
+                          <div style={{ textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center", gap: "8px" }}>
+                            <Text as="h3" variant="headingMd" fontWeight="bold">Pathao Fulfillment & Delivery Defaults</Text>
+                            <div style={{ maxWidth: "520px" }}>
+                              <Text as="p" variant="bodySm" tone="subdued">
+                                Manage your default Pathao dispatch routing rules, consignment notes, and parcel delivery settings.
+                              </Text>
+                            </div>
+                          </div>
                           <Divider />
-                          <BlockStack gap="300">
-                            {pathaoStores.length > 0 ? (
-                              <Select
-                                label="Default Pickup Store"
-                                options={[
-                                  { label: "-- Select Active Pathao Store --", value: "" },
-                                  ...pathaoStores.map((st) => ({
-                                    label: `${st.store_name} (ID: ${st.store_id})`,
-                                    value: String(st.store_id),
-                                  })),
-                                ]}
-                                value={pathaoStoreId}
-                                onChange={(val) => {
-                                  setPathaoStoreId(val);
-                                  const found = pathaoStores.find((s) => String(s.store_id) === String(val));
-                                  if (found) setPathaoStoreName(found.store_name);
-                                }}
-                                helpText="Selected pickup warehouse used for all one-click parcel dispatches."
-                              />
-                            ) : (
-                              <TextField
-                                label="Pathao Store ID"
-                                value={pathaoStoreId}
-                                onChange={(val) => setPathaoStoreId(val)}
-                                placeholder="e.g. 12345"
-                                autoComplete="off"
-                                helpText="Numeric store ID from Pathao. Click 'Verify Credentials & Fetch Stores' in Tab 1 to auto-detect."
-                              />
-                            )}
-                            <TextField
-                              label="Store Name"
-                              value={pathaoStoreName}
-                              onChange={(val) => setPathaoStoreName(val)}
-                              placeholder="e.g. Main Warehouse"
-                              autoComplete="off"
-                            />
-                          </BlockStack>
+                          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", width: "100%" }}>
+                            <div style={{ width: "100%", maxWidth: "560px", backgroundColor: "#F8FAFC", padding: "20px", borderRadius: "12px", border: "1px solid #E2E8F0" }}>
+                              <BlockStack gap="200">
+                                <Text as="h4" variant="headingSm" fontWeight="semibold">
+                                  Active Warehouse Routing
+                                </Text>
+                                <Text as="p" variant="bodySm" tone="subdued">
+                                  All automated one-click parcel dispatches are assigned to your active Pathao store:{" "}
+                                  <strong>{pathaoStoreName || pathaoStoreId || "Default Store"}</strong> (ID: {pathaoStoreId || "Auto-Selected"}).
+                                </Text>
+                                <Text as="p" variant="bodyXs" tone="subdued">
+                                  To switch or update pickup warehouse locations, use the &quot;Verify Credentials &amp; Fetch Stores&quot; selector in <strong>🔑 API Configuration</strong>.
+                                </Text>
+                              </BlockStack>
+                            </div>
+                          </div>
                           <Divider />
-                          <InlineStack align="end">
+                          <div style={{ display: "flex", justifyContent: "center", width: "100%" }}>
                             <Button
                               variant="primary"
                               loading={isSubmittingPathao}
@@ -1743,7 +1748,7 @@ export default function CourierSettingsPage() {
                             >
                               Save Settings
                             </Button>
-                          </InlineStack>
+                          </div>
                         </BlockStack>
                       )}
                     </>
