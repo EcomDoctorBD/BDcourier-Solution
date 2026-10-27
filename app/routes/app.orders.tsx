@@ -6747,6 +6747,7 @@ export default function OrdersFulfillmentPage() {
                                   paddingBottom: isCompact ? "2px" : "5px",
                                   flexShrink: 0,
                                   overflow: "hidden",
+                                  maxHeight: isMicro ? "28px" : isCompact ? "36px" : "48px",
                                 }}
                               >
                                 <div
@@ -6765,6 +6766,7 @@ export default function OrdersFulfillmentPage() {
                                       minWidth: 0,
                                       flex: "1 1 auto",
                                       overflow: "hidden",
+                                      maxHeight: isMicro ? "16px" : isCompact ? "20px" : "30px",
                                     }}
                                   >
                                     {brandLogo ? (
@@ -6787,6 +6789,10 @@ export default function OrdersFulfillmentPage() {
                                           whiteSpace: "nowrap",
                                           overflow: "hidden",
                                           textOverflow: "ellipsis",
+                                          display: "block",
+                                          minWidth: 0,
+                                          maxWidth: "100%",
+                                          lineHeight: 1.15,
                                         }}
                                         title={brandName}
                                       >
@@ -6801,6 +6807,10 @@ export default function OrdersFulfillmentPage() {
                                           whiteSpace: "nowrap",
                                           overflow: "hidden",
                                           textOverflow: "ellipsis",
+                                          display: "block",
+                                          minWidth: 0,
+                                          maxWidth: "100%",
+                                          lineHeight: 1.15,
                                         }}
                                       >
                                         {slip.courierName.toUpperCase()}
@@ -6815,6 +6825,10 @@ export default function OrdersFulfillmentPage() {
                                           whiteSpace: "nowrap",
                                           overflow: "hidden",
                                           textOverflow: "ellipsis",
+                                          display: "block",
+                                          minWidth: 0,
+                                          maxWidth: "100%",
+                                          lineHeight: 1.15,
                                         }}
                                         title={brandName}
                                       >
@@ -6826,8 +6840,9 @@ export default function OrdersFulfillmentPage() {
                                     style={{
                                       textAlign: "right",
                                       flexShrink: 0,
-                                      maxWidth: "50%",
+                                      maxWidth: "45%",
                                       overflow: "hidden",
+                                      maxHeight: isMicro ? "16px" : isCompact ? "20px" : "30px",
                                     }}
                                   >
                                     <span
@@ -6838,6 +6853,7 @@ export default function OrdersFulfillmentPage() {
                                         overflow: "hidden",
                                         textOverflow: "ellipsis",
                                         display: "block",
+                                        lineHeight: 1.15,
                                       }}
                                       title={slip.orderName}
                                     >

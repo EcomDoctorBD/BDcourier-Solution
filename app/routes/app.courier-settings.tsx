@@ -3943,7 +3943,13 @@ export default function CourierSettingsPage() {
                               textTransform: "uppercase",
                               letterSpacing: "0.5px",
                               lineHeight: 1.2,
+                              whiteSpace: "nowrap",
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
+                              maxWidth: "100%",
+                              maxHeight: isCompactLabel ? "20px" : "26px",
                             }}
+                            title={brandName}
                           >
                             {brandName}
                           </div>
