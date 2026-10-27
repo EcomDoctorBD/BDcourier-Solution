@@ -34,11 +34,49 @@ export function getRedxBaseUrl(environment = "production"): string {
   return "https://openapi.redx.com.bd";
 }
 
+// In-flight mutex map to deduplicate concurrent Pathao OAuth refresh calls per shopDomain
+// Prevents race conditions and multiple token refresh collisions under heavy batch stress (e.g. 50 orders simultaneously)
+const ongoingPathaoRefreshes = new Map<
+  string,
+  Promise<{ success: boolean; token: string | null; error?: string }>
+>();
+
 /**
  * Resolves or refreshes an active, valid Pathao OAuth access token.
  * Automatically saves new/refreshed tokens with AES-256 encryption into MongoDB.
+ * Supports forceRefresh for silent 401 interception and single-flight lock concurrency.
  */
-export async function getValidPathaoToken(shopDomain: string): Promise<{
+export async function getValidPathaoToken(
+  shopDomain: string,
+  options: { forceRefresh?: boolean } = {}
+): Promise<{
+  success: boolean;
+  token: string | null;
+  error?: string;
+}> {
+  const cacheKey = (shopDomain || "").trim().toLowerCase();
+
+  // If a refresh or token resolution is already in progress for this shopDomain, await it directly!
+  if (ongoingPathaoRefreshes.has(cacheKey)) {
+    return ongoingPathaoRefreshes.get(cacheKey)!;
+  }
+
+  const tokenPromise = (async () => {
+    try {
+      return await resolvePathaoTokenInternal(shopDomain, options);
+    } finally {
+      ongoingPathaoRefreshes.delete(cacheKey);
+    }
+  })();
+
+  ongoingPathaoRefreshes.set(cacheKey, tokenPromise);
+  return tokenPromise;
+}
+
+async function resolvePathaoTokenInternal(
+  shopDomain: string,
+  options: { forceRefresh?: boolean } = {}
+): Promise<{
   success: boolean;
   token: string | null;
   error?: string;
@@ -47,7 +85,11 @@ export async function getValidPathaoToken(shopDomain: string): Promise<{
   const rawConfig: any = await CourierConfig.findOne({ shopDomain }).lean();
 
   if (!rawConfig) {
-    return { success: false, token: null, error: "Store courier configuration not found." };
+    return {
+      success: false,
+      token: null,
+      error: "Store courier configuration not found.",
+    };
   }
 
   const config = decryptCourierConfig(rawConfig);
@@ -62,21 +104,23 @@ export async function getValidPathaoToken(shopDomain: string): Promise<{
     return {
       success: false,
       token: null,
-      error: "Pathao Client ID and Client Secret are required.",
+      error: "Pathao Client ID and Client Secret are required in Courier Settings.",
     };
   }
 
-  // Check if current token exists and is valid (with a 5-minute safety threshold)
+  // 1. Proactive Token Health Check Guard (5-minute safety threshold)
+  // If token exists, is valid, and NOT forced to refresh, return cached token immediately
   const SAFETY_BUFFER_MS = 5 * 60 * 1000;
-  if (
-    config.pathaoAccessToken &&
-    config.pathaoTokenExpiresAt &&
-    new Date(config.pathaoTokenExpiresAt).getTime() - SAFETY_BUFFER_MS > Date.now()
-  ) {
+  const tokenExpiresAtMs = config.pathaoTokenExpiresAt
+    ? new Date(config.pathaoTokenExpiresAt).getTime()
+    : 0;
+  const isExpired = Date.now() >= tokenExpiresAtMs - SAFETY_BUFFER_MS;
+
+  if (!options.forceRefresh && config.pathaoAccessToken && !isExpired) {
     return { success: true, token: config.pathaoAccessToken };
   }
 
-  // If expired but a refresh token exists, attempt refresh first
+  // 2. Silent Auto-Refresh via refresh_token grant
   if (config.pathaoRefreshToken) {
     try {
       const refreshResponse = await fetch(`${baseUrl}/aladdin/api/v1/issue-token`, {
@@ -91,7 +135,7 @@ export async function getValidPathaoToken(shopDomain: string): Promise<{
           refresh_token: config.pathaoRefreshToken,
           grant_type: "refresh_token",
         }),
-        signal: AbortSignal.timeout(6000),
+        signal: AbortSignal.timeout(8000),
       });
 
       if (refreshResponse.ok) {
@@ -99,7 +143,9 @@ export async function getValidPathaoToken(shopDomain: string): Promise<{
         const newAccessToken =
           refreshData?.access_token || refreshData?.data?.access_token;
         const newRefreshToken =
-          refreshData?.refresh_token || refreshData?.data?.refresh_token || config.pathaoRefreshToken;
+          refreshData?.refresh_token ||
+          refreshData?.data?.refresh_token ||
+          config.pathaoRefreshToken;
         const expiresInSec = Number(
           refreshData?.expires_in || refreshData?.data?.expires_in || 604800
         );
@@ -118,20 +164,34 @@ export async function getValidPathaoToken(shopDomain: string): Promise<{
             }
           );
 
+          console.log(
+            `[Pathao OAuth] Token successfully refreshed via refresh_token for ${shopDomain}. Valid until ${expiresAt.toISOString()}`
+          );
+
           return { success: true, token: newAccessToken };
         }
+      } else {
+        const errJson: any = await refreshResponse.json().catch(() => null);
+        console.warn(
+          `[Pathao OAuth] refresh_token grant failed (${refreshResponse.status}):`,
+          errJson?.message || errJson?.error || refreshResponse.statusText
+        );
       }
-    } catch (refreshErr) {
-      console.warn("Pathao token refresh attempt failed, falling back to password grant:", refreshErr);
+    } catch (refreshErr: any) {
+      console.warn(
+        `[Pathao OAuth] refresh_token network error for ${shopDomain}:`,
+        refreshErr?.message || refreshErr
+      );
     }
   }
 
-  // Request new token via password grant
+  // 3. Fallback: Request fresh token via password grant if username & password configured
   if (!username || !password) {
     return {
       success: false,
       token: null,
-      error: "Pathao Merchant Username (email) and Password are required to issue access tokens.",
+      error:
+        "Pathao token expired and cannot be refreshed automatically. Please re-authenticate your Pathao account in Courier Settings.",
     };
   }
 
@@ -166,8 +226,12 @@ export async function getValidPathaoToken(shopDomain: string): Promise<{
         tokenData?.message ||
         tokenData?.error_description ||
         tokenData?.error ||
-        `HTTP ${tokenResponse.status} from Pathao`;
-      return { success: false, token: null, error: errorMsg };
+        `HTTP ${tokenResponse.status} from Pathao OAuth`;
+      return {
+        success: false,
+        token: null,
+        error: `Pathao authentication failed: ${errorMsg}. Please re-authenticate your Pathao account in Courier Settings.`,
+      };
     }
 
     const expiresAt = new Date(Date.now() + expiresInSec * 1000);
@@ -183,12 +247,16 @@ export async function getValidPathaoToken(shopDomain: string): Promise<{
       }
     );
 
+    console.log(
+      `[Pathao OAuth] Fresh token issued via password grant for ${shopDomain}. Valid until ${expiresAt.toISOString()}`
+    );
+
     return { success: true, token: accessToken };
   } catch (err: any) {
     return {
       success: false,
       token: null,
-      error: `Network error connecting to Pathao: ${err.message || "Unknown"}`,
+      error: `Network error connecting to Pathao OAuth: ${err?.message || "Unknown"}`,
     };
   }
 }
@@ -201,7 +269,7 @@ export async function fetchPathaoStores(shopDomain: string): Promise<{
   stores: PathaoStore[];
   error?: string;
 }> {
-  const tokenResult = await getValidPathaoToken(shopDomain);
+  let tokenResult = await getValidPathaoToken(shopDomain);
   if (!tokenResult.success || !tokenResult.token) {
     return { success: false, stores: [], error: tokenResult.error };
   }
@@ -211,7 +279,7 @@ export async function fetchPathaoStores(shopDomain: string): Promise<{
   const baseUrl = getPathaoBaseUrl(rawConfig?.pathaoEnvironment);
 
   try {
-    const response = await fetch(`${baseUrl}/aladdin/api/v1/stores`, {
+    let response = await fetch(`${baseUrl}/aladdin/api/v1/stores`, {
       method: "GET",
       headers: {
         Accept: "application/json",
@@ -219,6 +287,22 @@ export async function fetchPathaoStores(shopDomain: string): Promise<{
       },
       signal: AbortSignal.timeout(8000),
     });
+
+    // Silent 401 Unauthorized Interception & Automatic Retry
+    if (response.status === 401) {
+      console.warn("[Pathao Stores] 401 Unauthorized encountered. Attempting silent token refresh...");
+      tokenResult = await getValidPathaoToken(shopDomain, { forceRefresh: true });
+      if (tokenResult.success && tokenResult.token) {
+        response = await fetch(`${baseUrl}/aladdin/api/v1/stores`, {
+          method: "GET",
+          headers: {
+            Accept: "application/json",
+            Authorization: `Bearer ${tokenResult.token}`,
+          },
+          signal: AbortSignal.timeout(8000),
+        });
+      }
+    }
 
     if (!response.ok) {
       const errText = await response.text();

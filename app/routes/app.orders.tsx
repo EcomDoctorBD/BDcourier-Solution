@@ -1880,7 +1880,26 @@ async function dispatchSingleOrderToCourier(params: {
       }
 
       const baseUrl = getPathaoBaseUrl(storeConfig?.pathaoEnvironment);
-      const orderResponse = await fetch(
+      const pathaoPayload = {
+        store_id: Number(storeId) || storeId,
+        merchant_order_id: isRedispatch
+          ? `${orderName.replace("#", "").trim()}-R${redispatchCount}`
+          : orderName.replace("#", "").trim(),
+        recipient_name: customerName,
+        recipient_phone: cleanPhone,
+        recipient_address: cleanAddress,
+        recipient_city: recipientCity,
+        recipient_zone: recipientZone,
+        delivery_type: 48,
+        item_type: 2,
+        special_instruction: courierInstructionPayload,
+        item_quantity: 1,
+        item_weight: 0.5,
+        amount_to_collect: amountToCollect,
+        item_description: `Order ${orderName} from ${shopDomain}`,
+      };
+
+      let orderResponse = await fetch(
         `${baseUrl}/aladdin/api/v1/orders`,
         {
           method: "POST",
@@ -1889,27 +1908,33 @@ async function dispatchSingleOrderToCourier(params: {
             Accept: "application/json",
             Authorization: `Bearer ${sharedPathaoTokenRef.token}`,
           },
-          body: JSON.stringify({
-            store_id: Number(storeId) || storeId,
-            merchant_order_id: isRedispatch
-              ? `${orderName.replace("#", "").trim()}-R${redispatchCount}`
-              : orderName.replace("#", "").trim(),
-            recipient_name: customerName,
-            recipient_phone: cleanPhone,
-            recipient_address: cleanAddress,
-            recipient_city: recipientCity,
-            recipient_zone: recipientZone,
-            delivery_type: 48,
-            item_type: 2,
-            special_instruction: courierInstructionPayload,
-            item_quantity: 1,
-            item_weight: 0.5,
-            amount_to_collect: amountToCollect,
-            item_description: `Order ${orderName} from ${shopDomain}`,
-          }),
+          body: JSON.stringify(pathaoPayload),
           signal: AbortSignal.timeout(10000),
         }
       );
+
+      // Silent 401 Unauthorized Interception & Automatic Retry with Fresh Token
+      if (orderResponse.status === 401) {
+        console.warn(`[Pathao 401 Intercept] Token expired for order ${orderName}. Triggering silent refresh...`);
+        const refreshTokenRes = await getValidPathaoToken(shopDomain, { forceRefresh: true });
+        if (refreshTokenRes.success && refreshTokenRes.token) {
+          sharedPathaoTokenRef.token = refreshTokenRes.token;
+
+          orderResponse = await fetch(
+            `${baseUrl}/aladdin/api/v1/orders`,
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Accept: "application/json",
+                Authorization: `Bearer ${sharedPathaoTokenRef.token}`,
+              },
+              body: JSON.stringify(pathaoPayload),
+              signal: AbortSignal.timeout(10000),
+            }
+          );
+        }
+      }
 
       const orderResult: any = await orderResponse.json();
       const consignmentId =
@@ -5644,12 +5669,24 @@ export default function OrdersFulfillmentPage() {
                 title={
                   actionData.success
                     ? "Courier Fulfillment Completed"
+                    : actionData.message.includes("Pathao") &&
+                      (actionData.message.includes("credentials") ||
+                        actionData.message.includes("Auth Token") ||
+                        actionData.message.includes("expired") ||
+                        actionData.message.includes("revoked"))
+                    ? "Pathao Authentication Alert"
                     : "Fulfillment Validation Alert"
                 }
                 tone={actionData.success ? "success" : "critical"}
                 action={
                   actionData.limitReached
                     ? { content: "Upgrade Plan", url: "/app/pricing" }
+                    : actionData.message.includes("Pathao") &&
+                      (actionData.message.includes("credentials") ||
+                        actionData.message.includes("Auth Token") ||
+                        actionData.message.includes("expired") ||
+                        actionData.message.includes("revoked"))
+                    ? { content: "Verify Courier Settings", url: "/app/courier-settings" }
                     : undefined
                 }
                 onDismiss={() => setShowBanner(false)}
