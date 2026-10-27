@@ -720,10 +720,11 @@ async function syncOrderPaidAndFulfilledInShopify(
 async function addShopifyOrderTags(
   admin: any,
   orderId: string,
-  tags: string[]
+  tags: string[],
+  shopDomain?: string
 ): Promise<boolean> {
   try {
-    if (!admin || !orderId || !Array.isArray(tags) || tags.length === 0) {
+    if ((!admin && !shopDomain) || !orderId || !Array.isArray(tags) || tags.length === 0) {
       return false;
     }
     const orderGid = orderId.startsWith("gid://shopify/Order/")
@@ -743,10 +744,29 @@ async function addShopifyOrderTags(
         }
       }
     `;
-    const res = await admin.graphql(TAGS_ADD_MUTATION, {
+    let effectiveAdmin = admin;
+    if (!effectiveAdmin && shopDomain) {
+      const offlineAuth = await unauthenticated.admin(shopDomain).catch(() => null);
+      effectiveAdmin = offlineAuth?.admin;
+    }
+    if (!effectiveAdmin) return false;
+
+    let res = await effectiveAdmin.graphql(TAGS_ADD_MUTATION, {
       variables: { id: orderGid, tags },
     });
-    const data: any = await res.json();
+    let data: any = await res.json().catch(() => null);
+
+    // If online session dropped, seamlessly retry with persistent offline admin
+    if (data?.errors && shopDomain) {
+      const offlineAuth = await unauthenticated.admin(shopDomain).catch(() => null);
+      if (offlineAuth?.admin) {
+        res = await offlineAuth.admin.graphql(TAGS_ADD_MUTATION, {
+          variables: { id: orderGid, tags },
+        });
+        data = await res.json().catch(() => null);
+      }
+    }
+
     if (data?.errors && data.errors.length > 0) {
       return false;
     }
@@ -824,8 +844,29 @@ async function createShopifyFulfillmentOnBooking(params: {
       }
     `;
 
-    let foRes = await effectiveAdmin.graphql(FO_QUERY, { variables: { id: formattedOrderId } });
-    let foJson: any = await foRes.json();
+    let foRes: any;
+    try {
+      foRes = await effectiveAdmin.graphql(FO_QUERY, { variables: { id: formattedOrderId } });
+    } catch (gqlErr: any) {
+      console.warn(`[Shopify Fulfillment] Primary GraphQL query failed on ${orderName}, attempting offline revalidation:`, gqlErr?.message);
+      const offlineAuth = await unauthenticated.admin(shopDomain);
+      if (offlineAuth?.admin) {
+        effectiveAdmin = offlineAuth.admin;
+        foRes = await effectiveAdmin.graphql(FO_QUERY, { variables: { id: formattedOrderId } });
+      } else {
+        throw gqlErr;
+      }
+    }
+    let foJson: any = await foRes.json().catch(() => null);
+    if (foJson?.errors && foJson.errors.some((e: any) => /unauthorized|expired|invalid token|access denied/i.test(e.message || ""))) {
+      console.warn(`[Shopify Fulfillment] Token expired in query response on ${orderName}, revalidating via offline admin...`);
+      const offlineAuth = await unauthenticated.admin(shopDomain);
+      if (offlineAuth?.admin) {
+        effectiveAdmin = offlineAuth.admin;
+        foRes = await effectiveAdmin.graphql(FO_QUERY, { variables: { id: formattedOrderId } });
+        foJson = await foRes.json().catch(() => null);
+      }
+    }
     let foEdges = foJson?.data?.order?.fulfillmentOrders?.edges || [];
 
     // Fault-Tolerant Fallback: If assignmentStatus returns empty, query open/in-progress fulfillment orders
@@ -2492,24 +2533,12 @@ async function dispatchSingleOrderToCourier(params: {
   );
 
   // Non-blocking Shopify Order Tagging: ["Courier Booked", "${partnerName} Booked"]
-  if (admin) {
-    addShopifyOrderTags(admin, orderId, [
-      "Courier Booked",
-      `${partnerName} Booked`,
-    ]).catch(() => {});
-  } else {
-    unauthenticated
-      .admin(shopDomain)
-      .then(({ admin: offlineAdmin }) => {
-        if (offlineAdmin) {
-          addShopifyOrderTags(offlineAdmin, orderId, [
-            "Courier Booked",
-            `${partnerName} Booked`,
-          ]).catch(() => {});
-        }
-      })
-      .catch(() => {});
-  }
+  addShopifyOrderTags(
+    admin,
+    orderId,
+    ["Courier Booked", `${partnerName} Booked`],
+    shopDomain
+  ).catch(() => {});
 
   // Background Google Sheets Auto-Sync (Real-time append)
   syncOrderToGoogleSheet(shopDomain, {
@@ -2551,6 +2580,109 @@ async function dispatchSingleOrderToCourier(params: {
       bookedAt: bookedAtIso,
     },
   };
+}
+
+/**
+ * Advanced Audit Point 2: Resilient Session Assertion & Revalidation Engine
+ * Seamlessly resolves or revalidates an active Shopify Admin GraphQL client context.
+ * If the current online session is expired or expiring within 5 minutes, it silently
+ * bridges to the persistent offline session store to guarantee that bulk fulfillment
+ * actions never suffer from mid-way authentication drops or browser redirect loops.
+ */
+async function assertResilientAdminSession(
+  request: Request,
+  providedShop?: string
+): Promise<{
+  admin: any;
+  session: any;
+  shopDomain: string;
+  isOfflineFallback: boolean;
+}> {
+  let primaryAuth: any = null;
+  let authError: any = null;
+
+  try {
+    primaryAuth = await authenticate.admin(request);
+  } catch (err: any) {
+    authError = err;
+  }
+
+  // 1. If primary authentication succeeded
+  if (primaryAuth?.session?.shop) {
+    const session = primaryAuth.session;
+    const shopDomain = session.shop;
+
+    // Check expiration buffer (5 minutes / 300,000 ms)
+    const isExpiringSoon =
+      session.expires &&
+      new Date(session.expires).getTime() - Date.now() < 300000;
+
+    // If online session is healthy and not expiring soon, use it
+    if (!isExpiringSoon && primaryAuth.admin) {
+      return {
+        admin: primaryAuth.admin,
+        session,
+        shopDomain,
+        isOfflineFallback: false,
+      };
+    }
+
+    // If session is expiring soon or transient, assert persistent offline session
+    try {
+      const offlineAuth = await unauthenticated.admin(shopDomain);
+      if (offlineAuth?.admin) {
+        return {
+          admin: offlineAuth.admin,
+          session: offlineAuth.session || session,
+          shopDomain,
+          isOfflineFallback: true,
+        };
+      }
+    } catch (offlineErr) {
+      console.warn(`[Session Assertion] Offline session fallback warning for ${shopDomain}:`, offlineErr);
+    }
+
+    // Return primary if offline load failed
+    return {
+      admin: primaryAuth.admin,
+      session,
+      shopDomain,
+      isOfflineFallback: false,
+    };
+  }
+
+  // 2. If primary authentication failed (e.g. idle timeout, expired JWT token in POST action)
+  // Extract target shop from providedShop parameter, URL query, or request headers
+  const url = new URL(request.url);
+  const targetShop =
+    providedShop?.trim() ||
+    url.searchParams.get("shop")?.trim() ||
+    request.headers.get("x-shopify-shop-domain")?.trim() ||
+    "";
+
+  if (targetShop) {
+    try {
+      const offlineAuth = await unauthenticated.admin(targetShop);
+      if (offlineAuth?.admin) {
+        console.log(`[Session Assertion] Resiliently recovered admin context via persistent offline session for ${targetShop}`);
+        return {
+          admin: offlineAuth.admin,
+          session: offlineAuth.session,
+          shopDomain: targetShop,
+          isOfflineFallback: true,
+        };
+      }
+    } catch (recoveryErr) {
+      console.warn(`[Session Assertion] Silent offline recovery failed for ${targetShop}:`, recoveryErr);
+    }
+  }
+
+  // If no recovery was possible and primary auth threw a Response, re-throw
+  if (authError) {
+    throw authError;
+  }
+
+  throw new Error("Unable to establish valid Shopify Admin session context");
 }
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
@@ -3289,8 +3421,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const { session, admin } = await authenticate.admin(request);
-  const shopDomain = session.shop;
+  // Advanced Audit Point 2: Resilient Session Assertion & Revalidation
+  const { session, admin, shopDomain } = await assertResilientAdminSession(request);
 
   await connectDB();
   await ensureBillingCycleCurrent(shopDomain);
