@@ -5867,119 +5867,6 @@ export default function OrdersFulfillmentPage() {
             </Layout.Section>
           )}
 
-          {/* ==================== 1. STICKY BATCH BULK ACTION HEADER ==================== */}
-          {selectedResources.length > 0 && (
-            <Layout.Section>
-              <div
-                className="flex flex-row items-center justify-between w-full"
-                style={{
-                  position: "sticky",
-                  top: "12px",
-                  zIndex: 50,
-                  borderRadius: "12px",
-                  boxShadow:
-                    "0 6px 20px rgba(0, 0, 0, 0.12), 0 2px 4px rgba(0, 0, 0, 0.06)",
-                  border: "1px solid var(--p-color-border, #c9cccf)",
-                  background: "var(--p-color-bg-surface, #ffffff)",
-                  padding: "14px 20px",
-                  backdropFilter: "blur(8px)",
-                  display: "flex",
-                  flexDirection: "row",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  width: "100%",
-                  gap: "16px",
-                }}
-              >
-                {/* LEFT SECTION: Displays the selection indicator text (e.g., "1 selected") */}
-                <div
-                  className="flex items-center gap-3 shrink-0"
-                  style={{ display: "flex", alignItems: "center", gap: "12px", flexShrink: 0 }}
-                >
-                  <Text variant="bodyMd" fontWeight="semibold" as="span">
-                    {`${selectedResources.length} selected`}
-                  </Text>
-                  <Button
-                    variant="plain"
-                    onClick={() => {
-                      setSelectedResources([]);
-                      setShowLabelConfigError(false);
-                      setShowInvoiceConfigError(false);
-                    }}
-                  >
-                    Deselect All
-                  </Button>
-                  {isBatchOverPlanCap && (
-                    <Text variant="bodySm" tone="critical">
-                      ⚠️ Limit exceeded (Max {usageSummary.bulkBatchLimit} per batch)
-                    </Text>
-                  )}
-                </div>
-
-                {/* MIDDLE SECTION: Houses our side-by-side conditional courier buttons ("Assign Pathao", etc.) */}
-                <div
-                  className="flex items-center justify-center gap-2 flex-1"
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    gap: "8px",
-                    flex: 1,
-                  }}
-                >
-                  {activeCouriers.pathao && (
-                    <Button
-                      onClick={() => handleBulkAssignCourier("pathao")}
-                    >
-                      Assign Pathao
-                    </Button>
-                  )}
-                  {activeCouriers.steadfast && (
-                    <Button
-                      onClick={() => handleBulkAssignCourier("steadfast")}
-                    >
-                      Assign Steadfast
-                    </Button>
-                  )}
-                  {activeCouriers.redx && (
-                    <Button
-                      onClick={() => handleBulkAssignCourier("redx")}
-                    >
-                      Assign RedX
-                    </Button>
-                  )}
-                  {activeCouriers.carrybee && (
-                    <Button
-                      onClick={() => handleBulkAssignCourier("carrybee")}
-                    >
-                      Assign CarryBee
-                    </Button>
-                  )}
-                  {activeCouriers.bahok && (
-                    <Button
-                      onClick={() => handleBulkAssignCourier("bahok")}
-                    >
-                      Assign Bahok
-                    </Button>
-                  )}
-                </div>
-
-                {/* RIGHT SECTION: Displays the relocated "Print Labels" and "Print Invoices" buttons directly side-by-side */}
-                <div
-                  className="flex items-center gap-2 shrink-0"
-                  style={{ display: "flex", alignItems: "center", gap: "8px", flexShrink: 0 }}
-                >
-                  <Button onClick={handlePrintLabels}>
-                    Print Labels
-                  </Button>
-                  <Button onClick={handlePrintInvoices}>
-                    Print Invoices
-                  </Button>
-                </div>
-              </div>
-            </Layout.Section>
-          )}
-
           {/* ==================== BULK COURIER FULFILLMENT QUEUE OVERVIEW ==================== */}
           <Layout.Section>
             <div
@@ -6327,6 +6214,142 @@ export default function OrdersFulfillmentPage() {
                   </Popover>
                 </InlineStack>
               </Box>
+
+              {/* ==================== OPERATIONAL FLOATING ACTION / BULK BOOKING BAR ==================== */}
+              {selectedResources.length > 0 && (
+                <div
+                  className="flex flex-row items-center justify-between w-full"
+                  style={{
+                    position: "sticky",
+                    top: "0px",
+                    zIndex: 25,
+                    borderBottom: "1px solid var(--p-color-border, #c9cccf)",
+                    background: "var(--p-color-bg-surface, #ffffff)",
+                    padding: "12px 20px",
+                    boxShadow: "0 2px 8px rgba(0, 0, 0, 0.08)",
+                    display: "flex",
+                    flexDirection: "row",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    width: "100%",
+                    gap: "16px",
+                  }}
+                >
+                  {/* LEFT SECTION: Displays the selection indicator text (e.g., "1 selected") */}
+                  <div
+                    className="flex items-center gap-3 shrink-0"
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "12px",
+                      flexShrink: 0,
+                    }}
+                  >
+                    <Checkbox
+                      label=""
+                      labelHidden
+                      checked={
+                        selectedResources.length === displayedOrders.length
+                          ? true
+                          : selectedResources.length > 0
+                          ? "indeterminate"
+                          : false
+                      }
+                      onChange={(newChecked) => {
+                        if (newChecked) {
+                          setSelectedResources(displayedOrders.map((o) => o.id));
+                        } else {
+                          setSelectedResources([]);
+                        }
+                      }}
+                    />
+                    <Text variant="bodyMd" fontWeight="semibold" as="span">
+                      {`${selectedResources.length} selected`}
+                    </Text>
+                    <Button
+                      variant="plain"
+                      onClick={() => {
+                        setSelectedResources([]);
+                        setShowLabelConfigError(false);
+                        setShowInvoiceConfigError(false);
+                      }}
+                    >
+                      Deselect All
+                    </Button>
+                    {isBatchOverPlanCap && (
+                      <Text variant="bodySm" tone="critical">
+                        ⚠️ Limit exceeded (Max {usageSummary.bulkBatchLimit} per batch)
+                      </Text>
+                    )}
+                  </div>
+
+                  {/* MIDDLE SECTION: Houses our side-by-side conditional courier buttons ("Assign Pathao", etc.) */}
+                  <div
+                    className="flex items-center justify-center gap-2 flex-1"
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: "8px",
+                      flex: 1,
+                    }}
+                  >
+                    {activeCouriers.pathao && (
+                      <Button
+                        onClick={() => handleBulkAssignCourier("pathao")}
+                      >
+                        Assign Pathao
+                      </Button>
+                    )}
+                    {activeCouriers.steadfast && (
+                      <Button
+                        onClick={() => handleBulkAssignCourier("steadfast")}
+                      >
+                        Assign Steadfast
+                      </Button>
+                    )}
+                    {activeCouriers.redx && (
+                      <Button
+                        onClick={() => handleBulkAssignCourier("redx")}
+                      >
+                        Assign RedX
+                      </Button>
+                    )}
+                    {activeCouriers.carrybee && (
+                      <Button
+                        onClick={() => handleBulkAssignCourier("carrybee")}
+                      >
+                        Assign CarryBee
+                      </Button>
+                    )}
+                    {activeCouriers.bahok && (
+                      <Button
+                        onClick={() => handleBulkAssignCourier("bahok")}
+                      >
+                        Assign Bahok
+                      </Button>
+                    )}
+                  </div>
+
+                  {/* RIGHT SECTION: Displays the relocated "Print Labels" and "Print Invoices" buttons directly side-by-side */}
+                  <div
+                    className="flex items-center gap-2 shrink-0"
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "8px",
+                      flexShrink: 0,
+                    }}
+                  >
+                    <Button onClick={handlePrintLabels}>
+                      Print Labels
+                    </Button>
+                    <Button onClick={handlePrintInvoices}>
+                      Print Invoices
+                    </Button>
+                  </div>
+                </div>
+              )}
 
               {displayedOrders.length === 0 ? (
                 <Box paddingBlock="600" paddingInline="500">
