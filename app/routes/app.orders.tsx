@@ -438,6 +438,7 @@ interface RawShopifyOrder {
   name: string;
   createdAt: string;
   cancelledAt?: string | null;
+  cancelReason?: string | null;
   closedAt?: string | null;
   isCancelled: boolean;
   isClosed: boolean;
@@ -490,6 +491,9 @@ export interface DispatchedSlipRecord {
   warehouseNote: string;
   lineItems: OrderLineItem[];
   bookedAt: string;
+  isCancelled?: boolean;
+  cancelledAt?: string | null;
+  cancelReason?: string | null;
 }
 
 function formatBangladeshPhone(rawPhone: string): string {
@@ -2734,6 +2738,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
             name
             createdAt
             cancelledAt
+            cancelReason
             closedAt
             note
             displayFulfillmentStatus
@@ -2810,6 +2815,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
             name
             createdAt
             cancelledAt
+            cancelReason
             closedAt
             note
             displayFulfillmentStatus
@@ -2945,6 +2951,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         name: node.name,
         createdAt: node.createdAt,
         cancelledAt: node.cancelledAt || null,
+        cancelReason: node.cancelReason || null,
         closedAt: node.closedAt || null,
         isCancelled: Boolean(node.cancelledAt),
         isClosed: Boolean(node.closedAt),
@@ -3028,6 +3035,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
           name: node.name,
           createdAt: node.createdAt,
           cancelledAt: node.cancelledAt || null,
+          cancelReason: node.cancelReason || null,
           closedAt: node.closedAt || null,
           isCancelled: Boolean(node.cancelledAt),
           isClosed: Boolean(node.closedAt),
@@ -3720,6 +3728,8 @@ export default function OrdersFulfillmentPage() {
   // Standalone printing configuration error banner states
   const [showLabelConfigError, setShowLabelConfigError] = useState(false);
   const [showInvoiceConfigError, setShowInvoiceConfigError] = useState(false);
+  // Point 7 Cancelled Orders Printing Security banner state
+  const [showCancelledOrdersPrintWarning, setShowCancelledOrdersPrintWarning] = useState(false);
 
   // Secondary dropdown for batch document printing (4x6 Shipping Labels vs A4 Invoices)
   const [isPrintPopoverActive, setIsPrintPopoverActive] = useState(false);
@@ -4487,11 +4497,34 @@ export default function OrdersFulfillmentPage() {
     setShowInvoiceConfigError(false);
   };
 
+  // Master Audit List Point 7: Real-time order cancellation status evaluation helper
+  const isOrderCancelledRecord = (order: any): boolean =>
+    Boolean(
+      order?.cancelReason ||
+      order?.cancelledAt ||
+      order?.isCancelled ||
+      order?.displayFulfillmentStatus === "CANCELLED" ||
+      order?.fulfillmentStatus === "CANCELLED" ||
+      order?.status?.toLowerCase() === "cancelled"
+    );
+
   const handlePrintLabels = () => {
     const selectedOrdersList = displayedOrders.filter((o) =>
       selectedResources.includes(o.id)
     );
     if (selectedOrdersList.length === 0) return;
+
+    // Point 7 Check: Intercept single cancelled order print attempt
+    if (selectedOrdersList.length === 1 && isOrderCancelledRecord(selectedOrdersList[0])) {
+      setShowCancelledOrdersPrintWarning(true);
+      setShowLabelConfigError(false);
+      setShowInvoiceConfigError(false);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
+
+    const hasCancelled = selectedOrdersList.some(isOrderCancelledRecord);
+    setShowCancelledOrdersPrintWarning(hasCancelled);
 
     const hasUnbookedOrders = selectedOrdersList.some(
       (order) => !dispatchedOrders[order.id]?.trackingNumber && !order.trackingNumber
@@ -4514,6 +4547,18 @@ export default function OrdersFulfillmentPage() {
       selectedResources.includes(o.id)
     );
     if (selectedOrdersList.length === 0) return;
+
+    // Point 7 Check: Intercept single cancelled order print attempt
+    if (selectedOrdersList.length === 1 && isOrderCancelledRecord(selectedOrdersList[0])) {
+      setShowCancelledOrdersPrintWarning(true);
+      setShowLabelConfigError(false);
+      setShowInvoiceConfigError(false);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
+
+    const hasCancelled = selectedOrdersList.some(isOrderCancelledRecord);
+    setShowCancelledOrdersPrintWarning(hasCancelled);
 
     const hasMissingInvoiceConfig =
       !invoiceConfig ||
@@ -4542,10 +4587,13 @@ export default function OrdersFulfillmentPage() {
 
     if (selectedOrdersList.length === 0) return;
 
+    const hasCancelled = selectedOrdersList.some(isOrderCancelledRecord);
+    if (hasCancelled) {
+      setShowCancelledOrdersPrintWarning(true);
+    }
+
     const slipsForPrint: DispatchedSlipRecord[] = selectedOrdersList.map((order) => {
-      if (dispatchedOrders[order.id]) {
-        return dispatchedOrders[order.id];
-      }
+      const orderIsCancelled = isOrderCancelledRecord(order);
       const chosenCourier = String(
         selectedCouriersByOrder[order.id] || order.assignedCourier || ""
       ).toLowerCase();
@@ -4561,6 +4609,16 @@ export default function OrdersFulfillmentPage() {
           : chosenCourier === "redx"
           ? "RedX Delivery"
           : "";
+
+      if (dispatchedOrders[order.id]) {
+        return {
+          ...dispatchedOrders[order.id],
+          isCancelled: orderIsCancelled,
+          cancelledAt: order.cancelledAt || null,
+          cancelReason: (order as any).cancelReason || null,
+        };
+      }
+
       return {
         orderId: order.id,
         orderName: order.name,
@@ -4570,11 +4628,16 @@ export default function OrdersFulfillmentPage() {
         customerName: order.customerName,
         customerPhone: order.customerPhone,
         shippingAddress: order.shippingAddress,
+        isInsideDhaka: order.isInsideDhaka,
         codAmount: String(order.codAmount),
         currencyCode: order.currencyCode,
         warehouseNote:
           warehouseNotesByOrder[order.id] ?? order.warehouseNote,
         lineItems: order.lineItems,
+        bookedAt: new Date().toISOString(),
+        isCancelled: orderIsCancelled,
+        cancelledAt: order.cancelledAt || null,
+        cancelReason: (order as any).cancelReason || null,
       };
     });
 
@@ -5617,6 +5680,10 @@ export default function OrdersFulfillmentPage() {
           .no-print {
             display: none !important;
           }
+          .cancelled-order-watermark-sheet {
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
         }
         .orders-tabs-nowrap-container [role="tablist"],
         .orders-tabs-nowrap-container ul {
@@ -5759,6 +5826,20 @@ export default function OrdersFulfillmentPage() {
         <TitleBar title="Orders" />
 
         <Layout>
+          {showCancelledOrdersPrintWarning && (
+            <Layout.Section>
+              <Banner
+                title="Cancelled Orders Detected in Selection"
+                tone="warning"
+                onDismiss={() => setShowCancelledOrdersPrintWarning(false)}
+              >
+                <p>
+                  Warning: Cancelled orders detected in your selection and blocked from normal processing.
+                </p>
+              </Banner>
+            </Layout.Section>
+          )}
+
           {showLabelConfigError && (
             <Layout.Section>
               <Banner
@@ -5958,6 +6039,269 @@ export default function OrdersFulfillmentPage() {
                     <BlockStack gap="400">
                       {bookedSlipsList.map((slip, index) => {
                         const isLastSlip = index === bookedSlipsList.length - 1;
+                        const matchingOrder =
+                          displayedOrders.find((o) => o.id === slip.orderId) ||
+                          orders.find((o) => o.id === slip.orderId);
+
+                        const isCancelledOrder = Boolean(
+                          slip.isCancelled ||
+                          slip.cancelledAt ||
+                          slip.cancelReason ||
+                          matchingOrder?.cancelReason ||
+                          matchingOrder?.cancelledAt ||
+                          matchingOrder?.isCancelled ||
+                          matchingOrder?.fulfillmentStatus === "CANCELLED" ||
+                          (matchingOrder as any)?.displayFulfillmentStatus === "CANCELLED" ||
+                          matchingOrder?.status?.toLowerCase() === "cancelled"
+                        );
+
+                        // Master Audit Point 7: Live Cancel Intercept - render high-visibility security watermark placeholder
+                        if (isCancelledOrder) {
+                          const cancelReasonText =
+                            slip.cancelReason ||
+                            (matchingOrder as any)?.cancelReason ||
+                            "Customer / Merchant Cancelled";
+                          const cancelDateText =
+                            slip.cancelledAt ||
+                            matchingOrder?.cancelledAt ||
+                            new Date().toISOString();
+
+                          if (printDocumentMode === "labels_4x6") {
+                            const dimensions = getPrintLabelDimensions(
+                              shippingLabelConfig?.labelSize || "4in x 6in"
+                            );
+                            const isCompact = [
+                              "4in x 2in",
+                              "3in x 2in",
+                              "2in x 1.5in",
+                              "1.5in x 1in",
+                              "2in x 1in",
+                              "2in x 1.15in",
+                              "2.2in x 1.4in",
+                            ].includes(shippingLabelConfig?.labelSize || "4in x 6in");
+
+                            return (
+                              <div
+                                key={`${slip.orderId}-${index}-cancelled-label`}
+                                className="cancelled-order-watermark-sheet"
+                                style={{
+                                  width: dimensions.width,
+                                  maxHeight: dimensions.maxHeight,
+                                  minHeight: isCompact ? "auto" : "135mm",
+                                  height: "auto",
+                                  boxSizing: "border-box",
+                                  border: "3px dashed #dc2626",
+                                  borderRadius: "6px",
+                                  padding: dimensions.padding || "12px",
+                                  margin: "0 auto",
+                                  backgroundColor: "#fff5f5",
+                                  color: "#991b1b",
+                                  fontFamily: "system-ui, -apple-system, sans-serif",
+                                  pageBreakAfter: isLastSlip ? "auto" : "always",
+                                  breakAfter: isLastSlip ? "auto" : "page",
+                                  pageBreakInside: "avoid",
+                                  breakInside: "avoid",
+                                  display: "flex",
+                                  flexDirection: "column",
+                                  justifyContent: "space-between",
+                                  textAlign: "center",
+                                  overflow: "hidden",
+                                }}
+                              >
+                                <div style={{ padding: "8px 4px" }}>
+                                  <div
+                                    style={{
+                                      display: "inline-block",
+                                      backgroundColor: "#dc2626",
+                                      color: "#ffffff",
+                                      fontWeight: 900,
+                                      fontSize: isCompact ? "10px" : "12px",
+                                      letterSpacing: "0.5px",
+                                      padding: "3px 8px",
+                                      borderRadius: "4px",
+                                      marginBottom: "6px",
+                                      textTransform: "uppercase",
+                                    }}
+                                  >
+                                    SECURITY INTERCEPT: CANCELLED
+                                  </div>
+                                  <div
+                                    style={{
+                                      fontSize: isCompact ? "13px" : "18px",
+                                      fontWeight: 900,
+                                      lineHeight: 1.2,
+                                      color: "#991b1b",
+                                      margin: "4px 0",
+                                      textTransform: "uppercase",
+                                    }}
+                                  >
+                                    ⛔ ORDER CANCELLED ON SHOPIFY - DO NOT PACK / SHIP
+                                  </div>
+                                </div>
+
+                                <div
+                                  style={{
+                                    borderTop: "2px solid #f87171",
+                                    borderBottom: "2px solid #f87171",
+                                    padding: isCompact ? "6px 4px" : "10px 8px",
+                                    backgroundColor: "#ffffff",
+                                    borderRadius: "4px",
+                                    textAlign: "left",
+                                    fontSize: isCompact ? "9px" : "11.5px",
+                                    lineHeight: 1.4,
+                                    color: "#1f2937",
+                                  }}
+                                >
+                                  <div style={{ fontWeight: 800, fontSize: isCompact ? "11px" : "13px", marginBottom: "4px", color: "#111827" }}>
+                                    Order: {slip.orderName}
+                                  </div>
+                                  <div>
+                                    <strong>Customer:</strong> {slip.customerName || matchingOrder?.customerName || "N/A"}
+                                  </div>
+                                  <div>
+                                    <strong>Phone:</strong> {slip.customerPhone || matchingOrder?.customerPhone || "N/A"}
+                                  </div>
+                                  <div>
+                                    <strong>Cancelled At:</strong> {cancelDateText ? new Date(cancelDateText).toLocaleString("en-GB") : "Recently"}
+                                  </div>
+                                  <div>
+                                    <strong>Reason:</strong> {cancelReasonText}
+                                  </div>
+                                </div>
+
+                                <div
+                                  style={{
+                                    fontSize: isCompact ? "8px" : "9.5px",
+                                    fontWeight: 700,
+                                    color: "#b91c1c",
+                                    textTransform: "uppercase",
+                                    letterSpacing: "0.5px",
+                                    padding: "4px 0",
+                                  }}
+                                >
+                                  DISPATCH BLOCKED • DO NOT HAND OVER TO COURIER
+                                </div>
+                              </div>
+                            );
+                          }
+
+                          // Invoices (A4) Cancelled Sheet
+                          return (
+                            <div
+                              key={`${slip.orderId}-${index}-cancelled-invoice`}
+                              className="cancelled-order-watermark-sheet"
+                              style={{
+                                width: "100%",
+                                maxWidth: "210mm",
+                                minHeight: "270mm",
+                                boxSizing: "border-box",
+                                border: "3px dashed #dc2626",
+                                borderRadius: "6px",
+                                padding: "24mm 18mm",
+                                margin: "0 auto",
+                                backgroundColor: "#fffafa",
+                                color: "#991b1b",
+                                fontFamily: "system-ui, -apple-system, sans-serif",
+                                pageBreakAfter: isLastSlip ? "auto" : "always",
+                                breakAfter: isLastSlip ? "auto" : "page",
+                                pageBreakInside: "avoid",
+                                breakInside: "avoid",
+                                display: "flex",
+                                flexDirection: "column",
+                                justifyContent: "space-between",
+                                textAlign: "center",
+                                position: "relative",
+                              }}
+                            >
+                              <div style={{ textAlign: "center", marginTop: "18mm" }}>
+                                <div
+                                  style={{
+                                    display: "inline-block",
+                                    backgroundColor: "#dc2626",
+                                    color: "#ffffff",
+                                    fontWeight: 900,
+                                    fontSize: "13px",
+                                    letterSpacing: "1px",
+                                    padding: "6px 16px",
+                                    borderRadius: "4px",
+                                    marginBottom: "16px",
+                                    textTransform: "uppercase",
+                                  }}
+                                >
+                                  SECURITY VOID — INVOICE GENERATION BLOCKED
+                                </div>
+                                <h1
+                                  style={{
+                                    fontSize: "24px",
+                                    fontWeight: 900,
+                                    color: "#b91c1c",
+                                    marginBottom: "12px",
+                                    lineHeight: 1.3,
+                                    textTransform: "uppercase",
+                                  }}
+                                >
+                                  ⛔ ORDER CANCELLED ON SHOPIFY - DO NOT PACK / SHIP
+                                </h1>
+                                <p style={{ fontSize: "14px", color: "#4b5563", maxWidth: "520px", margin: "0 auto" }}>
+                                  This order was marked as cancelled on Shopify. To prevent lost packaging materials, uncollectable courier fees, or inventory discrepancies, all document generation for this order is revoked.
+                                </p>
+                              </div>
+
+                              <div
+                                style={{
+                                  border: "1px solid #fca5a5",
+                                  backgroundColor: "#ffffff",
+                                  borderRadius: "8px",
+                                  padding: "20px 24px",
+                                  margin: "16mm auto",
+                                  maxWidth: "550px",
+                                  width: "100%",
+                                  textAlign: "left",
+                                  boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
+                                }}
+                              >
+                                <h3 style={{ fontSize: "15px", fontWeight: 800, color: "#111827", marginBottom: "12px", borderBottom: "1px solid #e5e7eb", paddingBottom: "8px" }}>
+                                  Cancelled Order Manifest Details
+                                </h3>
+                                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", fontSize: "13px", color: "#374151" }}>
+                                  <div>
+                                    <strong>Order Number:</strong> {slip.orderName}
+                                  </div>
+                                  <div>
+                                    <strong>Tracking Number:</strong> {slip.trackingNumber || "None (Blocked)"}
+                                  </div>
+                                  <div>
+                                    <strong>Customer Name:</strong> {slip.customerName || matchingOrder?.customerName || "N/A"}
+                                  </div>
+                                  <div>
+                                    <strong>Customer Phone:</strong> {slip.customerPhone || matchingOrder?.customerPhone || "N/A"}
+                                  </div>
+                                  <div>
+                                    <strong>Cancelled Date:</strong> {cancelDateText ? new Date(cancelDateText).toLocaleString("en-GB") : "Recently"}
+                                  </div>
+                                  <div>
+                                    <strong>Cancellation Reason:</strong> {cancelReasonText}
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div
+                                style={{
+                                  borderTop: "2px solid #ef4444",
+                                  paddingTop: "12px",
+                                  fontSize: "12px",
+                                  color: "#6b7280",
+                                  textAlign: "center",
+                                }}
+                              >
+                                <p style={{ margin: 0, fontWeight: 700, color: "#dc2626" }}>
+                                  AUDIT SAFEGUARD ACTIVE — DO NOT PROCESS GOODS FOR THIS ORDER REFERENCE
+                                </p>
+                              </div>
+                            </div>
+                          );
+                        }
+
                         const effectiveNote = resolveEffectiveNote(slip, shippingLabelConfig);
 
                         if (printDocumentMode === "labels_4x6") {
