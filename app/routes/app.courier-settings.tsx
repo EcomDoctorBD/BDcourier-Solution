@@ -34,6 +34,7 @@ import {
   Select,
   Icon,
   RadioButton,
+  Tabs,
 } from "@shopify/polaris";
 
 import { authenticate } from "../shopify.server";
@@ -1363,6 +1364,47 @@ export default function CourierSettingsPage() {
     );
   };
 
+  // ==================== 6. TOP SETTINGS NAVIGATION TABS ====================
+  const settingsNavTabs = [
+    {
+      id: "courier_integration",
+      content: "Courier Integration",
+      accessibilityLabel: "Courier Integration",
+      panelID: "courier-integration-panel",
+    },
+    {
+      id: "shipping_label",
+      content: "Shipping Label",
+      accessibilityLabel: "Shipping Label",
+      panelID: "shipping-label-panel",
+    },
+    {
+      id: "invoice",
+      content: "Invoice",
+      accessibilityLabel: "Invoice",
+      panelID: "invoice-panel",
+    },
+  ];
+
+  const [selectedSettingsTab, setSelectedSettingsTab] = useState<
+    "courier_integration" | "shipping_label" | "invoice"
+  >("courier_integration");
+
+  const selectedSettingsTabIndex = Math.max(
+    0,
+    settingsNavTabs.findIndex((t) => t.id === selectedSettingsTab)
+  );
+
+  const handleSettingsTabChange = (selectedTabIndex: number) => {
+    const nextTab = settingsNavTabs[selectedTabIndex]?.id as
+      | "courier_integration"
+      | "shipping_label"
+      | "invoice";
+    if (nextTab) {
+      setSelectedSettingsTab(nextTab);
+    }
+  };
+
   const isSavingRoutingSettings =
     navigation.state === "submitting" &&
     navigation.formData?.get("actionType") === "saveRoutingSettings";
@@ -1385,7 +1427,22 @@ export default function CourierSettingsPage() {
     <Page>
       <TitleBar title="Courier Settings" />
 
-      <BlockStack gap="600">
+      <BlockStack gap="500">
+        {/* Top Settings Navigation Bar */}
+        <div
+          style={{
+            borderBottom: "1px solid var(--p-color-border, #E1E3E5)",
+            background: "var(--p-color-bg-surface, #FFFFFF)",
+            borderRadius: "8px",
+          }}
+        >
+          <Tabs
+            tabs={settingsNavTabs}
+            selected={selectedSettingsTabIndex}
+            onSelect={handleSettingsTabChange}
+          />
+        </div>
+
         {showBanner && actionData?.message && (
           <Banner
             title={actionData.success ? "Settings Saved" : "Validation Error"}
@@ -1397,9 +1454,13 @@ export default function CourierSettingsPage() {
         )}
 
         {/* ==================================================================== */}
-        {/* SECTION 1 & 2: DUAL-PANE SUB-VIEW OR 3-COLUMN DASHBOARD GRID         */}
+        {/* SCENARIO A: COURIER INTEGRATION VIEW WRAPPER                         */}
         {/* ==================================================================== */}
-        {activeCourierId ? (
+        <div style={{ display: selectedSettingsTab === "courier_integration" ? "block" : "none" }}>
+          {/* ==================================================================== */}
+          {/* SECTION 1 & 2: DUAL-PANE SUB-VIEW OR 3-COLUMN DASHBOARD GRID         */}
+          {/* ==================================================================== */}
+          {activeCourierId ? (
           /* ================================================================ */
           /* DEDICATED INNER SUB-VIEW: DUAL-PANE COURIER CONFIGURATION        */
           /* ================================================================ */
@@ -3157,6 +3218,42 @@ export default function CourierSettingsPage() {
 
             </BlockStack>
           </BlockStack>
+        )}
+        </div>
+
+        {/* ==================================================================== */}
+        {/* SCENARIO B: SHIPPING LABEL & INVOICE PLACEHOLDERS                     */}
+        {/* ==================================================================== */}
+        {selectedSettingsTab === "shipping_label" && (
+          <Card padding="600">
+            <BlockStack gap="300" inlineAlign="center">
+              <Text as="h2" variant="headingLg" alignment="center">
+                Shipping Label Settings
+              </Text>
+              <Text as="p" variant="bodyMd" tone="subdued" alignment="center">
+                Shipping Label Customization Settings Template
+              </Text>
+              <Text as="p" variant="bodySm" tone="subdued" alignment="center">
+                Configure thermal barcode label dimensions (4x6 / 100x150mm), custom merchant branding, barcode formats, and return policy notes.
+              </Text>
+            </BlockStack>
+          </Card>
+        )}
+
+        {selectedSettingsTab === "invoice" && (
+          <Card padding="600">
+            <BlockStack gap="300" inlineAlign="center">
+              <Text as="h2" variant="headingLg" alignment="center">
+                Invoice Configuration
+              </Text>
+              <Text as="p" variant="bodyMd" tone="subdued" alignment="center">
+                Invoice Configuration Template Setup
+              </Text>
+              <Text as="p" variant="bodySm" tone="subdued" alignment="center">
+                Customize A4 packing slips, store logo, branded headers, custom slogans, order breakdown items, and payment instructions.
+              </Text>
+            </BlockStack>
+          </Card>
         )}
       
       </BlockStack>
