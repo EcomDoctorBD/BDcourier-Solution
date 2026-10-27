@@ -33,6 +33,7 @@ import {
   Box,
   Select,
   Icon,
+  RadioButton,
 } from "@shopify/polaris";
 
 import { authenticate } from "../shopify.server";
@@ -507,6 +508,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       updateSet.steadfastSecretKey = encryptSecret(steadfastSecretKey);
     } else if (rawExisting?.steadfastSecretKey) {
       updateSet.steadfastSecretKey = rawExisting.steadfastSecretKey;
+    }
+
+    const defaultCourierParam = String(formData.get("defaultCourier") || "").trim();
+    if (defaultCourierParam && ["pathao", "steadfast", "redx", "carrybee", "bahok"].includes(defaultCourierParam)) {
+      updateSet.defaultCourier = defaultCourierParam;
     }
 
     await CourierConfig.findOneAndUpdate(
@@ -1031,6 +1037,8 @@ export default function CourierSettingsPage() {
   const [steadfastApiKey, setSteadfastApiKey] = useState(courierConfig.steadfastApiKey);
   const [steadfastSecretKey, setSteadfastSecretKey] = useState(courierConfig.steadfastSecretKey);
   const [showSteadfastSecret, setShowSteadfastSecret] = useState(false);
+  const [steadfastDeliveryType, setSteadfastDeliveryType] = useState("home");
+  const [steadfastParcelNote, setSteadfastParcelNote] = useState("");
 
   const isSteadfastConnected = Boolean(
     steadfastApiKey.trim() &&
@@ -1046,6 +1054,9 @@ export default function CourierSettingsPage() {
     formData.append("actionType", "saveSteadfast");
     formData.append("steadfastApiKey", steadfastApiKey);
     formData.append("steadfastSecretKey", steadfastSecretKey);
+    formData.append("defaultCourier", defaultCourier);
+    formData.append("steadfastDeliveryType", steadfastDeliveryType);
+    formData.append("steadfastParcelNote", steadfastParcelNote);
     submit(formData, { method: "post" });
   };
 
@@ -1772,7 +1783,7 @@ export default function CourierSettingsPage() {
                               label="API Key"
                               value={steadfastApiKey}
                               onChange={(val) => setSteadfastApiKey(val)}
-                              placeholder="e.g. stf_live_api_key_..."
+                              placeholder="Enter your Steadfast API Key"
                               autoComplete="off"
                             />
                             <TextField
@@ -1780,7 +1791,7 @@ export default function CourierSettingsPage() {
                               type={showSteadfastSecret ? "text" : "password"}
                               value={steadfastSecretKey}
                               onChange={(val) => setSteadfastSecretKey(val)}
-                              placeholder="••••••••••••••••"
+                              placeholder="Enter your Steadfast Secret Key"
                               autoComplete="off"
                               connectedRight={
                                 <Button
@@ -1790,7 +1801,6 @@ export default function CourierSettingsPage() {
                                   {showSteadfastSecret ? "Hide" : "Show"}
                                 </Button>
                               }
-                              helpText="Found under Steadfast Merchant Dashboard -> API Integration. Stored encrypted with AES-256-GCM."
                             />
                           </BlockStack>
                           <Divider />
@@ -1832,16 +1842,16 @@ export default function CourierSettingsPage() {
                               }
                             />
                             <TextField
-                              label="Bearer Token / Secret"
+                              label="Webhook Secret"
                               value={webhookSecret}
                               readOnly
                               autoComplete="off"
                               connectedRight={
                                 <Button onClick={() => copyToClipboard(webhookSecret, "steadfast_secret")}>
-                                  {copiedKey === "steadfast_secret" ? "Copied!" : "Copy Token"}
+                                  {copiedKey === "steadfast_secret" ? "Copied!" : "Copy Secret"}
                                 </Button>
                               }
-                              helpText="Paste in Steadfast Webhook Bearer Token / Secret field."
+                              helpText="Paste in Steadfast Webhook Secret field."
                             />
                             <InlineStack align="end">
                               <Button
@@ -1864,22 +1874,48 @@ export default function CourierSettingsPage() {
                           <BlockStack gap="100">
                             <Text as="h3" variant="headingMd" fontWeight="bold">Default Delivery & COD Settings</Text>
                             <Text as="p" variant="bodySm" tone="subdued">
-                              Configure Steadfast Cash-on-Delivery fulfillment across all 64 Bangladeshi districts.
+                              Configure default parcel preferences and delivery dispatch rules for Steadfast Courier.
                             </Text>
                           </BlockStack>
                           <Divider />
-                          <BlockStack gap="300">
-                            <Text as="p" variant="bodySm">
-                              Steadfast Courier provides nationwide doorstep delivery with fast cash-on-delivery (COD) reconciliation. Orders dispatched through Steadfast will automatically use your store's default merchant payout profile.
-                            </Text>
-                            <div style={{ backgroundColor: "#F8FAFC", padding: "16px", borderRadius: "8px", border: "1px solid #E2E8F0" }}>
-                              <BlockStack gap="100">
-                                <Text as="p" variant="bodySm" fontWeight="semibold">Coverage Notice:</Text>
-                                <Text as="p" variant="bodyXs" tone="subdued">
-                                  Covers all 64 districts including rural sub-districts (Thana/Upazila). Standard COD payment cycle: 24-48 hours after delivery completion.
-                                </Text>
-                              </BlockStack>
-                            </div>
+                          <BlockStack gap="400">
+                            <Checkbox
+                              label="Set Steadfast as default courier"
+                              checked={defaultCourier === "steadfast"}
+                              onChange={(newChecked) => {
+                                setDefaultCourier(newChecked ? "steadfast" : "pathao");
+                              }}
+                            />
+                            <BlockStack gap="150">
+                              <Text as="p" variant="bodyMd" fontWeight="medium">
+                                Default Delivery Type
+                              </Text>
+                              <InlineStack gap="400">
+                                <RadioButton
+                                  label="Home Delivery"
+                                  checked={steadfastDeliveryType === "home"}
+                                  id="steadfast_delivery_home"
+                                  name="steadfastDeliveryType"
+                                  onChange={() => setSteadfastDeliveryType("home")}
+                                />
+                                <RadioButton
+                                  label="Hub Delivery"
+                                  checked={steadfastDeliveryType === "hub"}
+                                  id="steadfast_delivery_hub"
+                                  name="steadfastDeliveryType"
+                                  onChange={() => setSteadfastDeliveryType("hub")}
+                                />
+                              </InlineStack>
+                            </BlockStack>
+                            <TextField
+                              label="Default Parcel Note"
+                              value={steadfastParcelNote}
+                              onChange={(val) => setSteadfastParcelNote(val)}
+                              placeholder="e.g. Please call customer before delivery"
+                              multiline={3}
+                              autoComplete="off"
+                              helpText="Don't use any special characters or emoji characters"
+                            />
                           </BlockStack>
                           <Divider />
                           <InlineStack align="end">
