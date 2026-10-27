@@ -678,6 +678,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       updateSet.carrybeeWebhookSecret = rawExisting.carrybeeWebhookSecret;
     }
 
+    const defaultCourierParam = String(formData.get("defaultCourier") || "").trim();
+    if (defaultCourierParam && ["pathao", "steadfast", "redx", "carrybee", "bahok"].includes(defaultCourierParam)) {
+      updateSet.defaultCourier = defaultCourierParam;
+    }
+
     await CourierConfig.findOneAndUpdate(
       { shopDomain },
       { $set: updateSet },
@@ -1129,6 +1134,10 @@ export default function CourierSettingsPage() {
   const [showCarrybeeSecret, setShowCarrybeeSecret] = useState(false);
   const [showCarrybeeContext, setShowCarrybeeContext] = useState(false);
   const [showCarrybeeWebhookSecret, setShowCarrybeeWebhookSecret] = useState(false);
+  const [carrybeeDefaultWeight, setCarrybeeDefaultWeight] = useState("0.5");
+  const [carrybeeParcelNote, setCarrybeeParcelNote] = useState("");
+  const [carrybeeDeliveryType, setCarrybeeDeliveryType] = useState("normal");
+  const [carrybeeProductType, setCarrybeeProductType] = useState("parcel");
 
   const isCarrybeeConnected = Boolean(
     carrybeeClientId.trim() &&
@@ -1149,6 +1158,11 @@ export default function CourierSettingsPage() {
     formData.append("carrybeeStoreId", carrybeeStoreId);
     formData.append("carrybeeSandbox", String(carrybeeSandbox));
     formData.append("carrybeeWebhookSecret", carrybeeWebhookSecret);
+    formData.append("defaultCourier", defaultCourier);
+    formData.append("carrybeeDefaultWeight", carrybeeDefaultWeight);
+    formData.append("carrybeeParcelNote", carrybeeParcelNote);
+    formData.append("carrybeeDeliveryType", carrybeeDeliveryType);
+    formData.append("carrybeeProductType", carrybeeProductType);
     submit(formData, { method: "post" });
   };
 
@@ -2173,7 +2187,7 @@ export default function CourierSettingsPage() {
                               label="Client ID"
                               value={carrybeeClientId}
                               onChange={(val) => setCarrybeeClientId(val)}
-                              placeholder="e.g. cb_client_..."
+                              placeholder="Enter your CarryBee Client ID"
                               autoComplete="off"
                             />
                             <TextField
@@ -2181,7 +2195,7 @@ export default function CourierSettingsPage() {
                               type={showCarrybeeSecret ? "text" : "password"}
                               value={carrybeeClientSecret}
                               onChange={(val) => setCarrybeeClientSecret(val)}
-                              placeholder="••••••••••••••••"
+                              placeholder="Enter your CarryBee Client Secret"
                               autoComplete="off"
                               connectedRight={
                                 <Button
@@ -2191,14 +2205,13 @@ export default function CourierSettingsPage() {
                                   {showCarrybeeSecret ? "Hide" : "Show"}
                                 </Button>
                               }
-                              helpText="Stored encrypted with AES-256-GCM."
                             />
                             <TextField
                               label="Client Context"
                               type={showCarrybeeContext ? "text" : "password"}
                               value={carrybeeClientContext}
                               onChange={(val) => setCarrybeeClientContext(val)}
-                              placeholder="••••••••••••••••"
+                              placeholder="Enter your unique CarryBee Client Context token"
                               autoComplete="off"
                               connectedRight={
                                 <Button
@@ -2208,7 +2221,35 @@ export default function CourierSettingsPage() {
                                   {showCarrybeeContext ? "Hide" : "Show"}
                                 </Button>
                               }
-                              helpText="Your unique CarryBee Client Context token. Stored encrypted."
+                            />
+                            <TextField
+                              label="Store ID"
+                              value={carrybeeStoreId}
+                              onChange={(val) => setCarrybeeStoreId(val)}
+                              placeholder="Enter your CarryBee Store ID (e.g. cb_store_101)"
+                              autoComplete="off"
+                            />
+                            <TextField
+                              label="Custom Webhook Secret (Optional)"
+                              type={showCarrybeeWebhookSecret ? "text" : "password"}
+                              value={carrybeeWebhookSecret}
+                              onChange={(val) => setCarrybeeWebhookSecret(val)}
+                              placeholder="Enter custom signature secret (optional)"
+                              autoComplete="off"
+                              connectedRight={
+                                <Button
+                                  variant="plain"
+                                  onClick={() => setShowCarrybeeWebhookSecret((prev) => !prev)}
+                                >
+                                  {showCarrybeeWebhookSecret ? "Hide" : "Show"}
+                                </Button>
+                              }
+                            />
+                            <Checkbox
+                              label="Sandbox / Test API Mode"
+                              checked={carrybeeSandbox}
+                              onChange={(val) => setCarrybeeSandbox(val)}
+                              helpText="Enable to run simulated orders in the CarryBee Sandbox environment."
                             />
                           </BlockStack>
                           <Divider />
@@ -2250,13 +2291,13 @@ export default function CourierSettingsPage() {
                               }
                             />
                             <TextField
-                              label="Bearer Token / Secret"
+                              label="Your Secret Key"
                               value={carrybeeWebhookSecret || webhookSecret}
                               readOnly
                               autoComplete="off"
                               connectedRight={
                                 <Button onClick={() => copyToClipboard(carrybeeWebhookSecret || webhookSecret, "carrybee_secret")}>
-                                  {copiedKey === "carrybee_secret" ? "Copied!" : "Copy Token"}
+                                  {copiedKey === "carrybee_secret" ? "Copied!" : "Copy Key"}
                                 </Button>
                               }
                               helpText="Paste in CarryBee Webhook Secret field."
@@ -2280,44 +2321,88 @@ export default function CourierSettingsPage() {
                       {activeSetupTab === "settings" && (
                         <BlockStack gap="400">
                           <BlockStack gap="100">
-                            <Text as="h3" variant="headingMd" fontWeight="bold">Default Fulfillment & Sandbox Settings</Text>
+                            <Text as="h3" variant="headingMd" fontWeight="bold">CarryBee Fulfillment Defaults</Text>
                             <Text as="p" variant="bodySm" tone="subdued">
-                              Manage your CarryBee default store ID and environment sandbox mode.
+                              Configure default parcel preferences and automated dispatch parameters for Carry Bee Logistics.
                             </Text>
                           </BlockStack>
                           <Divider />
-                          <BlockStack gap="300">
+                          <BlockStack gap="400">
                             <Checkbox
-                              label="Sandbox / Test API Mode"
-                              checked={carrybeeSandbox}
-                              onChange={(val) => setCarrybeeSandbox(val)}
-                              helpText="Enable to run simulated orders in the CarryBee Sandbox environment."
+                              label="Set Carry Bee as default courier"
+                              checked={defaultCourier === "carrybee"}
+                              onChange={(newChecked) => {
+                                setDefaultCourier(newChecked ? "carrybee" : "pathao");
+                              }}
                             />
                             <TextField
-                              label="Store ID"
-                              value={carrybeeStoreId}
-                              onChange={(val) => setCarrybeeStoreId(val)}
-                              placeholder="e.g. cb_store_101"
+                              label="Default Parcel Weight (kg)"
+                              type="number"
+                              value={carrybeeDefaultWeight}
+                              onChange={(val) => setCarrybeeDefaultWeight(val)}
+                              placeholder="0.5"
                               autoComplete="off"
-                              helpText="CarryBee merchant store identifier."
+                              min={0.1}
+                              step={0.1}
                             />
                             <TextField
-                              label="Custom Webhook Secret (Optional)"
-                              type={showCarrybeeWebhookSecret ? "text" : "password"}
-                              value={carrybeeWebhookSecret}
-                              onChange={(val) => setCarrybeeWebhookSecret(val)}
-                              placeholder="••••••••••••••••"
+                              label="Default Parcel Note"
+                              value={carrybeeParcelNote}
+                              onChange={(val) => setCarrybeeParcelNote(val)}
+                              placeholder="e.g. Please call before delivery"
+                              multiline={3}
                               autoComplete="off"
-                              connectedRight={
-                                <Button
-                                  variant="plain"
-                                  onClick={() => setShowCarrybeeWebhookSecret((prev) => !prev)}
-                                >
-                                  {showCarrybeeWebhookSecret ? "Hide" : "Show"}
-                                </Button>
-                              }
-                              helpText="Custom signature secret provided by CarryBee if different from global secret."
+                              helpText="Don't use any special characters or emoji characters."
                             />
+                            <BlockStack gap="150">
+                              <Text as="p" variant="bodyMd" fontWeight="medium">
+                                Default Delivery Type
+                              </Text>
+                              <InlineStack gap="400">
+                                <RadioButton
+                                  label="Normal Delivery"
+                                  checked={carrybeeDeliveryType === "normal"}
+                                  id="carrybee_delivery_normal"
+                                  name="carrybeeDeliveryType"
+                                  onChange={() => setCarrybeeDeliveryType("normal")}
+                                />
+                                <RadioButton
+                                  label="Express Delivery"
+                                  checked={carrybeeDeliveryType === "express"}
+                                  id="carrybee_delivery_express"
+                                  name="carrybeeDeliveryType"
+                                  onChange={() => setCarrybeeDeliveryType("express")}
+                                />
+                              </InlineStack>
+                            </BlockStack>
+                            <BlockStack gap="150">
+                              <Text as="p" variant="bodyMd" fontWeight="medium">
+                                Default Product Type
+                              </Text>
+                              <InlineStack gap="400">
+                                <RadioButton
+                                  label="Parcel"
+                                  checked={carrybeeProductType === "parcel"}
+                                  id="carrybee_product_parcel"
+                                  name="carrybeeProductType"
+                                  onChange={() => setCarrybeeProductType("parcel")}
+                                />
+                                <RadioButton
+                                  label="Book"
+                                  checked={carrybeeProductType === "book"}
+                                  id="carrybee_product_book"
+                                  name="carrybeeProductType"
+                                  onChange={() => setCarrybeeProductType("book")}
+                                />
+                                <RadioButton
+                                  label="Document"
+                                  checked={carrybeeProductType === "document"}
+                                  id="carrybee_product_document"
+                                  name="carrybeeProductType"
+                                  onChange={() => setCarrybeeProductType("document")}
+                                />
+                              </InlineStack>
+                            </BlockStack>
                           </BlockStack>
                           <Divider />
                           <InlineStack align="end">
