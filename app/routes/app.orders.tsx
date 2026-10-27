@@ -4025,6 +4025,17 @@ export default function OrdersFulfillmentPage() {
   const [phoneCopiedToast, setPhoneCopiedToast] = useState(false);
   const copyTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
+  // Advanced Audit Point 3: Immediate synchronous lock refs against rapid double-clicks
+  const isSubmittingRef = useRef(false);
+  const inFlightOrderIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (navigation.state === "idle") {
+      isSubmittingRef.current = false;
+      inFlightOrderIdRef.current = null;
+    }
+  }, [navigation.state]);
+
   const handleCopyPhone = useCallback((phone: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
     if (!phone) return;
@@ -4608,6 +4619,17 @@ export default function OrdersFulfillmentPage() {
   ];
 
   const handleSendSingleOrder = (order: NormalizedOrder) => {
+    // Advanced Audit Point 3: Synchronous double-click guard
+    if (
+      isSubmittingRef.current ||
+      inFlightOrderIdRef.current === order.id ||
+      navigation.state === "submitting"
+    ) {
+      return;
+    }
+    isSubmittingRef.current = true;
+    inFlightOrderIdRef.current = order.id;
+
     const rawCourier =
       selectedCouriersByOrder[order.id] || order.assignedCourier;
     const isChosenActive = courierSelectOptions.some(
@@ -4635,6 +4657,8 @@ export default function OrdersFulfillmentPage() {
 
     // Rigid real-time intercept: block dispatch if custom COD exceeds order total
     if (!isPrepaid && enteredCodNum !== null && maxOrderPrice > 0 && enteredCodNum > maxOrderPrice) {
+      isSubmittingRef.current = false;
+      inFlightOrderIdRef.current = null;
       return;
     }
 
@@ -4684,10 +4708,21 @@ export default function OrdersFulfillmentPage() {
     setClientBatchError(null);
     if (selectedResources.length === 0) return;
 
+    // Advanced Audit Point 3: Synchronous double-click guard for bulk dispatch
+    if (
+      isSubmittingRef.current ||
+      navigation.state === "submitting" ||
+      isBulkSubmitting
+    ) {
+      return;
+    }
+    isSubmittingRef.current = true;
+
     if (
       !usageSummary.isUnlimitedBulk &&
       selectedResources.length > usageSummary.bulkBatchLimit
     ) {
+      isSubmittingRef.current = false;
       setClientBatchError(
         `Plan Cap Reached: Your ${usageSummary.currentPlan} tier allows up to ${usageSummary.bulkBatchLimit} orders per bulk batch (you selected ${selectedResources.length}). Please deselect some orders or upgrade your plan.`
       );
@@ -4768,6 +4803,7 @@ export default function OrdersFulfillmentPage() {
   };
 
   const handleBulkAssignCourier = (courierKey: string) => {
+    if (isSubmittingRef.current || navigation.state === "submitting") return;
     setSelectedCouriersByOrder((prev) => {
       const updated = { ...prev };
       for (const id of selectedResources) {
@@ -4933,6 +4969,7 @@ export default function OrdersFulfillmentPage() {
     }
   };
 
+  const isSubmitting = navigation.state === "submitting" || navigation.state === "loading";
   const pendingActionType = navigation.formData?.get("actionType");
   const isBulkSubmitting =
     navigation.state === "submitting" &&
@@ -4961,11 +4998,17 @@ export default function OrdersFulfillmentPage() {
 
   // Official Polaris Native Bulk Actions Pipeline
   const promotedBulkActions = [
+    {
+      content: isBulkSubmitting ? "Booking Orders..." : "Book Selected Orders",
+      onAction: handleBulkSendToCourier,
+      disabled: isSubmitting || isBulkSubmitting || isBatchOverPlanCap,
+    },
     ...(activeCouriers.pathao
       ? [
           {
             content: "Assign Pathao",
             onAction: () => handleBulkAssignCourier("pathao"),
+            disabled: isSubmitting || isBulkSubmitting,
           },
         ]
       : []),
@@ -4974,6 +5017,7 @@ export default function OrdersFulfillmentPage() {
           {
             content: "Assign Steadfast",
             onAction: () => handleBulkAssignCourier("steadfast"),
+            disabled: isSubmitting || isBulkSubmitting,
           },
         ]
       : []),
@@ -4982,6 +5026,7 @@ export default function OrdersFulfillmentPage() {
           {
             content: "Assign RedX",
             onAction: () => handleBulkAssignCourier("redx"),
+            disabled: isSubmitting || isBulkSubmitting,
           },
         ]
       : []),
@@ -4990,6 +5035,7 @@ export default function OrdersFulfillmentPage() {
           {
             content: "Assign CarryBee",
             onAction: () => handleBulkAssignCourier("carrybee"),
+            disabled: isSubmitting || isBulkSubmitting,
           },
         ]
       : []),
@@ -4998,16 +5044,19 @@ export default function OrdersFulfillmentPage() {
           {
             content: "Assign Bahok",
             onAction: () => handleBulkAssignCourier("bahok"),
+            disabled: isSubmitting || isBulkSubmitting,
           },
         ]
       : []),
     {
       content: "Print Labels",
       onAction: handlePrintLabels,
+      disabled: isSubmitting || isBulkSubmitting,
     },
     {
       content: "Print Invoices",
       onAction: handlePrintInvoices,
+      disabled: isSubmitting || isBulkSubmitting,
     },
   ];
 
@@ -5676,7 +5725,8 @@ export default function OrdersFulfillmentPage() {
                         disabled={
                           Boolean(dispatchedInfo) ||
                           isRowProcessing ||
-                          isLockedBySafetyNet
+                          isLockedBySafetyNet ||
+                          isSubmitting
                         }
                       />
                     </div>
@@ -5887,6 +5937,7 @@ export default function OrdersFulfillmentPage() {
               <Button
                 size="slim"
                 variant="secondary"
+                disabled={isSubmitting}
                 onClick={() =>
                   setManuallyUnlockedOrders((prev) => ({
                     ...prev,
@@ -5901,7 +5952,7 @@ export default function OrdersFulfillmentPage() {
                 variant={isHistoricalCancelledOrReturned ? "secondary" : "primary"}
                 size="slim"
                 loading={isRowSubmitting}
-                disabled={isRowCodOverflow}
+                disabled={isSubmitting || isRowSubmitting || isRowProcessing || isRowCodOverflow}
                 onClick={() => handleSendSingleOrder(order)}
               >
                 {isHistoricalCancelledOrReturned ? "🔄 Re-dispatch" : "Confirm & Dispatch"}
@@ -9241,6 +9292,7 @@ export default function OrdersFulfillmentPage() {
                   }
                   onSelectionChange={handleSelectionChange}
                   selectable={true}
+                  loading={isBulkSubmitting}
                   headings={tableHeadings as any}
                   promotedBulkActions={promotedBulkActions}
                   bulkActions={bulkActions}
