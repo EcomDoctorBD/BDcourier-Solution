@@ -3276,6 +3276,7 @@ export default function OrdersFulfillmentPage() {
   const [dispatchedOrders, setDispatchedOrders] = useState<
     Record<string, DispatchedSlipRecord>
   >(initialDispatchedOrders || {});
+  const [batchPrintSlips, setBatchPrintSlips] = useState<DispatchedSlipRecord[]>([]);
   const [showPackingSlipView, setShowPackingSlipView] = useState(false);
 
   const planNormalized = usageSummary.currentPlan.toLowerCase();
@@ -3394,6 +3395,7 @@ export default function OrdersFulfillmentPage() {
           }
           return updated;
         });
+        setBatchPrintSlips(actionData.bookedSlips);
         setSelectedResources([]);
         setShowPackingSlipView(true);
       }
@@ -4037,12 +4039,11 @@ export default function OrdersFulfillmentPage() {
     );
     if (selectedOrdersList.length === 0) return;
 
-    const hasMissingCourier = selectedOrdersList.some((order) => {
-      const chosen = selectedCouriersByOrder[order.id] || order.assignedCourier;
-      return !isCourierActive(chosen);
-    });
+    const hasUnbookedOrders = selectedOrdersList.some(
+      (order) => !dispatchedOrders[order.id]?.trackingNumber && !order.trackingNumber
+    );
 
-    if (hasMissingCourier) {
+    if (hasUnbookedOrders) {
       setShowLabelConfigError(true);
       setShowInvoiceConfigError(false);
       window.scrollTo({ top: 0, behavior: "smooth" });
@@ -4060,12 +4061,12 @@ export default function OrdersFulfillmentPage() {
     );
     if (selectedOrdersList.length === 0) return;
 
-    const hasMissingCourier = selectedOrdersList.some((order) => {
-      const chosen = selectedCouriersByOrder[order.id] || order.assignedCourier;
-      return !isCourierActive(chosen);
-    });
+    const hasMissingInvoiceConfig =
+      !invoiceConfig ||
+      !invoiceConfig.invoiceBrandName ||
+      invoiceConfig.invoiceBrandName.trim() === "";
 
-    if (hasMissingCourier) {
+    if (hasMissingInvoiceConfig) {
       setShowInvoiceConfigError(true);
       setShowLabelConfigError(false);
       window.scrollTo({ top: 0, behavior: "smooth" });
@@ -4087,43 +4088,43 @@ export default function OrdersFulfillmentPage() {
 
     if (selectedOrdersList.length === 0) return;
 
-    setDispatchedOrders((prev) => {
-      const updated = { ...prev };
-      for (const order of selectedOrdersList) {
-        if (!updated[order.id]) {
-          const chosenCourier = String(
-            selectedCouriersByOrder[order.id] || order.assignedCourier || ""
-          ).toLowerCase();
-          const courierName =
-            chosenCourier === "pathao"
-              ? "Pathao Courier"
-              : chosenCourier === "steadfast"
-              ? "Steadfast Courier"
-              : chosenCourier === "carrybee"
-              ? "CarryBee"
-              : chosenCourier === "bahok"
-              ? "Bahok Courier"
-              : "RedX Delivery";
-          updated[order.id] = {
-            orderId: order.id,
-            orderName: order.name,
-            courierName,
-            trackingNumber: order.trackingNumber || "",
-            bookingDate: new Date().toLocaleDateString("en-GB"),
-            customerName: order.customerName,
-            customerPhone: order.customerPhone,
-            shippingAddress: order.shippingAddress,
-            codAmount: String(order.codAmount),
-            currencyCode: order.currencyCode,
-            warehouseNote:
-              warehouseNotesByOrder[order.id] ?? order.warehouseNote,
-            lineItems: order.lineItems,
-          };
-        }
+    const slipsForPrint: DispatchedSlipRecord[] = selectedOrdersList.map((order) => {
+      if (dispatchedOrders[order.id]) {
+        return dispatchedOrders[order.id];
       }
-      return updated;
+      const chosenCourier = String(
+        selectedCouriersByOrder[order.id] || order.assignedCourier || ""
+      ).toLowerCase();
+      const courierName =
+        chosenCourier === "pathao"
+          ? "Pathao Courier"
+          : chosenCourier === "steadfast"
+          ? "Steadfast Courier"
+          : chosenCourier === "carrybee"
+          ? "CarryBee"
+          : chosenCourier === "bahok"
+          ? "Bahok Courier"
+          : chosenCourier === "redx"
+          ? "RedX Delivery"
+          : "";
+      return {
+        orderId: order.id,
+        orderName: order.name,
+        courierName,
+        trackingNumber: order.trackingNumber || "",
+        bookingDate: new Date().toLocaleDateString("en-GB"),
+        customerName: order.customerName,
+        customerPhone: order.customerPhone,
+        shippingAddress: order.shippingAddress,
+        codAmount: String(order.codAmount),
+        currencyCode: order.currencyCode,
+        warehouseNote:
+          warehouseNotesByOrder[order.id] ?? order.warehouseNote,
+        lineItems: order.lineItems,
+      };
     });
 
+    setBatchPrintSlips(slipsForPrint);
     setShowPackingSlipView(true);
 
     if (typeof window !== "undefined") {
@@ -4139,7 +4140,10 @@ export default function OrdersFulfillmentPage() {
     pendingActionType === "bulkBookCouriers";
   const submittingOrderId = navigation.formData?.get("orderId");
 
-  const bookedSlipsList = Object.values(dispatchedOrders);
+  const bookedSlipsList =
+    batchPrintSlips.length > 0
+      ? batchPrintSlips
+      : Object.values(dispatchedOrders);
   const isBatchOverPlanCap =
     !usageSummary.isUnlimitedBulk &&
     selectedResources.length > usageSummary.bulkBatchLimit;
@@ -5219,7 +5223,7 @@ export default function OrdersFulfillmentPage() {
                 tone="critical"
                 onDismiss={() => setShowLabelConfigError(false)}
               >
-                <p>You need to assign a courier before downloading the shipping labels.</p>
+                <p>অনুগ্রহ করে আগে এই অর্ডারে কুরিয়ার অ্যাসাইন করুন। অর্ডারটি 'Shipping' ট্যাবে চলে যাওয়ার পর সেখান থেকে লেবেল প্রিন্ট করা যাবে।</p>
               </Banner>
             </Layout.Section>
           )}
@@ -5322,7 +5326,12 @@ export default function OrdersFulfillmentPage() {
                       <Button variant="primary" onClick={() => window.print()}>
                         🖨️ Print Batch Documents
                       </Button>
-                      <Button onClick={() => setShowPackingSlipView(false)}>
+                      <Button
+                        onClick={() => {
+                          setShowPackingSlipView(false);
+                          setBatchPrintSlips([]);
+                        }}
+                      >
                         Close Preview
                       </Button>
                     </InlineStack>
