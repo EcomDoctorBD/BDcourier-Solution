@@ -910,7 +910,14 @@ export default function CourierSettingsPage() {
   const carrybeeWebhookUrl = `${appUrl}/api/webhooks/carrybee?shop=${encodeURIComponent(shopDomain)}${tokenParam}`;
   const bahokWebhookUrl = `${appUrl}/api/webhooks/bahok?shop=${encodeURIComponent(shopDomain)}${tokenParam}`;
 
-  // Collapsible gateway form states (compact summary by default)
+  // Sub-view & Tabbed Navigation States (Section 2 Competitor UX)
+  type CourierId = "pathao" | "steadfast" | "redx" | "carrybee" | "bahok";
+  type SetupTab = "api" | "webhook" | "settings";
+
+  const [activeCourierId, setActiveCourierId] = useState<CourierId | null>(null);
+  const [activeSetupTab, setActiveSetupTab] = useState<SetupTab>("api");
+
+  // Collapsible gateway form states (kept for backward-compatible action triggers)
   const [showPathaoForm, setShowPathaoForm] = useState(false);
   const [showSteadfastForm, setShowSteadfastForm] = useState(false);
   const [showRedxForm, setShowRedxForm] = useState(false);
@@ -1160,18 +1167,23 @@ export default function CourierSettingsPage() {
       setShowBanner(true);
       if (actionData.actionType === "fetchPathaoStores" || actionData.actionType === "savePathao") {
         setShowPathaoForm(true);
+        setActiveCourierId("pathao");
       }
       if (actionData.actionType === "saveSteadfast") {
         setShowSteadfastForm(true);
+        setActiveCourierId("steadfast");
       }
       if (actionData.actionType === "fetchRedxStores" || actionData.actionType === "saveRedX") {
         setShowRedxForm(true);
+        setActiveCourierId("redx");
       }
       if (actionData.actionType === "saveCarrybee") {
         setShowCarrybeeForm(true);
+        setActiveCourierId("carrybee");
       }
       if (actionData.actionType === "saveBahok") {
         setShowBahokForm(true);
+        setActiveCourierId("bahok");
       }
       if (actionData.actionType === "fetchPathaoStores" && (actionData as any).stores) {
         const fetched = (actionData as any).stores as PathaoStore[];
@@ -1345,1069 +1357,1339 @@ export default function CourierSettingsPage() {
           </Banner>
         )}
 
-        <BlockStack gap="200">
-          <Text as="h1" variant="headingXl" fontWeight="bold">
-            Courier Gateways
-          </Text>
-          <Text as="p" variant="bodyMd" tone="subdued">
-            Manage your credentials for Bangladesh&apos;s leading logistics partners to enable one-click booking and automated dispatch.
-          </Text>
-        </BlockStack>
-
         {/* ==================================================================== */}
-        {/* SECTION 1: COURIER GATEWAYS LAYOUT (3-Column Grid)                   */}
+        {/* SECTION 1 & 2: DUAL-PANE SUB-VIEW OR 3-COLUMN DASHBOARD GRID         */}
         {/* ==================================================================== */}
-        <div
-          className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 items-stretch"
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fill, minmax(310px, 1fr))",
-            gap: "24px",
-            alignItems: "stretch",
-          }}
-        >
-          {/* Card 1: Pathao Settings */}
-          <div
-            className="w-full bg-white rounded-2xl shadow-sm p-6 flex flex-col justify-between hover:shadow-md transition-shadow duration-200"
-            style={{
-              backgroundColor: "#FFFFFF",
-              borderRadius: "16px",
-              boxShadow: showPathaoForm
-                ? "0 0 0 2px #0F172A, 0 4px 14px rgba(15, 23, 42, 0.08)"
-                : "0 2px 8px -2px rgba(0, 0, 0, 0.05), 0 1px 4px -1px rgba(0, 0, 0, 0.03)",
-              border: "none",
-              padding: "24px",
-              display: "flex",
-              flexDirection: "column",
-              justifyContent: "space-between",
-              minHeight: "290px",
-            }}
-          >
-            {/* Top: Centered Logo + Name + Status Badge + Description */}
-            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", width: "100%" }}>
-              <div style={{ display: "flex", justifyContent: "center", alignItems: "center", marginBottom: "12px", minHeight: "56px" }}>
-                <CourierLogo courier="pathao" size={52} />
-              </div>
-
-              <div style={{ marginBottom: "6px" }}>
-                <Text as="h3" variant="headingMd" fontWeight="bold">
-                  Pathao Courier
-                </Text>
-              </div>
-
-              <div style={{ marginBottom: "12px", display: "flex", justifyContent: "center" }}>
-                <Badge tone={isPathaoConnected ? "success" : undefined}>
-                  {isPathaoConnected ? "● Active" : "Not Configured"}
-                </Badge>
-              </div>
-
-              <div style={{ color: "#64748B", fontSize: "13px", lineHeight: "1.5", textAlign: "center", maxWidth: "280px" }}>
-                Express parcel delivery and real-time consignment tracking via Pathao Merchant API.
-              </div>
-            </div>
-
-            {/* Bottom: Primary Action Button at Bottom-Left */}
-            <div style={{ marginTop: "auto", paddingTop: "20px", display: "flex", justifyContent: "flex-start", width: "100%" }}>
-              <Button
-                variant={isPathaoConnected ? "secondary" : "primary"}
-                onClick={() => handleToggleCourierForm("pathao")}
+        {activeCourierId ? (
+          /* ================================================================ */
+          /* DEDICATED INNER SUB-VIEW: DUAL-PANE COURIER CONFIGURATION        */
+          /* ================================================================ */
+          <BlockStack gap="500">
+            {/* Back Button Action: ← All couriers */}
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-start" }}>
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveCourierId(null);
+                  setActiveSetupTab("api");
+                }}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "6px",
+                  background: "none",
+                  border: "none",
+                  cursor: "pointer",
+                  padding: "4px 0",
+                  fontSize: "14px",
+                  fontWeight: 600,
+                  color: "#2563EB",
+                  transition: "color 0.15s ease",
+                }}
               >
-                Configure
-              </Button>
-            </div>
-          </div>
-
-          {/* Card 2: Steadfast Settings */}
-          <div
-            className="w-full bg-white rounded-2xl shadow-sm p-6 flex flex-col justify-between hover:shadow-md transition-shadow duration-200"
-            style={{
-              backgroundColor: "#FFFFFF",
-              borderRadius: "16px",
-              boxShadow: showSteadfastForm
-                ? "0 0 0 2px #0F172A, 0 4px 14px rgba(15, 23, 42, 0.08)"
-                : "0 2px 8px -2px rgba(0, 0, 0, 0.05), 0 1px 4px -1px rgba(0, 0, 0, 0.03)",
-              border: "none",
-              padding: "24px",
-              display: "flex",
-              flexDirection: "column",
-              justifyContent: "space-between",
-              minHeight: "290px",
-            }}
-          >
-            {/* Top: Centered Logo + Name + Status Badge + Description */}
-            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", width: "100%" }}>
-              <div style={{ display: "flex", justifyContent: "center", alignItems: "center", marginBottom: "12px", minHeight: "56px" }}>
-                <CourierLogo courier="steadfast" size={52} />
-              </div>
-
-              <div style={{ marginBottom: "6px" }}>
-                <Text as="h3" variant="headingMd" fontWeight="bold">
-                  Steadfast Courier
-                </Text>
-              </div>
-
-              <div style={{ marginBottom: "12px", display: "flex", justifyContent: "center" }}>
-                <Badge tone={isSteadfastConnected ? "success" : undefined}>
-                  {isSteadfastConnected ? "● Active" : "Not Configured"}
-                </Badge>
-              </div>
-
-              <div style={{ color: "#64748B", fontSize: "13px", lineHeight: "1.5", textAlign: "center", maxWidth: "280px" }}>
-                Nationwide door-to-door cash on delivery coverage with automated next-day merchant payouts.
-              </div>
+                <span>&larr; All couriers</span>
+              </button>
             </div>
 
-            {/* Bottom: Primary Action Button at Bottom-Left */}
-            <div style={{ marginTop: "auto", paddingTop: "20px", display: "flex", justifyContent: "flex-start", width: "100%" }}>
-              <Button
-                variant={isSteadfastConnected ? "secondary" : "primary"}
-                onClick={() => handleToggleCourierForm("steadfast")}
+            {/* Dual-Pane Layout (2-Column Grid) */}
+            <div
+              className="flex flex-col md:flex-row gap-6 items-start"
+              style={{
+                display: "flex",
+                gap: "24px",
+                alignItems: "flex-start",
+                width: "100%",
+              }}
+            >
+              {/* LEFT SIDEBAR PANEL (Width: ~25%-30%) */}
+              <div
+                className="w-full md:w-80 flex-shrink-0"
+                style={{
+                  width: "280px",
+                  backgroundColor: "#FFFFFF",
+                  borderRadius: "16px",
+                  padding: "20px",
+                  boxShadow: "0 1px 3px rgba(0, 0, 0, 0.05)",
+                  border: "1px solid #E2E8F0",
+                }}
               >
-                Configure
-              </Button>
-            </div>
-          </div>
+                {/* Respective Courier Logo & Title */}
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "12px",
+                    marginBottom: "16px",
+                    paddingBottom: "16px",
+                    borderBottom: "1px solid #F1F5F9",
+                  }}
+                >
+                  <CourierLogo courier={activeCourierId} size={42} />
+                  <div>
+                    <Text as="h2" variant="headingMd" fontWeight="bold">
+                      {activeCourierId === "pathao" && "Pathao Courier"}
+                      {activeCourierId === "steadfast" && "Steadfast Courier"}
+                      {activeCourierId === "redx" && "REDX Delivery"}
+                      {activeCourierId === "carrybee" && "CarryBee Logistics"}
+                      {activeCourierId === "bahok" && "Bahok Courier"}
+                    </Text>
+                    <div style={{ marginTop: "4px" }}>
+                      <Badge
+                        tone={
+                          (activeCourierId === "pathao" && isPathaoConnected) ||
+                          (activeCourierId === "steadfast" && isSteadfastConnected) ||
+                          (activeCourierId === "redx" && isRedxConnected) ||
+                          (activeCourierId === "carrybee" && isCarrybeeConnected) ||
+                          (activeCourierId === "bahok" && isBahokConnected)
+                            ? "success"
+                            : undefined
+                        }
+                      >
+                        {((activeCourierId === "pathao" && isPathaoConnected) ||
+                        (activeCourierId === "steadfast" && isSteadfastConnected) ||
+                        (activeCourierId === "redx" && isRedxConnected) ||
+                        (activeCourierId === "carrybee" && isCarrybeeConnected) ||
+                        (activeCourierId === "bahok" && isBahokConnected))
+                          ? "● Active"
+                          : "Not Configured"}
+                      </Badge>
+                    </div>
+                  </div>
+                </div>
 
-          {/* Card 3: REDX Settings */}
-          <div
-            className="w-full bg-white rounded-2xl shadow-sm p-6 flex flex-col justify-between hover:shadow-md transition-shadow duration-200"
-            style={{
-              backgroundColor: "#FFFFFF",
-              borderRadius: "16px",
-              boxShadow: showRedxForm
-                ? "0 0 0 2px #0F172A, 0 4px 14px rgba(15, 23, 42, 0.08)"
-                : "0 2px 8px -2px rgba(0, 0, 0, 0.05), 0 1px 4px -1px rgba(0, 0, 0, 0.03)",
-              border: "none",
-              padding: "24px",
-              display: "flex",
-              flexDirection: "column",
-              justifyContent: "space-between",
-              minHeight: "290px",
-            }}
-          >
-            {/* Top: Centered Logo + Name + Status Badge + Description */}
-            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", width: "100%" }}>
-              <div style={{ display: "flex", justifyContent: "center", alignItems: "center", marginBottom: "12px", minHeight: "56px" }}>
-                <CourierLogo courier="redx" size={52} />
+                {/* 3 Interactive Tab Buttons Stacked Vertically */}
+                <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                  <button
+                    type="button"
+                    onClick={() => setActiveSetupTab("api")}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "10px",
+                      padding: "10px 14px",
+                      borderRadius: "10px",
+                      fontSize: "13px",
+                      fontWeight: activeSetupTab === "api" ? 700 : 500,
+                      backgroundColor: activeSetupTab === "api" ? "#F1F5F9" : "transparent",
+                      color: activeSetupTab === "api" ? "#0F172A" : "#64748B",
+                      border: activeSetupTab === "api" ? "1px solid #CBD5E1" : "1px solid transparent",
+                      cursor: "pointer",
+                      textAlign: "left",
+                      width: "100%",
+                      transition: "all 0.15s ease",
+                    }}
+                  >
+                    <span style={{ fontSize: "15px" }}>🔑</span>
+                    <span>API Configuration</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setActiveSetupTab("webhook")}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "10px",
+                      padding: "10px 14px",
+                      borderRadius: "10px",
+                      fontSize: "13px",
+                      fontWeight: activeSetupTab === "webhook" ? 700 : 500,
+                      backgroundColor: activeSetupTab === "webhook" ? "#F1F5F9" : "transparent",
+                      color: activeSetupTab === "webhook" ? "#0F172A" : "#64748B",
+                      border: activeSetupTab === "webhook" ? "1px solid #CBD5E1" : "1px solid transparent",
+                      cursor: "pointer",
+                      textAlign: "left",
+                      width: "100%",
+                      transition: "all 0.15s ease",
+                    }}
+                  >
+                    <span style={{ fontSize: "15px" }}>🔗</span>
+                    <span>Webhook</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setActiveSetupTab("settings")}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "10px",
+                      padding: "10px 14px",
+                      borderRadius: "10px",
+                      fontSize: "13px",
+                      fontWeight: activeSetupTab === "settings" ? 700 : 500,
+                      backgroundColor: activeSetupTab === "settings" ? "#F1F5F9" : "transparent",
+                      color: activeSetupTab === "settings" ? "#0F172A" : "#64748B",
+                      border: activeSetupTab === "settings" ? "1px solid #CBD5E1" : "1px solid transparent",
+                      cursor: "pointer",
+                      textAlign: "left",
+                      width: "100%",
+                      transition: "all 0.15s ease",
+                    }}
+                  >
+                    <span style={{ fontSize: "15px" }}>⚙️</span>
+                    <span>Default Settings</span>
+                  </button>
+                </div>
               </div>
 
-              <div style={{ marginBottom: "6px" }}>
-                <Text as="h3" variant="headingMd" fontWeight="bold">
-                  REDX Delivery
-                </Text>
-              </div>
-
-              <div style={{ marginBottom: "12px", display: "flex", justifyContent: "center" }}>
-                <Badge tone={isRedxConnected ? "success" : undefined}>
-                  {isRedxConnected ? "● Active" : "Not Configured"}
-                </Badge>
-              </div>
-
-              <div style={{ color: "#64748B", fontSize: "13px", lineHeight: "1.5", textAlign: "center", maxWidth: "280px" }}>
-                Enterprise-grade logistics with extensive coverage across Dhaka and 64 districts with automated tracking.
-              </div>
-            </div>
-
-            {/* Bottom: Primary Action Button at Bottom-Left */}
-            <div style={{ marginTop: "auto", paddingTop: "20px", display: "flex", justifyContent: "flex-start", width: "100%" }}>
-              <Button
-                variant={isRedxConnected ? "secondary" : "primary"}
-                onClick={() => handleToggleCourierForm("redx")}
-              >
-                Configure
-              </Button>
-            </div>
-          </div>
-
-          {/* Card 4: CarryBee Settings */}
-          <div
-            className="w-full bg-white rounded-2xl shadow-sm p-6 flex flex-col justify-between hover:shadow-md transition-shadow duration-200"
-            style={{
-              backgroundColor: "#FFFFFF",
-              borderRadius: "16px",
-              boxShadow: showCarrybeeForm
-                ? "0 0 0 2px #0F172A, 0 4px 14px rgba(15, 23, 42, 0.08)"
-                : "0 2px 8px -2px rgba(0, 0, 0, 0.05), 0 1px 4px -1px rgba(0, 0, 0, 0.03)",
-              border: "none",
-              padding: "24px",
-              display: "flex",
-              flexDirection: "column",
-              justifyContent: "space-between",
-              minHeight: "290px",
-            }}
-          >
-            {/* Top: Centered Logo + Name + Status Badge + Description */}
-            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", width: "100%" }}>
-              <div style={{ display: "flex", justifyContent: "center", alignItems: "center", marginBottom: "12px", minHeight: "56px" }}>
-                <CourierLogo courier="carrybee" size={52} />
-              </div>
-
-              <div style={{ marginBottom: "6px" }}>
-                <Text as="h3" variant="headingMd" fontWeight="bold">
-                  CarryBee Logistics
-                </Text>
-              </div>
-
-              <div style={{ marginBottom: "12px", display: "flex", justifyContent: "center" }}>
-                <Badge tone={isCarrybeeConnected ? "success" : undefined}>
-                  {isCarrybeeConnected ? "● Active" : "Not Configured"}
-                </Badge>
-              </div>
-
-              <div style={{ color: "#64748B", fontSize: "13px", lineHeight: "1.5", textAlign: "center", maxWidth: "280px" }}>
-                Modern eCommerce logistics network with fast dispatch, real-time tracking, and automated COD payouts.
-              </div>
-            </div>
-
-            {/* Bottom: Primary Action Button at Bottom-Left */}
-            <div style={{ marginTop: "auto", paddingTop: "20px", display: "flex", justifyContent: "flex-start", width: "100%" }}>
-              <Button
-                variant={isCarrybeeConnected ? "secondary" : "primary"}
-                onClick={() => handleToggleCourierForm("carrybee")}
-              >
-                Configure
-              </Button>
-            </div>
-          </div>
-
-          {/* Card 5: Bahok Courier Settings */}
-          <div
-            className="w-full bg-white rounded-2xl shadow-sm p-6 flex flex-col justify-between hover:shadow-md transition-shadow duration-200"
-            style={{
-              backgroundColor: "#FFFFFF",
-              borderRadius: "16px",
-              boxShadow: showBahokForm
-                ? "0 0 0 2px #0F172A, 0 4px 14px rgba(15, 23, 42, 0.08)"
-                : "0 2px 8px -2px rgba(0, 0, 0, 0.05), 0 1px 4px -1px rgba(0, 0, 0, 0.03)",
-              border: "none",
-              padding: "24px",
-              display: "flex",
-              flexDirection: "column",
-              justifyContent: "space-between",
-              minHeight: "290px",
-            }}
-          >
-            {/* Top: Centered Logo + Name + Status Badge + Description */}
-            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", width: "100%" }}>
-              <div style={{ display: "flex", justifyContent: "center", alignItems: "center", marginBottom: "12px", minHeight: "56px" }}>
-                <CourierLogo courier="bahok" size={52} />
-              </div>
-
-              <div style={{ marginBottom: "6px" }}>
-                <Text as="h3" variant="headingMd" fontWeight="bold">
-                  Bahok Courier
-                </Text>
-              </div>
-
-              <div style={{ marginBottom: "12px", display: "flex", justifyContent: "center" }}>
-                <Badge tone={isBahokConnected ? "success" : undefined}>
-                  {isBahokConnected ? "● Active" : "Not Configured"}
-                </Badge>
-              </div>
-
-              <div style={{ color: "#64748B", fontSize: "13px", lineHeight: "1.5", textAlign: "center", maxWidth: "280px" }}>
-                Reliable nationwide courier service with automated booking, SMS alerts, and fast COD reconciliation.
-              </div>
-            </div>
-
-            {/* Bottom: Primary Action Button at Bottom-Left */}
-            <div style={{ marginTop: "auto", paddingTop: "20px", display: "flex", justifyContent: "flex-start", width: "100%" }}>
-              <Button
-                variant={isBahokConnected ? "secondary" : "primary"}
-                onClick={() => handleToggleCourierForm("bahok")}
-              >
-                Configure
-              </Button>
-            </div>
-          </div>
-        </div>
-
-        {/* ==================================================================== */}
-        {/* DECOUPLED GATEWAY CONFIGURATION VIEW                                 */}
-        {/* (Decoupled from inline grid rows; staged for Section 2 Side Panel)   */}
-        {/* ==================================================================== */}
-        {(showPathaoForm || showSteadfastForm || showRedxForm || showCarrybeeForm || showBahokForm) && (
-          <div
-            id="courier-config-drawer"
-            style={{
-              marginTop: "28px",
-              backgroundColor: "#FFFFFF",
-              borderRadius: "16px",
-              boxShadow: "0 4px 20px -2px rgba(0, 0, 0, 0.06), 0 2px 6px -1px rgba(0, 0, 0, 0.03)",
-              padding: "28px",
-              border: "1px solid #E2E8F0",
-            }}
-          >
-            {showPathaoForm && (
-                    <BlockStack gap="400">
-                      <InlineStack align="space-between" blockAlign="center">
-                      <InlineStack gap="300" blockAlign="center">
-                        <CourierLogo courier="pathao" size={32} />
-                        <BlockStack gap="050">
-                          <Text as="h2" variant="headingLg">Configure Pathao Courier</Text>
-                          <Text as="p" variant="bodySm" tone="subdued">Set up your Pathao Merchant API credentials and live webhook callback.</Text>
-                        </BlockStack>
-                      </InlineStack>
-                      <Button onClick={() => setShowPathaoForm(false)}>
-                        ✕ Close Panel
-                      </Button>
-                    </InlineStack>
-                    <Divider />
-
-                      <BlockStack gap="300">
-                        <Select
-                          label="API Environment"
-                          options={[
-                            { label: "Production (Hermes Live)", value: "production" },
-                            { label: "Sandbox / Test API", value: "sandbox" },
-                          ]}
-                          value={pathaoEnvironment}
-                          onChange={(val) => setPathaoEnvironment(val)}
-                        />
-
-                        <TextField
-                          label="Client ID"
-                          value={pathaoClientId}
-                          onChange={(val) => setPathaoClientId(val)}
-                          placeholder="e.g. pt_client_live_..."
-                          autoComplete="off"
-                        />
-
-                        <TextField
-                          label="Client Secret"
-                          type={showPathaoSecret ? "text" : "password"}
-                          value={pathaoSecret}
-                          onChange={(val) => setPathaoSecret(val)}
-                          placeholder="••••••••••••••••"
-                          autoComplete="off"
-                          connectedRight={
-                            <Button
-                              variant="plain"
-                              onClick={() => setShowPathaoSecret((prev) => !prev)}
-                            >
-                              {showPathaoSecret ? "Hide" : "Show"}
-                            </Button>
-                          }
-                          helpText="Stored encrypted with AES-256-GCM."
-                        />
-
-                        <TextField
-                          label="Merchant Username (Email)"
-                          value={pathaoUsername}
-                          onChange={(val) => setPathaoUsername(val)}
-                          placeholder="merchant@example.com"
-                          autoComplete="off"
-                          helpText="Merchant Portal login email (used for OAuth token authorization)."
-                        />
-
-                        <TextField
-                          label="Merchant Password"
-                          type={showPathaoPassword ? "text" : "password"}
-                          value={pathaoPassword}
-                          onChange={(val) => setPathaoPassword(val)}
-                          placeholder="••••••••••••••••"
-                          autoComplete="off"
-                          connectedRight={
-                            <Button
-                              variant="plain"
-                              onClick={() => setShowPathaoPassword((prev) => !prev)}
-                            >
-                              {showPathaoPassword ? "Hide" : "Show"}
-                            </Button>
-                          }
-                          helpText="Stored encrypted with AES-256-GCM. Used to renew OAuth tokens."
-                        />
-
-                        <InlineStack align="start">
-                          <Button
-                            size="medium"
-                            loading={isFetchingPathaoStores}
-                            onClick={handleFetchPathaoStores}
-                            disabled={!pathaoClientId || !pathaoSecret || !pathaoUsername || !pathaoPassword}
-                          >
-                            Verify &amp; Fetch Stores
-                          </Button>
-                        </InlineStack>
-
-                        {pathaoStores.length > 0 && (
-                          <Select
-                            label="Pickup Store"
-                            options={[
-                              { label: "-- Select a Pickup Store --", value: "" },
-                              ...pathaoStores.map((s) => ({
-                                label: `${s.store_name} (${s.store_address || "ID: " + s.store_id})`,
-                                value: s.store_id,
-                              })),
-                            ]}
-                            value={pathaoStoreId}
-                            onChange={(val) => {
-                              setPathaoStoreId(val);
-                              const matched = pathaoStores.find((s) => s.store_id === val);
-                              if (matched) setPathaoStoreName(matched.store_name);
-                            }}
-                            helpText={
-                              pathaoStoreName
-                                ? `Selected: ${pathaoStoreName} (ID: ${pathaoStoreId})`
-                                : "Choose from verified stores"
-                            }
-                          />
-                        )}
-
-                        <TextField
-                          label="Store ID"
-                          value={pathaoStoreId}
-                          onChange={(val) => setPathaoStoreId(val)}
-                          placeholder="e.g. 10248"
-                          autoComplete="off"
-                          helpText={
-                            pathaoStoreName
-                              ? `Connected store: ${pathaoStoreName}`
-                              : "Manual fallback or click 'Verify & Fetch Stores' above."
-                          }
-                        />
-
-                        <Divider />
-
-                        <BlockStack gap="200">
-                          <InlineStack align="space-between" blockAlign="center">
-                            <Text as="h4" variant="headingSm">
-                              Real-Time Webhook (Two-Way Status Sync)
+              {/* RIGHT CONTENT PANEL (Width: ~70%-75%) */}
+              <div style={{ flex: 1, width: "100%", minWidth: 0 }}>
+                <Card padding="600">
+                  {/* ==================== 1. PATHAO SUB-VIEW ==================== */}
+                  {activeCourierId === "pathao" && (
+                    <>
+                      {/* Tab 1: API Configuration */}
+                      {activeSetupTab === "api" && (
+                        <BlockStack gap="400">
+                          <BlockStack gap="100">
+                            <Text as="h3" variant="headingMd" fontWeight="bold">Pathao API Credentials</Text>
+                            <Text as="p" variant="bodySm" tone="subdued">
+                              Enter your Pathao Merchant API credentials to enable automated consignment creation.
                             </Text>
-                            <Badge tone="info">Live Webhook</Badge>
-                          </InlineStack>
-                          <Text as="p" variant="bodyXs" tone="subdued">
-                            Paste in Pathao Developer API &rarr; Webhook Integration:
-                          </Text>
-                          <TextField
-                            label="Callback URL"
-                            value={pathaoWebhookUrl}
-                            readOnly
-                            autoComplete="off"
-                            connectedRight={
+                          </BlockStack>
+                          <Divider />
+                          <BlockStack gap="300">
+                            <Select
+                              label="API Environment"
+                              options={[
+                                { label: "Production (Hermes Live)", value: "production" },
+                                { label: "Sandbox / Test API", value: "sandbox" },
+                              ]}
+                              value={pathaoEnvironment}
+                              onChange={(val) => setPathaoEnvironment(val)}
+                            />
+                            <TextField
+                              label="Client ID"
+                              value={pathaoClientId}
+                              onChange={(val) => setPathaoClientId(val)}
+                              placeholder="e.g. pt_client_live_..."
+                              autoComplete="off"
+                            />
+                            <TextField
+                              label="Client Secret"
+                              type={showPathaoSecret ? "text" : "password"}
+                              value={pathaoSecret}
+                              onChange={(val) => setPathaoSecret(val)}
+                              placeholder="••••••••••••••••"
+                              autoComplete="off"
+                              connectedRight={
+                                <Button
+                                  variant="plain"
+                                  onClick={() => setShowPathaoSecret((prev) => !prev)}
+                                >
+                                  {showPathaoSecret ? "Hide" : "Show"}
+                                </Button>
+                              }
+                              helpText="Stored encrypted with AES-256-GCM."
+                            />
+                            <TextField
+                              label="Merchant Username (Email)"
+                              value={pathaoUsername}
+                              onChange={(val) => setPathaoUsername(val)}
+                              placeholder="merchant@example.com"
+                              autoComplete="off"
+                              helpText="Merchant Portal login email (used for OAuth token authorization)."
+                            />
+                            <TextField
+                              label="Merchant Password"
+                              type={showPathaoPassword ? "text" : "password"}
+                              value={pathaoPassword}
+                              onChange={(val) => setPathaoPassword(val)}
+                              placeholder="••••••••••••••••"
+                              autoComplete="off"
+                              connectedRight={
+                                <Button
+                                  variant="plain"
+                                  onClick={() => setShowPathaoPassword((prev) => !prev)}
+                                >
+                                  {showPathaoPassword ? "Hide" : "Show"}
+                                </Button>
+                              }
+                              helpText="Stored encrypted with AES-256-GCM."
+                            />
+                            <InlineStack gap="300" blockAlign="center">
                               <Button
-                                onClick={() =>
-                                  copyToClipboard(pathaoWebhookUrl, "pathao_url")
-                                }
+                                size="medium"
+                                loading={isFetchingPathaoStores}
+                                onClick={handleFetchPathaoStores}
                               >
-                                {copiedKey === "pathao_url" ? "Copied!" : "Copy URL"}
+                                Verify Credentials & Fetch Stores
                               </Button>
-                            }
-                          />
-                          <TextField
-                            label="Webhook Secret"
-                            value={webhookSecret}
-                            readOnly
-                            autoComplete="off"
-                            connectedRight={
-                              <Button
-                                onClick={() =>
-                                  copyToClipboard(webhookSecret, "pathao_secret")
-                                }
-                              >
-                                {copiedKey === "pathao_secret" ? "Copied!" : "Copy Secret"}
-                              </Button>
-                            }
-                            helpText="Required for automated verification handshake in Pathao developer portal."
-                          />
+                              <Text as="p" variant="bodyXs" tone="subdued">
+                                Authenticate and load pickup stores directly from Pathao API.
+                              </Text>
+                            </InlineStack>
+                          </BlockStack>
+                          <Divider />
                           <InlineStack align="end">
                             <Button
-                              size="micro"
-                              variant="plain"
-                              tone="critical"
-                              onClick={handleRegenerateWebhookSecret}
-                              loading={isRegeneratingWebhookSecret}
+                              variant="primary"
+                              loading={isSubmittingPathao}
+                              onClick={handleSavePathao}
                             >
-                              Rotate / Regenerate Webhook Token
+                              Save Settings
                             </Button>
                           </InlineStack>
                         </BlockStack>
-                      </BlockStack>
+                      )}
 
-                      <InlineStack align="space-between" blockAlign="center">
-                        <Button onClick={() => setShowPathaoForm(false)}>
-                          Collapse
-                        </Button>
-                        <Button
-                          variant="primary"
-                          loading={isSubmittingPathao}
-                          onClick={handleSavePathao}
-                        >
-                          Save Pathao Settings
-                        </Button>
-                      </InlineStack>
-                    </BlockStack>
-                  )}
-            {showSteadfastForm && (
-                    <BlockStack gap="400">
-                      <InlineStack align="space-between" blockAlign="center">
-                      <InlineStack gap="300" blockAlign="center">
-                        <CourierLogo courier="steadfast" size={32} />
-                        <BlockStack gap="050">
-                          <Text as="h2" variant="headingLg">Configure Steadfast Courier</Text>
-                          <Text as="p" variant="bodySm" tone="subdued">Set up your Steadfast API Key, Secret Key, and live webhook listener.</Text>
-                        </BlockStack>
-                      </InlineStack>
-                      <Button onClick={() => setShowSteadfastForm(false)}>
-                        ✕ Close Panel
-                      </Button>
-                    </InlineStack>
-                    <Divider />
-
-                      <BlockStack gap="300">
-                        <TextField
-                          label="API Key"
-                          value={steadfastApiKey}
-                          onChange={(val) => setSteadfastApiKey(val)}
-                          placeholder="e.g. stf_live_api_key_..."
-                          autoComplete="off"
-                        />
-
-                        <TextField
-                          label="Secret Key"
-                          type={showSteadfastSecret ? "text" : "password"}
-                          value={steadfastSecretKey}
-                          onChange={(val) => setSteadfastSecretKey(val)}
-                          placeholder="••••••••••••••••"
-                          autoComplete="off"
-                          connectedRight={
-                            <Button
-                              variant="plain"
-                              onClick={() => setShowSteadfastSecret((prev) => !prev)}
-                            >
-                              {showSteadfastSecret ? "Hide" : "Show"}
-                            </Button>
-                          }
-                          helpText="Found under Steadfast Merchant Dashboard -> API Integration. Stored encrypted."
-                        />
-                      </BlockStack>
-
-                      <Divider />
-
-                      <BlockStack gap="200">
-                        <InlineStack align="space-between" blockAlign="center">
-                          <Text as="h4" variant="headingSm">
-                            Real-Time Webhook (Two-Way Status Sync)
-                          </Text>
-                          <Badge tone="info">Live Webhook</Badge>
-                        </InlineStack>
-                        <Text as="p" variant="bodyXs" tone="subdued">
-                          Paste in Steadfast Merchant Portal &rarr; API &rarr; Webhook:
-                        </Text>
-                        <TextField
-                          label="Callback URL"
-                          value={steadfastWebhookUrl}
-                          readOnly
-                          autoComplete="off"
-                          connectedRight={
-                            <Button
-                              onClick={() =>
-                                copyToClipboard(steadfastWebhookUrl, "steadfast_url")
-                              }
-                            >
-                              {copiedKey === "steadfast_url" ? "Copied!" : "Copy URL"}
-                            </Button>
-                          }
-                        />
-                        <TextField
-                          label="Bearer Token / Secret"
-                          value={webhookSecret}
-                          readOnly
-                          autoComplete="off"
-                          connectedRight={
-                            <Button
-                              onClick={() =>
-                                copyToClipboard(webhookSecret, "steadfast_secret")
-                              }
-                            >
-                              {copiedKey === "steadfast_secret" ? "Copied!" : "Copy Token"}
-                            </Button>
-                          }
-                          helpText="Paste in Steadfast Webhook Bearer Token / Secret field."
-                        />
-                        <InlineStack align="end">
-                          <Button
-                            size="micro"
-                            variant="plain"
-                            tone="critical"
-                            onClick={handleRegenerateWebhookSecret}
-                            loading={isRegeneratingWebhookSecret}
-                          >
-                            Rotate / Regenerate Webhook Token
-                          </Button>
-                        </InlineStack>
-                      </BlockStack>
-
-                      <InlineStack align="space-between" blockAlign="center">
-                        <Button onClick={() => setShowSteadfastForm(false)}>
-                          Collapse
-                        </Button>
-                        <Button
-                          variant="primary"
-                          loading={isSubmittingSteadfast}
-                          onClick={handleSaveSteadfast}
-                        >
-                          Save Steadfast Settings
-                        </Button>
-                      </InlineStack>
-                    </BlockStack>
-                  )}
-            {showRedxForm && (
-                    <BlockStack gap="400">
-                      <InlineStack align="space-between" blockAlign="center">
-                      <InlineStack gap="300" blockAlign="center">
-                        <CourierLogo courier="redx" size={32} />
-                        <BlockStack gap="050">
-                          <Text as="h2" variant="headingLg">Configure REDX Delivery</Text>
-                          <Text as="p" variant="bodySm" tone="subdued">Set up your REDX Access Token, Pickup Store mapping, and webhook.</Text>
-                        </BlockStack>
-                      </InlineStack>
-                      <Button onClick={() => setShowRedxForm(false)}>
-                        ✕ Close Panel
-                      </Button>
-                    </InlineStack>
-                    <Divider />
-
-                      <BlockStack gap="300">
-                        <Select
-                          label="API Environment"
-                          options={[
-                            { label: "Production (OpenAPI Live)", value: "production" },
-                            { label: "Sandbox / Test API", value: "sandbox" },
-                          ]}
-                          value={redxEnvironment}
-                          onChange={(val) => setRedxEnvironment(val)}
-                        />
-
-                        <TextField
-                          label="API Access Token (JWT)"
-                          type={showRedxToken ? "text" : "password"}
-                          value={redxAccessToken}
-                          onChange={(val) => setRedxAccessToken(val)}
-                          placeholder="••••••••••••••••"
-                          autoComplete="off"
-                          connectedRight={
-                            <Button
-                              variant="plain"
-                              onClick={() => setShowRedxToken((prev) => !prev)}
-                            >
-                              {showRedxToken ? "Hide" : "Show"}
-                            </Button>
-                          }
-                          helpText="Your REDX Open API token (stored encrypted with AES-256-GCM)."
-                        />
-
-                        <InlineStack align="start">
-                          <Button
-                            size="medium"
-                            loading={isFetchingRedxStores}
-                            onClick={handleFetchRedxStores}
-                            disabled={!redxAccessToken}
-                          >
-                            Verify &amp; Fetch Stores
-                          </Button>
-                        </InlineStack>
-
-                        {redxStores.length > 0 && (
-                          <Select
-                            label="Pickup Store"
-                            options={[
-                              { label: "-- Select a Pickup Store --", value: "" },
-                              ...redxStores.map((s) => ({
-                                label: `${s.name} (${s.address || "ID: " + s.id})`,
-                                value: s.id,
-                              })),
-                            ]}
-                            value={redxPickupStoreId}
-                            onChange={(val) => {
-                              setRedxPickupStoreId(val);
-                              setRedxLocationId(val);
-                              const matched = redxStores.find((s) => s.id === val);
-                              if (matched) {
-                                setRedxPickupStoreName(matched.name);
-                                setRedxProfileId(matched.name);
-                              }
-                            }}
-                            helpText={
-                              redxPickupStoreName
-                                ? `Selected: ${redxPickupStoreName} (ID: ${redxPickupStoreId})`
-                                : "Choose from registered RedX stores"
-                            }
-                          />
-                        )}
-
-                        <TextField
-                          label="Pickup Store ID"
-                          value={redxPickupStoreId}
-                          onChange={(val) => {
-                            setRedxPickupStoreId(val);
-                            setRedxLocationId(val);
-                          }}
-                          placeholder="e.g. 12948"
-                          autoComplete="off"
-                          helpText={
-                            redxPickupStoreName
-                              ? `Connected store: ${redxPickupStoreName}`
-                              : "Manual ID fallback or click 'Verify & Fetch Stores' above."
-                          }
-                        />
-
-                        <Divider />
-
-                        <BlockStack gap="200">
-                          <InlineStack align="space-between" blockAlign="center">
-                            <Text as="h4" variant="headingSm">
-                              Real-Time Webhook (Two-Way Status Sync)
+                      {/* Tab 2: Webhook */}
+                      {activeSetupTab === "webhook" && (
+                        <BlockStack gap="400">
+                          <BlockStack gap="100">
+                            <InlineStack align="space-between" blockAlign="center">
+                              <Text as="h3" variant="headingMd" fontWeight="bold">Real-Time Webhook (Two-Way Status Sync)</Text>
+                              <Badge tone="info">Live Webhook</Badge>
+                            </InlineStack>
+                            <Text as="p" variant="bodySm" tone="subdued">
+                              Copy and paste these parameters in Pathao Developer Portal &rarr; Webhook Setup to enable real-time delivery status updates.
                             </Text>
-                            <Badge tone="info">Live Webhook</Badge>
-                          </InlineStack>
-                          <Text as="p" variant="bodyXs" tone="subdued">
-                            Paste in RedX Partner Portal &rarr; Settings &rarr; Webhook:
-                          </Text>
-                          <TextField
-                            label="Callback URL"
-                            value={redxWebhookUrl}
-                            readOnly
-                            autoComplete="off"
-                            connectedRight={
+                          </BlockStack>
+                          <Divider />
+                          <BlockStack gap="300">
+                            <TextField
+                              label="Callback URL"
+                              value={pathaoWebhookUrl}
+                              readOnly
+                              autoComplete="off"
+                              connectedRight={
+                                <Button onClick={() => copyToClipboard(pathaoWebhookUrl, "pathao_url")}>
+                                  {copiedKey === "pathao_url" ? "Copied!" : "Copy URL"}
+                                </Button>
+                              }
+                              helpText="Enter as the Callback URL in Pathao Merchant Portal."
+                            />
+                            <TextField
+                              label="Secret Token"
+                              value={webhookSecret}
+                              readOnly
+                              autoComplete="off"
+                              connectedRight={
+                                <Button onClick={() => copyToClipboard(webhookSecret, "pathao_secret")}>
+                                  {copiedKey === "pathao_secret" ? "Copied!" : "Copy Token"}
+                                </Button>
+                              }
+                              helpText="Paste in Pathao Webhook Secret Token field to verify webhook signature."
+                            />
+                            <InlineStack align="end">
                               <Button
-                                onClick={() =>
-                                  copyToClipboard(redxWebhookUrl, "redx_url")
-                                }
-                              >
-                                {copiedKey === "redx_url" ? "Copied!" : "Copy URL"}
-                              </Button>
-                            }
-                          />
-                          <TextField
-                            label="Webhook Secret"
-                            value={webhookSecret}
-                            readOnly
-                            autoComplete="off"
-                            connectedRight={
-                              <Button
-                                onClick={() =>
-                                  copyToClipboard(webhookSecret, "redx_secret")
-                                }
-                              >
-                                {copiedKey === "redx_secret" ? "Copied!" : "Copy Secret"}
-                              </Button>
-                            }
-                            helpText="Paste in RedX Webhook Secret field."
-                          />
-                          <InlineStack align="end">
-                            <Button
-                              size="micro"
-                              variant="plain"
-                              tone="critical"
-                              onClick={handleRegenerateWebhookSecret}
-                              loading={isRegeneratingWebhookSecret}
-                            >
-                              Rotate / Regenerate Webhook Token
-                            </Button>
-                          </InlineStack>
-                        </BlockStack>
-                      </BlockStack>
-
-                      <InlineStack align="space-between" blockAlign="center">
-                        <Button onClick={() => setShowRedxForm(false)}>
-                          Collapse
-                        </Button>
-                        <Button
-                          variant="primary"
-                          loading={isSubmittingRedx}
-                          onClick={handleSaveRedX}
-                        >
-                          Save REDX Settings
-                        </Button>
-                      </InlineStack>
-                    </BlockStack>
-                  )}
-            {showCarrybeeForm && (
-                    <BlockStack gap="400">
-                      <InlineStack align="space-between" blockAlign="center">
-                      <InlineStack gap="300" blockAlign="center">
-                        <CourierLogo courier="carrybee" size={32} />
-                        <BlockStack gap="050">
-                          <Text as="h2" variant="headingLg">Configure CarryBee Logistics</Text>
-                          <Text as="p" variant="bodySm" tone="subdued">Set up your CarryBee Client credentials, sandbox mode, and webhooks.</Text>
-                        </BlockStack>
-                      </InlineStack>
-                      <Button onClick={() => setShowCarrybeeForm(false)}>
-                        ✕ Close Panel
-                      </Button>
-                    </InlineStack>
-                    <Divider />
-
-                      <BlockStack gap="300">
-                        <Select
-                          label="API Environment"
-                          options={[
-                            { label: "Production Live API", value: "production" },
-                            { label: "Sandbox / Test API", value: "sandbox" },
-                          ]}
-                          value={carrybeeSandbox ? "sandbox" : "production"}
-                          onChange={(val) => setCarrybeeSandbox(val === "sandbox")}
-                        />
-
-                        <TextField
-                          label="Client ID"
-                          value={carrybeeClientId}
-                          onChange={(val) => setCarrybeeClientId(val)}
-                          placeholder="Enter CarryBee Client ID..."
-                          autoComplete="off"
-                        />
-
-                        <TextField
-                          label="Client Secret"
-                          type={showCarrybeeSecret ? "text" : "password"}
-                          value={carrybeeClientSecret}
-                          onChange={(val) => setCarrybeeClientSecret(val)}
-                          placeholder="••••••••••••••••"
-                          autoComplete="off"
-                          connectedRight={
-                            <Button
-                              variant="plain"
-                              onClick={() => setShowCarrybeeSecret((prev) => !prev)}
-                            >
-                              {showCarrybeeSecret ? "Hide" : "Show"}
-                            </Button>
-                          }
-                          helpText="Your CarryBee Client Secret (stored encrypted with AES-256-GCM)."
-                        />
-
-                        <TextField
-                          label="Client Context"
-                          type={showCarrybeeContext ? "text" : "password"}
-                          value={carrybeeClientContext}
-                          onChange={(val) => setCarrybeeClientContext(val)}
-                          placeholder="••••••••••••••••"
-                          autoComplete="off"
-                          connectedRight={
-                            <Button
-                              variant="plain"
-                              onClick={() => setShowCarrybeeContext((prev) => !prev)}
-                            >
-                              {showCarrybeeContext ? "Hide" : "Show"}
-                            </Button>
-                          }
-                          helpText="Your CarryBee Client Context (stored encrypted with AES-256-GCM)."
-                        />
-
-                        <TextField
-                          label="Default Pickup Store ID"
-                          value={carrybeeStoreId}
-                          onChange={(val) => setCarrybeeStoreId(val)}
-                          placeholder="e.g. STORE-001"
-                          autoComplete="off"
-                          helpText="Your registered pickup store ID in CarryBee portal."
-                        />
-
-                        <Divider />
-
-                        <BlockStack gap="200">
-                          <InlineStack align="space-between" blockAlign="center">
-                            <Text as="h4" variant="headingSm">
-                              Real-Time Webhook (Two-Way Status Sync)
-                            </Text>
-                            <Badge tone="info">Live Webhook</Badge>
-                          </InlineStack>
-                          <Text as="p" variant="bodyXs" tone="subdued">
-                            Paste in CarryBee Merchant Portal &rarr; Webhook Settings:
-                          </Text>
-                          <TextField
-                            label="Callback URL"
-                            value={carrybeeWebhookUrl}
-                            readOnly
-                            autoComplete="off"
-                            connectedRight={
-                              <Button
-                                onClick={() =>
-                                  copyToClipboard(carrybeeWebhookUrl, "carrybee_url")
-                                }
-                              >
-                                {copiedKey === "carrybee_url" ? "Copied!" : "Copy URL"}
-                              </Button>
-                            }
-                          />
-                          <TextField
-                            label="Webhook Secret (Optional Custom)"
-                            type={showCarrybeeWebhookSecret ? "text" : "password"}
-                            value={carrybeeWebhookSecret}
-                            onChange={(val) => setCarrybeeWebhookSecret(val)}
-                            placeholder="Optional custom secret"
-                            autoComplete="off"
-                            connectedRight={
-                              <Button
+                                size="micro"
                                 variant="plain"
-                                onClick={() =>
-                                  setShowCarrybeeWebhookSecret((prev) => !prev)
-                                }
+                                tone="critical"
+                                onClick={handleRegenerateWebhookSecret}
+                                loading={isRegeneratingWebhookSecret}
                               >
-                                {showCarrybeeWebhookSecret ? "Hide" : "Show"}
+                                Rotate / Regenerate Webhook Token
                               </Button>
-                            }
-                            helpText="Leave empty to use the store default webhook secret below."
-                          />
-                          <InlineStack align="end">
-                            <Button
-                              size="micro"
-                              variant="plain"
-                              tone="critical"
-                              onClick={handleRegenerateWebhookSecret}
-                              loading={isRegeneratingWebhookSecret}
-                            >
-                              Rotate / Regenerate Webhook Token
-                            </Button>
-                          </InlineStack>
+                            </InlineStack>
+                          </BlockStack>
                         </BlockStack>
-                      </BlockStack>
+                      )}
 
-                      <InlineStack align="space-between" blockAlign="center">
-                        <Button onClick={() => setShowCarrybeeForm(false)}>
-                          Collapse
-                        </Button>
-                        <Button
-                          variant="primary"
-                          loading={isSubmittingCarrybee}
-                          onClick={handleSaveCarrybee}
-                        >
-                          Save CarryBee Settings
-                        </Button>
-                      </InlineStack>
-                    </BlockStack>
-                  )}
-            {showBahokForm && (
-                    <BlockStack gap="400">
-                      <InlineStack align="space-between" blockAlign="center">
-                      <InlineStack gap="300" blockAlign="center">
-                        <CourierLogo courier="bahok" size={32} />
-                        <BlockStack gap="050">
-                          <Text as="h2" variant="headingLg">Configure Bahok Courier</Text>
-                          <Text as="p" variant="bodySm" tone="subdued">Set up your Bahok Merchant ID, API Key, Token, and webhooks.</Text>
-                        </BlockStack>
-                      </InlineStack>
-                      <Button onClick={() => setShowBahokForm(false)}>
-                        ✕ Close Panel
-                      </Button>
-                    </InlineStack>
-                    <Divider />
-
-                      <BlockStack gap="300">
-                        <TextField
-                          label="Merchant ID"
-                          value={bahokMerchantId}
-                          onChange={(val) => setBahokMerchantId(val)}
-                          placeholder="Enter Bahok Merchant / Login ID..."
-                          autoComplete="off"
-                        />
-
-                        <TextField
-                          label="API Key"
-                          value={bahokApiKey}
-                          onChange={(val) => setBahokApiKey(val)}
-                          placeholder="Enter Bahok API Key..."
-                          autoComplete="off"
-                        />
-
-                        <TextField
-                          label="API Secret / Bearer Token"
-                          type={showBahokToken ? "text" : "password"}
-                          value={bahokApiToken}
-                          onChange={(val) => setBahokApiToken(val)}
-                          placeholder="••••••••••••••••"
-                          autoComplete="off"
-                          connectedRight={
-                            <Button
-                              variant="plain"
-                              onClick={() => setShowBahokToken((prev) => !prev)}
-                            >
-                              {showBahokToken ? "Hide" : "Show"}
-                            </Button>
-                          }
-                          helpText="Your Bahok API Secret / Token (stored encrypted with AES-256-GCM)."
-                        />
-
-                        <Divider />
-
-                        <BlockStack gap="200">
-                          <InlineStack align="space-between" blockAlign="center">
-                            <Text as="h4" variant="headingSm">
-                              Real-Time Webhook (Two-Way Status Sync)
+                      {/* Tab 3: Default Settings */}
+                      {activeSetupTab === "settings" && (
+                        <BlockStack gap="400">
+                          <BlockStack gap="100">
+                            <Text as="h3" variant="headingMd" fontWeight="bold">Default Settings & Pickup Store</Text>
+                            <Text as="p" variant="bodySm" tone="subdued">
+                              Select your default Pathao dispatch warehouse and localized parcel booking defaults.
                             </Text>
-                            <Badge tone="info">Live Webhook</Badge>
-                          </InlineStack>
-                          <Text as="p" variant="bodyXs" tone="subdued">
-                            Paste in Bahok Merchant Portal &rarr; Webhook Settings:
-                          </Text>
-                          <TextField
-                            label="Callback URL"
-                            value={bahokWebhookUrl}
-                            readOnly
-                            autoComplete="off"
-                            connectedRight={
-                              <Button
-                                onClick={() =>
-                                  copyToClipboard(bahokWebhookUrl, "bahok_url")
-                                }
-                              >
-                                {copiedKey === "bahok_url" ? "Copied!" : "Copy URL"}
-                              </Button>
-                            }
-                          />
-                          <TextField
-                            label="Webhook Secret (Optional Custom)"
-                            type={showBahokWebhookSecret ? "text" : "password"}
-                            value={bahokWebhookSecret}
-                            onChange={(val) => setBahokWebhookSecret(val)}
-                            placeholder="Optional custom secret"
-                            autoComplete="off"
-                            connectedRight={
-                              <Button
-                                variant="plain"
-                                onClick={() =>
-                                  setShowBahokWebhookSecret((prev) => !prev)
-                                }
-                              >
-                                {showBahokWebhookSecret ? "Hide" : "Show"}
-                              </Button>
-                            }
-                            helpText="Leave empty to use the store default webhook secret below."
-                          />
+                          </BlockStack>
+                          <Divider />
+                          <BlockStack gap="300">
+                            {pathaoStores.length > 0 ? (
+                              <Select
+                                label="Default Pickup Store"
+                                options={[
+                                  { label: "-- Select Active Pathao Store --", value: "" },
+                                  ...pathaoStores.map((st) => ({
+                                    label: `${st.store_name} (ID: ${st.store_id})`,
+                                    value: String(st.store_id),
+                                  })),
+                                ]}
+                                value={pathaoStoreId}
+                                onChange={(val) => {
+                                  setPathaoStoreId(val);
+                                  const found = pathaoStores.find((s) => String(s.store_id) === String(val));
+                                  if (found) setPathaoStoreName(found.store_name);
+                                }}
+                                helpText="Selected pickup warehouse used for all one-click parcel dispatches."
+                              />
+                            ) : (
+                              <TextField
+                                label="Pathao Store ID"
+                                value={pathaoStoreId}
+                                onChange={(val) => setPathaoStoreId(val)}
+                                placeholder="e.g. 12345"
+                                autoComplete="off"
+                                helpText="Numeric store ID from Pathao. Click 'Verify Credentials & Fetch Stores' in Tab 1 to auto-detect."
+                              />
+                            )}
+                            <TextField
+                              label="Store Name"
+                              value={pathaoStoreName}
+                              onChange={(val) => setPathaoStoreName(val)}
+                              placeholder="e.g. Main Warehouse"
+                              autoComplete="off"
+                            />
+                          </BlockStack>
+                          <Divider />
                           <InlineStack align="end">
                             <Button
-                              size="micro"
-                              variant="plain"
-                              tone="critical"
-                              onClick={handleRegenerateWebhookSecret}
-                              loading={isRegeneratingWebhookSecret}
+                              variant="primary"
+                              loading={isSubmittingPathao}
+                              onClick={handleSavePathao}
                             >
-                              Rotate / Regenerate Webhook Token
+                              Save Settings
                             </Button>
                           </InlineStack>
                         </BlockStack>
-                      </BlockStack>
-
-                      <InlineStack align="space-between" blockAlign="center">
-                        <Button onClick={() => setShowBahokForm(false)}>
-                          Collapse
-                        </Button>
-                        <Button
-                          variant="primary"
-                          loading={isSubmittingBahok}
-                          onClick={handleSaveBahok}
-                        >
-                          Save Bahok Settings
-                        </Button>
-                      </InlineStack>
-                    </BlockStack>
+                      )}
+                    </>
                   )}
-          </div>
-        )}
 
-        {/* ==================================================================== */}
-        {/* SECTION 2: AUTOMATION RULES & AI WRAPPER                             */}
-        {/* ==================================================================== */}
-        <BlockStack gap="400">
+                  {/* ==================== 2. STEADFAST SUB-VIEW ==================== */}
+                  {activeCourierId === "steadfast" && (
+                    <>
+                      {/* Tab 1: API Configuration */}
+                      {activeSetupTab === "api" && (
+                        <BlockStack gap="400">
+                          <BlockStack gap="100">
+                            <Text as="h3" variant="headingMd" fontWeight="bold">Steadfast API Credentials</Text>
+                            <Text as="p" variant="bodySm" tone="subdued">
+                              Enter your Steadfast Merchant API credentials for automated consignment creation.
+                            </Text>
+                          </BlockStack>
+                          <Divider />
+                          <BlockStack gap="300">
+                            <TextField
+                              label="API Key"
+                              value={steadfastApiKey}
+                              onChange={(val) => setSteadfastApiKey(val)}
+                              placeholder="e.g. stf_live_api_key_..."
+                              autoComplete="off"
+                            />
+                            <TextField
+                              label="Secret Key"
+                              type={showSteadfastSecret ? "text" : "password"}
+                              value={steadfastSecretKey}
+                              onChange={(val) => setSteadfastSecretKey(val)}
+                              placeholder="••••••••••••••••"
+                              autoComplete="off"
+                              connectedRight={
+                                <Button
+                                  variant="plain"
+                                  onClick={() => setShowSteadfastSecret((prev) => !prev)}
+                                >
+                                  {showSteadfastSecret ? "Hide" : "Show"}
+                                </Button>
+                              }
+                              helpText="Found under Steadfast Merchant Dashboard -> API Integration. Stored encrypted with AES-256-GCM."
+                            />
+                          </BlockStack>
+                          <Divider />
+                          <InlineStack align="end">
+                            <Button
+                              variant="primary"
+                              loading={isSubmittingSteadfast}
+                              onClick={handleSaveSteadfast}
+                            >
+                              Save Settings
+                            </Button>
+                          </InlineStack>
+                        </BlockStack>
+                      )}
+
+                      {/* Tab 2: Webhook */}
+                      {activeSetupTab === "webhook" && (
+                        <BlockStack gap="400">
+                          <BlockStack gap="100">
+                            <InlineStack align="space-between" blockAlign="center">
+                              <Text as="h3" variant="headingMd" fontWeight="bold">Real-Time Webhook (Two-Way Status Sync)</Text>
+                              <Badge tone="info">Live Webhook</Badge>
+                            </InlineStack>
+                            <Text as="p" variant="bodySm" tone="subdued">
+                              Paste in Steadfast Merchant Portal &rarr; API &rarr; Webhook to receive instant parcel tracking callbacks.
+                            </Text>
+                          </BlockStack>
+                          <Divider />
+                          <BlockStack gap="300">
+                            <TextField
+                              label="Callback URL"
+                              value={steadfastWebhookUrl}
+                              readOnly
+                              autoComplete="off"
+                              connectedRight={
+                                <Button onClick={() => copyToClipboard(steadfastWebhookUrl, "steadfast_url")}>
+                                  {copiedKey === "steadfast_url" ? "Copied!" : "Copy URL"}
+                                </Button>
+                              }
+                            />
+                            <TextField
+                              label="Bearer Token / Secret"
+                              value={webhookSecret}
+                              readOnly
+                              autoComplete="off"
+                              connectedRight={
+                                <Button onClick={() => copyToClipboard(webhookSecret, "steadfast_secret")}>
+                                  {copiedKey === "steadfast_secret" ? "Copied!" : "Copy Token"}
+                                </Button>
+                              }
+                              helpText="Paste in Steadfast Webhook Bearer Token / Secret field."
+                            />
+                            <InlineStack align="end">
+                              <Button
+                                size="micro"
+                                variant="plain"
+                                tone="critical"
+                                onClick={handleRegenerateWebhookSecret}
+                                loading={isRegeneratingWebhookSecret}
+                              >
+                                Rotate / Regenerate Webhook Token
+                              </Button>
+                            </InlineStack>
+                          </BlockStack>
+                        </BlockStack>
+                      )}
+
+                      {/* Tab 3: Default Settings */}
+                      {activeSetupTab === "settings" && (
+                        <BlockStack gap="400">
+                          <BlockStack gap="100">
+                            <Text as="h3" variant="headingMd" fontWeight="bold">Default Delivery & COD Settings</Text>
+                            <Text as="p" variant="bodySm" tone="subdued">
+                              Configure Steadfast Cash-on-Delivery fulfillment across all 64 Bangladeshi districts.
+                            </Text>
+                          </BlockStack>
+                          <Divider />
+                          <BlockStack gap="300">
+                            <Text as="p" variant="bodySm">
+                              Steadfast Courier provides nationwide doorstep delivery with fast cash-on-delivery (COD) reconciliation. Orders dispatched through Steadfast will automatically use your store's default merchant payout profile.
+                            </Text>
+                            <div style={{ backgroundColor: "#F8FAFC", padding: "16px", borderRadius: "8px", border: "1px solid #E2E8F0" }}>
+                              <BlockStack gap="100">
+                                <Text as="p" variant="bodySm" fontWeight="semibold">Coverage Notice:</Text>
+                                <Text as="p" variant="bodyXs" tone="subdued">
+                                  Covers all 64 districts including rural sub-districts (Thana/Upazila). Standard COD payment cycle: 24-48 hours after delivery completion.
+                                </Text>
+                              </BlockStack>
+                            </div>
+                          </BlockStack>
+                          <Divider />
+                          <InlineStack align="end">
+                            <Button
+                              variant="primary"
+                              loading={isSubmittingSteadfast}
+                              onClick={handleSaveSteadfast}
+                            >
+                              Save Settings
+                            </Button>
+                          </InlineStack>
+                        </BlockStack>
+                      )}
+                    </>
+                  )}
+
+                  {/* ==================== 3. REDX SUB-VIEW ==================== */}
+                  {activeCourierId === "redx" && (
+                    <>
+                      {/* Tab 1: API Configuration */}
+                      {activeSetupTab === "api" && (
+                        <BlockStack gap="400">
+                          <BlockStack gap="100">
+                            <Text as="h3" variant="headingMd" fontWeight="bold">REDX API Credentials</Text>
+                            <Text as="p" variant="bodySm" tone="subdued">
+                              Enter your REDX OpenAPI credentials for automated delivery booking.
+                            </Text>
+                          </BlockStack>
+                          <Divider />
+                          <BlockStack gap="300">
+                            <Select
+                              label="API Environment"
+                              options={[
+                                { label: "Production (OpenAPI Live)", value: "production" },
+                                { label: "Sandbox / Test API", value: "sandbox" },
+                              ]}
+                              value={redxEnvironment}
+                              onChange={(val) => setRedxEnvironment(val)}
+                            />
+                            <TextField
+                              label="API Access Token"
+                              type={showRedxToken ? "text" : "password"}
+                              value={redxAccessToken}
+                              onChange={(val) => setRedxAccessToken(val)}
+                              placeholder="••••••••••••••••"
+                              autoComplete="off"
+                              connectedRight={
+                                <Button
+                                  variant="plain"
+                                  onClick={() => setShowRedxToken((prev) => !prev)}
+                                >
+                                  {showRedxToken ? "Hide" : "Show"}
+                                </Button>
+                              }
+                              helpText="REDX OpenAPI Bearer token. Stored encrypted with AES-256-GCM."
+                            />
+                            <InlineStack gap="300" blockAlign="center">
+                              <Button
+                                size="medium"
+                                loading={isFetchingRedxStores}
+                                onClick={handleFetchRedxStores}
+                              >
+                                Verify Credentials & Fetch Pickup Stores
+                              </Button>
+                              <Text as="p" variant="bodyXs" tone="subdued">
+                                Retrieve your active pickup stores directly from REDX API.
+                              </Text>
+                            </InlineStack>
+                          </BlockStack>
+                          <Divider />
+                          <InlineStack align="end">
+                            <Button
+                              variant="primary"
+                              loading={isSubmittingRedx}
+                              onClick={handleSaveRedX}
+                            >
+                              Save Settings
+                            </Button>
+                          </InlineStack>
+                        </BlockStack>
+                      )}
+
+                      {/* Tab 2: Webhook */}
+                      {activeSetupTab === "webhook" && (
+                        <BlockStack gap="400">
+                          <BlockStack gap="100">
+                            <InlineStack align="space-between" blockAlign="center">
+                              <Text as="h3" variant="headingMd" fontWeight="bold">Real-Time Webhook (Two-Way Status Sync)</Text>
+                              <Badge tone="info">Live Webhook</Badge>
+                            </InlineStack>
+                            <Text as="p" variant="bodySm" tone="subdued">
+                              Paste in REDX Developer Portal &rarr; Webhook Setup to receive real-time parcel delivery status webhooks.
+                            </Text>
+                          </BlockStack>
+                          <Divider />
+                          <BlockStack gap="300">
+                            <TextField
+                              label="Callback URL"
+                              value={redxWebhookUrl}
+                              readOnly
+                              autoComplete="off"
+                              connectedRight={
+                                <Button onClick={() => copyToClipboard(redxWebhookUrl, "redx_url")}>
+                                  {copiedKey === "redx_url" ? "Copied!" : "Copy URL"}
+                                </Button>
+                              }
+                            />
+                            <TextField
+                              label="Secret Token"
+                              value={webhookSecret}
+                              readOnly
+                              autoComplete="off"
+                              connectedRight={
+                                <Button onClick={() => copyToClipboard(webhookSecret, "redx_secret")}>
+                                  {copiedKey === "redx_secret" ? "Copied!" : "Copy Token"}
+                                </Button>
+                              }
+                              helpText="Paste in REDX Webhook Secret Token field."
+                            />
+                            <InlineStack align="end">
+                              <Button
+                                size="micro"
+                                variant="plain"
+                                tone="critical"
+                                onClick={handleRegenerateWebhookSecret}
+                                loading={isRegeneratingWebhookSecret}
+                              >
+                                Rotate / Regenerate Webhook Token
+                              </Button>
+                            </InlineStack>
+                          </BlockStack>
+                        </BlockStack>
+                      )}
+
+                      {/* Tab 3: Default Settings */}
+                      {activeSetupTab === "settings" && (
+                        <BlockStack gap="400">
+                          <BlockStack gap="100">
+                            <Text as="h3" variant="headingMd" fontWeight="bold">Default Pickup Store & Location IDs</Text>
+                            <Text as="p" variant="bodySm" tone="subdued">
+                              Map your REDX pickup location and profile identifier.
+                            </Text>
+                          </BlockStack>
+                          <Divider />
+                          <BlockStack gap="300">
+                            {redxStores.length > 0 ? (
+                              <Select
+                                label="Select Pickup Store"
+                                options={[
+                                  { label: "-- Select REDX Pickup Store --", value: "" },
+                                  ...redxStores.map((st) => ({
+                                    label: `${st.name} (ID: ${st.id})`,
+                                    value: String(st.id),
+                                  })),
+                                ]}
+                                value={redxPickupStoreId}
+                                onChange={(val) => {
+                                  setRedxPickupStoreId(val);
+                                  const found = redxStores.find((s) => String(s.id) === String(val));
+                                  if (found) {
+                                    setRedxPickupStoreName(found.name);
+                                    setRedxLocationId(String(val));
+                                    setRedxProfileId(found.name || String(val));
+                                  }
+                                }}
+                                helpText="Selected warehouse is used as origin for REDX pickup dispatches."
+                              />
+                            ) : (
+                              <TextField
+                                label="Pickup Store ID / Location ID"
+                                value={redxPickupStoreId}
+                                onChange={(val) => {
+                                  setRedxPickupStoreId(val);
+                                  setRedxLocationId(val);
+                                }}
+                                placeholder="e.g. 101"
+                                autoComplete="off"
+                                helpText="Your numeric REDX pickup store ID. Click 'Verify Credentials & Fetch Pickup Stores' in Tab 1 to auto-load."
+                              />
+                            )}
+                            <TextField
+                              label="Pickup Store Name / Label"
+                              value={redxPickupStoreName}
+                              onChange={(val) => {
+                                setRedxPickupStoreName(val);
+                                if (!redxProfileId) setRedxProfileId(val);
+                              }}
+                              placeholder="e.g. Dhanmondi Warehouse"
+                              autoComplete="off"
+                            />
+                            <TextField
+                              label="Profile ID"
+                              value={redxProfileId}
+                              onChange={(val) => setRedxProfileId(val)}
+                              placeholder="e.g. MyStore_Profile"
+                              autoComplete="off"
+                              helpText="Merchant Profile identifier used for REDX order tracking."
+                            />
+                          </BlockStack>
+                          <Divider />
+                          <InlineStack align="end">
+                            <Button
+                              variant="primary"
+                              loading={isSubmittingRedx}
+                              onClick={handleSaveRedX}
+                            >
+                              Save Settings
+                            </Button>
+                          </InlineStack>
+                        </BlockStack>
+                      )}
+                    </>
+                  )}
+
+                  {/* ==================== 4. CARRYBEE SUB-VIEW ==================== */}
+                  {activeCourierId === "carrybee" && (
+                    <>
+                      {/* Tab 1: API Configuration */}
+                      {activeSetupTab === "api" && (
+                        <BlockStack gap="400">
+                          <BlockStack gap="100">
+                            <Text as="h3" variant="headingMd" fontWeight="bold">CarryBee API Credentials</Text>
+                            <Text as="p" variant="bodySm" tone="subdued">
+                              Enter your CarryBee Client ID, Secret, and Client Context.
+                            </Text>
+                          </BlockStack>
+                          <Divider />
+                          <BlockStack gap="300">
+                            <TextField
+                              label="Client ID"
+                              value={carrybeeClientId}
+                              onChange={(val) => setCarrybeeClientId(val)}
+                              placeholder="e.g. cb_client_..."
+                              autoComplete="off"
+                            />
+                            <TextField
+                              label="Client Secret"
+                              type={showCarrybeeSecret ? "text" : "password"}
+                              value={carrybeeClientSecret}
+                              onChange={(val) => setCarrybeeClientSecret(val)}
+                              placeholder="••••••••••••••••"
+                              autoComplete="off"
+                              connectedRight={
+                                <Button
+                                  variant="plain"
+                                  onClick={() => setShowCarrybeeSecret((prev) => !prev)}
+                                >
+                                  {showCarrybeeSecret ? "Hide" : "Show"}
+                                </Button>
+                              }
+                              helpText="Stored encrypted with AES-256-GCM."
+                            />
+                            <TextField
+                              label="Client Context"
+                              type={showCarrybeeContext ? "text" : "password"}
+                              value={carrybeeClientContext}
+                              onChange={(val) => setCarrybeeClientContext(val)}
+                              placeholder="••••••••••••••••"
+                              autoComplete="off"
+                              connectedRight={
+                                <Button
+                                  variant="plain"
+                                  onClick={() => setShowCarrybeeContext((prev) => !prev)}
+                                >
+                                  {showCarrybeeContext ? "Hide" : "Show"}
+                                </Button>
+                              }
+                              helpText="Your unique CarryBee Client Context token. Stored encrypted."
+                            />
+                          </BlockStack>
+                          <Divider />
+                          <InlineStack align="end">
+                            <Button
+                              variant="primary"
+                              loading={isSubmittingCarrybee}
+                              onClick={handleSaveCarrybee}
+                            >
+                              Save Settings
+                            </Button>
+                          </InlineStack>
+                        </BlockStack>
+                      )}
+
+                      {/* Tab 2: Webhook */}
+                      {activeSetupTab === "webhook" && (
+                        <BlockStack gap="400">
+                          <BlockStack gap="100">
+                            <InlineStack align="space-between" blockAlign="center">
+                              <Text as="h3" variant="headingMd" fontWeight="bold">Real-Time Webhook (Two-Way Status Sync)</Text>
+                              <Badge tone="info">Live Webhook</Badge>
+                            </InlineStack>
+                            <Text as="p" variant="bodySm" tone="subdued">
+                              Configure this Webhook Callback URL in your CarryBee Developer Settings.
+                            </Text>
+                          </BlockStack>
+                          <Divider />
+                          <BlockStack gap="300">
+                            <TextField
+                              label="Callback URL"
+                              value={carrybeeWebhookUrl}
+                              readOnly
+                              autoComplete="off"
+                              connectedRight={
+                                <Button onClick={() => copyToClipboard(carrybeeWebhookUrl, "carrybee_url")}>
+                                  {copiedKey === "carrybee_url" ? "Copied!" : "Copy URL"}
+                                </Button>
+                              }
+                            />
+                            <TextField
+                              label="Bearer Token / Secret"
+                              value={carrybeeWebhookSecret || webhookSecret}
+                              readOnly
+                              autoComplete="off"
+                              connectedRight={
+                                <Button onClick={() => copyToClipboard(carrybeeWebhookSecret || webhookSecret, "carrybee_secret")}>
+                                  {copiedKey === "carrybee_secret" ? "Copied!" : "Copy Token"}
+                                </Button>
+                              }
+                              helpText="Paste in CarryBee Webhook Secret field."
+                            />
+                            <InlineStack align="end">
+                              <Button
+                                size="micro"
+                                variant="plain"
+                                tone="critical"
+                                onClick={handleRegenerateWebhookSecret}
+                                loading={isRegeneratingWebhookSecret}
+                              >
+                                Rotate / Regenerate Webhook Token
+                              </Button>
+                            </InlineStack>
+                          </BlockStack>
+                        </BlockStack>
+                      )}
+
+                      {/* Tab 3: Default Settings */}
+                      {activeSetupTab === "settings" && (
+                        <BlockStack gap="400">
+                          <BlockStack gap="100">
+                            <Text as="h3" variant="headingMd" fontWeight="bold">Default Fulfillment & Sandbox Settings</Text>
+                            <Text as="p" variant="bodySm" tone="subdued">
+                              Manage your CarryBee default store ID and environment sandbox mode.
+                            </Text>
+                          </BlockStack>
+                          <Divider />
+                          <BlockStack gap="300">
+                            <Checkbox
+                              label="Sandbox / Test API Mode"
+                              checked={carrybeeSandbox}
+                              onChange={(val) => setCarrybeeSandbox(val)}
+                              helpText="Enable to run simulated orders in the CarryBee Sandbox environment."
+                            />
+                            <TextField
+                              label="Store ID"
+                              value={carrybeeStoreId}
+                              onChange={(val) => setCarrybeeStoreId(val)}
+                              placeholder="e.g. cb_store_101"
+                              autoComplete="off"
+                              helpText="CarryBee merchant store identifier."
+                            />
+                            <TextField
+                              label="Custom Webhook Secret (Optional)"
+                              type={showCarrybeeWebhookSecret ? "text" : "password"}
+                              value={carrybeeWebhookSecret}
+                              onChange={(val) => setCarrybeeWebhookSecret(val)}
+                              placeholder="••••••••••••••••"
+                              autoComplete="off"
+                              connectedRight={
+                                <Button
+                                  variant="plain"
+                                  onClick={() => setShowCarrybeeWebhookSecret((prev) => !prev)}
+                                >
+                                  {showCarrybeeWebhookSecret ? "Hide" : "Show"}
+                                </Button>
+                              }
+                              helpText="Custom signature secret provided by CarryBee if different from global secret."
+                            />
+                          </BlockStack>
+                          <Divider />
+                          <InlineStack align="end">
+                            <Button
+                              variant="primary"
+                              loading={isSubmittingCarrybee}
+                              onClick={handleSaveCarrybee}
+                            >
+                              Save Settings
+                            </Button>
+                          </InlineStack>
+                        </BlockStack>
+                      )}
+                    </>
+                  )}
+
+                  {/* ==================== 5. BAHOK SUB-VIEW ==================== */}
+                  {activeCourierId === "bahok" && (
+                    <>
+                      {/* Tab 1: API Configuration */}
+                      {activeSetupTab === "api" && (
+                        <BlockStack gap="400">
+                          <BlockStack gap="100">
+                            <Text as="h3" variant="headingMd" fontWeight="bold">Bahok API Credentials</Text>
+                            <Text as="p" variant="bodySm" tone="subdued">
+                              Enter your Bahok Merchant ID, API Key, and Token for automated dispatch.
+                            </Text>
+                          </BlockStack>
+                          <Divider />
+                          <BlockStack gap="300">
+                            <TextField
+                              label="Merchant ID"
+                              value={bahokMerchantId}
+                              onChange={(val) => setBahokMerchantId(val)}
+                              placeholder="e.g. BHK-12345"
+                              autoComplete="off"
+                              helpText="Your Bahok Merchant Account ID."
+                            />
+                            <TextField
+                              label="API Key"
+                              value={bahokApiKey}
+                              onChange={(val) => setBahokApiKey(val)}
+                              placeholder="e.g. bhk_live_key_..."
+                              autoComplete="off"
+                            />
+                            <TextField
+                              label="API Secret / Token"
+                              type={showBahokToken ? "text" : "password"}
+                              value={bahokApiToken}
+                              onChange={(val) => setBahokApiToken(val)}
+                              placeholder="••••••••••••••••"
+                              autoComplete="off"
+                              connectedRight={
+                                <Button
+                                  variant="plain"
+                                  onClick={() => setShowBahokToken((prev) => !prev)}
+                                >
+                                  {showBahokToken ? "Hide" : "Show"}
+                                </Button>
+                              }
+                              helpText="Bahok Authorization Token. Stored encrypted with AES-256-GCM."
+                            />
+                          </BlockStack>
+                          <Divider />
+                          <InlineStack align="end">
+                            <Button
+                              variant="primary"
+                              loading={isSubmittingBahok}
+                              onClick={handleSaveBahok}
+                            >
+                              Save Settings
+                            </Button>
+                          </InlineStack>
+                        </BlockStack>
+                      )}
+
+                      {/* Tab 2: Webhook */}
+                      {activeSetupTab === "webhook" && (
+                        <BlockStack gap="400">
+                          <BlockStack gap="100">
+                            <InlineStack align="space-between" blockAlign="center">
+                              <Text as="h3" variant="headingMd" fontWeight="bold">Real-Time Webhook (Two-Way Status Sync)</Text>
+                              <Badge tone="info">Live Webhook</Badge>
+                            </InlineStack>
+                            <Text as="p" variant="bodySm" tone="subdued">
+                              Enter this URL in Bahok Merchant Portal &rarr; Settings &rarr; Webhook to receive parcel tracking updates.
+                            </Text>
+                          </BlockStack>
+                          <Divider />
+                          <BlockStack gap="300">
+                            <TextField
+                              label="Callback URL"
+                              value={bahokWebhookUrl}
+                              readOnly
+                              autoComplete="off"
+                              connectedRight={
+                                <Button onClick={() => copyToClipboard(bahokWebhookUrl, "bahok_url")}>
+                                  {copiedKey === "bahok_url" ? "Copied!" : "Copy URL"}
+                                </Button>
+                              }
+                            />
+                            <TextField
+                              label="Bearer Token / Secret"
+                              value={bahokWebhookSecret || webhookSecret}
+                              readOnly
+                              autoComplete="off"
+                              connectedRight={
+                                <Button onClick={() => copyToClipboard(bahokWebhookSecret || webhookSecret, "bahok_secret")}>
+                                  {copiedKey === "bahok_secret" ? "Copied!" : "Copy Token"}
+                                </Button>
+                              }
+                              helpText="Bearer token for Bahok webhook authorization."
+                            />
+                            <InlineStack align="end">
+                              <Button
+                                size="micro"
+                                variant="plain"
+                                tone="critical"
+                                onClick={handleRegenerateWebhookSecret}
+                                loading={isRegeneratingWebhookSecret}
+                              >
+                                Rotate / Regenerate Webhook Token
+                              </Button>
+                            </InlineStack>
+                          </BlockStack>
+                        </BlockStack>
+                      )}
+
+                      {/* Tab 3: Default Settings */}
+                      {activeSetupTab === "settings" && (
+                        <BlockStack gap="400">
+                          <BlockStack gap="100">
+                            <Text as="h3" variant="headingMd" fontWeight="bold">Default Fulfillment & Webhook Secret</Text>
+                            <Text as="p" variant="bodySm" tone="subdued">
+                              Configure custom Bahok webhook secret and delivery preferences.
+                            </Text>
+                          </BlockStack>
+                          <Divider />
+                          <BlockStack gap="300">
+                            <TextField
+                              label="Custom Webhook Secret (Optional)"
+                              type={showBahokWebhookSecret ? "text" : "password"}
+                              value={bahokWebhookSecret}
+                              onChange={(val) => setBahokWebhookSecret(val)}
+                              placeholder="••••••••••••••••"
+                              autoComplete="off"
+                              connectedRight={
+                                <Button
+                                  variant="plain"
+                                  onClick={() => setShowBahokWebhookSecret((prev) => !prev)}
+                                >
+                                  {showBahokWebhookSecret ? "Hide" : "Show"}
+                                </Button>
+                              }
+                              helpText="Optional custom webhook secret if provided separately by Bahok."
+                            />
+                            <Text as="p" variant="bodySm" tone="subdued">
+                              Bahok provides reliable nationwide doorstep parcel delivery across all major divisions with automated consignment booking.
+                            </Text>
+                          </BlockStack>
+                          <Divider />
+                          <InlineStack align="end">
+                            <Button
+                              variant="primary"
+                              loading={isSubmittingBahok}
+                              onClick={handleSaveBahok}
+                            >
+                              Save Settings
+                            </Button>
+                          </InlineStack>
+                        </BlockStack>
+                      )}
+                    </>
+                  )}
+                </Card>
+              </div>
+            </div>
+          </BlockStack>
+        ) : (
+          /* ================================================================ */
+          /* MAIN 3-COLUMN DASHBOARD GRID VIEW                                */
+          /* ================================================================ */
+          <BlockStack gap="600">
+            <BlockStack gap="200">
+              <Text as="h1" variant="headingXl" fontWeight="bold">
+                Courier Gateways
+              </Text>
+              <Text as="p" variant="bodyMd" tone="subdued">
+                Manage your credentials for Bangladesh&apos;s leading logistics partners to enable one-click booking and automated dispatch.
+              </Text>
+            </BlockStack>
+
+            <div
+              className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 items-stretch"
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fill, minmax(310px, 1fr))",
+                gap: "24px",
+                alignItems: "stretch",
+              }}
+            >
+              {/* Card 1: Pathao Settings */}
+              <div
+                className="w-full bg-white rounded-2xl shadow-sm p-6 flex flex-col justify-between hover:shadow-md transition-shadow duration-200"
+                style={{
+                  backgroundColor: "#FFFFFF",
+                  borderRadius: "16px",
+                  boxShadow: "0 2px 8px -2px rgba(0, 0, 0, 0.05), 0 1px 4px -1px rgba(0, 0, 0, 0.03)",
+                  border: "none",
+                  padding: "24px",
+                  display: "flex",
+                  flexDirection: "column",
+                  justifyContent: "space-between",
+                  minHeight: "290px",
+                }}
+              >
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", width: "100%" }}>
+                  <div style={{ display: "flex", justifyContent: "center", alignItems: "center", marginBottom: "12px", minHeight: "56px" }}>
+                    <CourierLogo courier="pathao" size={52} />
+                  </div>
+                  <div style={{ marginBottom: "6px" }}>
+                    <Text as="h3" variant="headingMd" fontWeight="bold">
+                      Pathao Courier
+                    </Text>
+                  </div>
+                  <div style={{ marginBottom: "12px", display: "flex", justifyContent: "center" }}>
+                    <Badge tone={isPathaoConnected ? "success" : undefined}>
+                      {isPathaoConnected ? "● Active" : "Not Configured"}
+                    </Badge>
+                  </div>
+                  <div style={{ color: "#64748B", fontSize: "13px", lineHeight: "1.5", textAlign: "center", maxWidth: "280px" }}>
+                    Express parcel delivery and real-time consignment tracking via Pathao Merchant API.
+                  </div>
+                </div>
+                <div style={{ marginTop: "auto", paddingTop: "20px", display: "flex", justifyContent: "flex-start", width: "100%" }}>
+                  <Button
+                    variant={isPathaoConnected ? "secondary" : "primary"}
+                    onClick={() => {
+                      setActiveCourierId("pathao");
+                      setActiveSetupTab("api");
+                    }}
+                  >
+                    Configure
+                  </Button>
+                </div>
+              </div>
+
+              {/* Card 2: Steadfast Settings */}
+              <div
+                className="w-full bg-white rounded-2xl shadow-sm p-6 flex flex-col justify-between hover:shadow-md transition-shadow duration-200"
+                style={{
+                  backgroundColor: "#FFFFFF",
+                  borderRadius: "16px",
+                  boxShadow: "0 2px 8px -2px rgba(0, 0, 0, 0.05), 0 1px 4px -1px rgba(0, 0, 0, 0.03)",
+                  border: "none",
+                  padding: "24px",
+                  display: "flex",
+                  flexDirection: "column",
+                  justifyContent: "space-between",
+                  minHeight: "290px",
+                }}
+              >
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", width: "100%" }}>
+                  <div style={{ display: "flex", justifyContent: "center", alignItems: "center", marginBottom: "12px", minHeight: "56px" }}>
+                    <CourierLogo courier="steadfast" size={52} />
+                  </div>
+                  <div style={{ marginBottom: "6px" }}>
+                    <Text as="h3" variant="headingMd" fontWeight="bold">
+                      Steadfast Courier
+                    </Text>
+                  </div>
+                  <div style={{ marginBottom: "12px", display: "flex", justifyContent: "center" }}>
+                    <Badge tone={isSteadfastConnected ? "success" : undefined}>
+                      {isSteadfastConnected ? "● Active" : "Not Configured"}
+                    </Badge>
+                  </div>
+                  <div style={{ color: "#64748B", fontSize: "13px", lineHeight: "1.5", textAlign: "center", maxWidth: "280px" }}>
+                    Nationwide door-to-door cash on delivery coverage with automated next-day merchant payouts.
+                  </div>
+                </div>
+                <div style={{ marginTop: "auto", paddingTop: "20px", display: "flex", justifyContent: "flex-start", width: "100%" }}>
+                  <Button
+                    variant={isSteadfastConnected ? "secondary" : "primary"}
+                    onClick={() => {
+                      setActiveCourierId("steadfast");
+                      setActiveSetupTab("api");
+                    }}
+                  >
+                    Configure
+                  </Button>
+                </div>
+              </div>
+
+              {/* Card 3: REDX Settings */}
+              <div
+                className="w-full bg-white rounded-2xl shadow-sm p-6 flex flex-col justify-between hover:shadow-md transition-shadow duration-200"
+                style={{
+                  backgroundColor: "#FFFFFF",
+                  borderRadius: "16px",
+                  boxShadow: "0 2px 8px -2px rgba(0, 0, 0, 0.05), 0 1px 4px -1px rgba(0, 0, 0, 0.03)",
+                  border: "none",
+                  padding: "24px",
+                  display: "flex",
+                  flexDirection: "column",
+                  justifyContent: "space-between",
+                  minHeight: "290px",
+                }}
+              >
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", width: "100%" }}>
+                  <div style={{ display: "flex", justifyContent: "center", alignItems: "center", marginBottom: "12px", minHeight: "56px" }}>
+                    <CourierLogo courier="redx" size={52} />
+                  </div>
+                  <div style={{ marginBottom: "6px" }}>
+                    <Text as="h3" variant="headingMd" fontWeight="bold">
+                      REDX Delivery
+                    </Text>
+                  </div>
+                  <div style={{ marginBottom: "12px", display: "flex", justifyContent: "center" }}>
+                    <Badge tone={isRedxConnected ? "success" : undefined}>
+                      {isRedxConnected ? "● Active" : "Not Configured"}
+                    </Badge>
+                  </div>
+                  <div style={{ color: "#64748B", fontSize: "13px", lineHeight: "1.5", textAlign: "center", maxWidth: "280px" }}>
+                    Enterprise-grade logistics with extensive coverage across Dhaka and 64 districts with automated tracking.
+                  </div>
+                </div>
+                <div style={{ marginTop: "auto", paddingTop: "20px", display: "flex", justifyContent: "flex-start", width: "100%" }}>
+                  <Button
+                    variant={isRedxConnected ? "secondary" : "primary"}
+                    onClick={() => {
+                      setActiveCourierId("redx");
+                      setActiveSetupTab("api");
+                    }}
+                  >
+                    Configure
+                  </Button>
+                </div>
+              </div>
+
+              {/* Card 4: CarryBee Settings */}
+              <div
+                className="w-full bg-white rounded-2xl shadow-sm p-6 flex flex-col justify-between hover:shadow-md transition-shadow duration-200"
+                style={{
+                  backgroundColor: "#FFFFFF",
+                  borderRadius: "16px",
+                  boxShadow: "0 2px 8px -2px rgba(0, 0, 0, 0.05), 0 1px 4px -1px rgba(0, 0, 0, 0.03)",
+                  border: "none",
+                  padding: "24px",
+                  display: "flex",
+                  flexDirection: "column",
+                  justifyContent: "space-between",
+                  minHeight: "290px",
+                }}
+              >
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", width: "100%" }}>
+                  <div style={{ display: "flex", justifyContent: "center", alignItems: "center", marginBottom: "12px", minHeight: "56px" }}>
+                    <CourierLogo courier="carrybee" size={52} />
+                  </div>
+                  <div style={{ marginBottom: "6px" }}>
+                    <Text as="h3" variant="headingMd" fontWeight="bold">
+                      CarryBee Logistics
+                    </Text>
+                  </div>
+                  <div style={{ marginBottom: "12px", display: "flex", justifyContent: "center" }}>
+                    <Badge tone={isCarrybeeConnected ? "success" : undefined}>
+                      {isCarrybeeConnected ? "● Active" : "Not Configured"}
+                    </Badge>
+                  </div>
+                  <div style={{ color: "#64748B", fontSize: "13px", lineHeight: "1.5", textAlign: "center", maxWidth: "280px" }}>
+                    Modern eCommerce logistics network with fast dispatch, real-time tracking, and automated COD payouts.
+                  </div>
+                </div>
+                <div style={{ marginTop: "auto", paddingTop: "20px", display: "flex", justifyContent: "flex-start", width: "100%" }}>
+                  <Button
+                    variant={isCarrybeeConnected ? "secondary" : "primary"}
+                    onClick={() => {
+                      setActiveCourierId("carrybee");
+                      setActiveSetupTab("api");
+                    }}
+                  >
+                    Configure
+                  </Button>
+                </div>
+              </div>
+
+              {/* Card 5: Bahok Courier Settings */}
+              <div
+                className="w-full bg-white rounded-2xl shadow-sm p-6 flex flex-col justify-between hover:shadow-md transition-shadow duration-200"
+                style={{
+                  backgroundColor: "#FFFFFF",
+                  borderRadius: "16px",
+                  boxShadow: "0 2px 8px -2px rgba(0, 0, 0, 0.05), 0 1px 4px -1px rgba(0, 0, 0, 0.03)",
+                  border: "none",
+                  padding: "24px",
+                  display: "flex",
+                  flexDirection: "column",
+                  justifyContent: "space-between",
+                  minHeight: "290px",
+                }}
+              >
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", width: "100%" }}>
+                  <div style={{ display: "flex", justifyContent: "center", alignItems: "center", marginBottom: "12px", minHeight: "56px" }}>
+                    <CourierLogo courier="bahok" size={52} />
+                  </div>
+                  <div style={{ marginBottom: "6px" }}>
+                    <Text as="h3" variant="headingMd" fontWeight="bold">
+                      Bahok Courier
+                    </Text>
+                  </div>
+                  <div style={{ marginBottom: "12px", display: "flex", justifyContent: "center" }}>
+                    <Badge tone={isBahokConnected ? "success" : undefined}>
+                      {isBahokConnected ? "● Active" : "Not Configured"}
+                    </Badge>
+                  </div>
+                  <div style={{ color: "#64748B", fontSize: "13px", lineHeight: "1.5", textAlign: "center", maxWidth: "280px" }}>
+                    Reliable nationwide courier service with automated booking, SMS alerts, and fast COD reconciliation.
+                  </div>
+                </div>
+                <div style={{ marginTop: "auto", paddingTop: "20px", display: "flex", justifyContent: "flex-start", width: "100%" }}>
+                  <Button
+                    variant={isBahokConnected ? "secondary" : "primary"}
+                    onClick={() => {
+                      setActiveCourierId("bahok");
+                      setActiveSetupTab("api");
+                    }}
+                  >
+                    Configure
+                  </Button>
+                </div>
+              </div>
+            </div>
+
+            {/* SECTION 2: AUTOMATION RULES & AI WRAPPER (rendered on main dashboard) */}
+            {/* ==================================================================== */}
+            {/* SECTION 2: AUTOMATION RULES & AI WRAPPER                             */}
+            {/* ==================================================================== */}
+            <BlockStack gap="400">
+              
           <BlockStack gap="050">
             <Text as="h2" variant="headingLg">
               স্মার্ট AI অ্যাড্রেস কারেকশন ও অটো-কুরিয়ার সিলেকশন
@@ -2703,7 +2985,11 @@ export default function CourierSettingsPage() {
               </Card>
             </Layout.Section>
           </Layout>
-        </BlockStack>
+
+            </BlockStack>
+          </BlockStack>
+        )}
+      
       </BlockStack>
     </Page>
   );
