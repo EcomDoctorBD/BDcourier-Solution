@@ -127,15 +127,28 @@ export async function syncOrderPaidAndFulfilledInShopify(
       variables: { input: { id: orderGid } },
     });
 
-    // 2. Fetch open FulfillmentOrder IDs and mark Fulfilled with tracking info
+    // 2. Fetch open FulfillmentOrder IDs and mark Fulfilled with tracking info across all locations
     const FO_QUERY = `#graphql
       query GetOrderFulfillmentOrders($id: ID!) {
         order(id: $id) {
-          fulfillmentOrders(first: 5) {
+          fulfillmentOrders(first: 10) {
             edges {
               node {
                 id
                 status
+                assignedLocation {
+                  id
+                  name
+                }
+                lineItems(first: 50) {
+                  edges {
+                    node {
+                      id
+                      totalQuantity
+                      remainingQuantity
+                    }
+                  }
+                }
               }
             }
           }
@@ -145,11 +158,18 @@ export async function syncOrderPaidAndFulfilledInShopify(
     const foRes = await admin.graphql(FO_QUERY, { variables: { id: orderGid } });
     const foJson: any = await foRes.json();
     const foEdges = foJson?.data?.order?.fulfillmentOrders?.edges || [];
-    const openFo = foEdges.find(
-      ({ node }: any) => node.status === "OPEN" || node.status === "IN_PROGRESS"
-    );
+    const openFos = foEdges
+      .map(({ node }: any) => node)
+      .filter(
+        (n: any) =>
+          n &&
+          (n.status === "OPEN" ||
+            n.status === "IN_PROGRESS" ||
+            n.status === "SCHEDULED" ||
+            !n.status)
+      );
 
-    if (openFo?.node?.id) {
+    if (openFos.length > 0) {
       const FULFILL_MUTATION = `#graphql
         mutation FulfillOrder($fulfillment: FulfillmentV2Input!) {
           fulfillmentCreateV2(fulfillment: $fulfillment) {
@@ -174,17 +194,38 @@ export async function syncOrderPaidAndFulfilledInShopify(
         trackingInfo.url = trackingUrl.trim();
       }
 
-      await admin.graphql(FULFILL_MUTATION, {
-        variables: {
-          fulfillment: {
-            notifyCustomer: false,
-            trackingInfo,
-            lineItemsByFulfillmentOrder: [
-              { fulfillmentOrderId: openFo.node.id },
-            ],
+      for (const openFo of openFos) {
+        const foLineItemEdges = openFo.lineItems?.edges || [];
+        const fulfillmentOrderLineItems = foLineItemEdges
+          .map(({ node: foItem }: any) => {
+            const qty =
+              foItem.remainingQuantity !== undefined && foItem.remainingQuantity !== null
+                ? Number(foItem.remainingQuantity)
+                : Number(foItem.totalQuantity || 1);
+            return {
+              id: foItem.id,
+              quantity: qty > 0 ? qty : 1,
+            };
+          })
+          .filter((it: any) => it.id && it.quantity > 0);
+
+        await admin.graphql(FULFILL_MUTATION, {
+          variables: {
+            fulfillment: {
+              notifyCustomer: false,
+              trackingInfo,
+              lineItemsByFulfillmentOrder: [
+                {
+                  fulfillmentOrderId: openFo.id,
+                  ...(fulfillmentOrderLineItems.length > 0
+                    ? { fulfillmentOrderLineItems }
+                    : {}),
+                },
+              ],
+            },
           },
-        },
-      });
+        });
+      }
     }
     return true;
   } catch (err: any) {

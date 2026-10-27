@@ -455,15 +455,28 @@ async function syncOrderPaidAndFulfilledInShopify(
       variables: { input: { id: formattedOrderId } },
     });
 
-    // 2. Fetch open FulfillmentOrder IDs and mark Fulfilled with tracking info
+    // 2. Fetch open FulfillmentOrder IDs and mark Fulfilled with tracking info across all locations
     const FO_QUERY = `#graphql
       query GetOrderFulfillmentOrders($id: ID!) {
         order(id: $id) {
-          fulfillmentOrders(first: 5) {
+          fulfillmentOrders(first: 10) {
             edges {
               node {
                 id
                 status
+                assignedLocation {
+                  id
+                  name
+                }
+                lineItems(first: 50) {
+                  edges {
+                    node {
+                      id
+                      totalQuantity
+                      remainingQuantity
+                    }
+                  }
+                }
               }
             }
           }
@@ -473,11 +486,18 @@ async function syncOrderPaidAndFulfilledInShopify(
     const foRes = await admin.graphql(FO_QUERY, { variables: { id: formattedOrderId } });
     const foJson: any = await foRes.json();
     const foEdges = foJson?.data?.order?.fulfillmentOrders?.edges || [];
-    const openFo = foEdges.find(
-      ({ node }: any) => node.status === "OPEN" || node.status === "IN_PROGRESS"
-    );
+    const openFos = foEdges
+      .map(({ node }: any) => node)
+      .filter(
+        (n: any) =>
+          n &&
+          (n.status === "OPEN" ||
+            n.status === "IN_PROGRESS" ||
+            n.status === "SCHEDULED" ||
+            !n.status)
+      );
 
-    if (openFo?.node?.id) {
+    if (openFos.length > 0) {
       const FULFILL_MUTATION = `#graphql
         mutation FulfillOrder($fulfillment: FulfillmentV2Input!) {
           fulfillmentCreateV2(fulfillment: $fulfillment) {
@@ -500,17 +520,38 @@ async function syncOrderPaidAndFulfilledInShopify(
         trackingInfo.url = trackingUrl.trim();
       }
 
-      await admin.graphql(FULFILL_MUTATION, {
-        variables: {
-          fulfillment: {
-            notifyCustomer: false,
-            trackingInfo,
-            lineItemsByFulfillmentOrder: [
-              { fulfillmentOrderId: openFo.node.id },
-            ],
+      for (const openFo of openFos) {
+        const foLineItemEdges = openFo.lineItems?.edges || [];
+        const fulfillmentOrderLineItems = foLineItemEdges
+          .map(({ node: foItem }: any) => {
+            const qty =
+              foItem.remainingQuantity !== undefined && foItem.remainingQuantity !== null
+                ? Number(foItem.remainingQuantity)
+                : Number(foItem.totalQuantity || 1);
+            return {
+              id: foItem.id,
+              quantity: qty > 0 ? qty : 1,
+            };
+          })
+          .filter((it: any) => it.id && it.quantity > 0);
+
+        await admin.graphql(FULFILL_MUTATION, {
+          variables: {
+            fulfillment: {
+              notifyCustomer: false,
+              trackingInfo,
+              lineItemsByFulfillmentOrder: [
+                {
+                  fulfillmentOrderId: openFo.id,
+                  ...(fulfillmentOrderLineItems.length > 0
+                    ? { fulfillmentOrderLineItems }
+                    : {}),
+                },
+              ],
+            },
           },
-        },
-      });
+        });
+      }
     }
     return true;
   } catch {
@@ -594,17 +635,32 @@ async function createShopifyFulfillmentOnBooking(params: {
       ? orderId
       : `gid://shopify/Order/${orderId.replace(/\D/g, "")}`;
 
-    // 1. Query primary active FulfillmentOrder and its dynamic Assigned Location
+    // 1. Query all active FulfillmentOrders and their dynamic Assigned Locations & Line Items
     const FO_QUERY = `#graphql
       query GetOrderFulfillmentOrdersForDispatch($id: ID!) {
         order(id: $id) {
-          fulfillmentOrders(first: 1, assignmentStatus: FULFILLMENT_REQUESTED_OR_UNFULFILLED) {
+          fulfillmentOrders(first: 10, assignmentStatus: FULFILLMENT_REQUESTED_OR_UNFULFILLED) {
             edges {
               node {
                 id
                 status
                 assignedLocation {
                   id
+                  name
+                }
+                lineItems(first: 50) {
+                  edges {
+                    node {
+                      id
+                      totalQuantity
+                      remainingQuantity
+                      lineItem {
+                        id
+                        title
+                        sku
+                      }
+                    }
+                  }
                 }
               }
             }
@@ -622,13 +678,28 @@ async function createShopifyFulfillmentOnBooking(params: {
       const FO_FALLBACK_QUERY = `#graphql
         query GetOrderFulfillmentOrdersFallback($id: ID!) {
           order(id: $id) {
-            fulfillmentOrders(first: 5) {
+            fulfillmentOrders(first: 10) {
               edges {
                 node {
                   id
                   status
                   assignedLocation {
                     id
+                    name
+                  }
+                  lineItems(first: 50) {
+                    edges {
+                      node {
+                        id
+                        totalQuantity
+                        remainingQuantity
+                        lineItem {
+                          id
+                          title
+                          sku
+                        }
+                      }
+                    }
                   }
                 }
               }
@@ -641,26 +712,25 @@ async function createShopifyFulfillmentOnBooking(params: {
       foEdges = fallbackJson?.data?.order?.fulfillmentOrders?.edges || [];
     }
 
-    const targetFoNode =
-      foEdges.find(
-        ({ node }: any) => node.status === "OPEN" || node.status === "IN_PROGRESS" || !node.status
-      )?.node || foEdges[0]?.node;
+    const targetFoNodes = foEdges
+      .map(({ node }: any) => node)
+      .filter(
+        (node: any) =>
+          node &&
+          (node.status === "OPEN" ||
+            node.status === "IN_PROGRESS" ||
+            node.status === "SCHEDULED" ||
+            !node.status)
+      );
 
-    if (!targetFoNode?.id) {
+    if (targetFoNodes.length === 0) {
       console.log(
         `[Shopify Fulfillment] Order ${orderName} (${formattedOrderId}) has no OPEN or IN_PROGRESS fulfillment orders to fulfill`
       );
       return false;
     }
 
-    const fulfillmentOrderId = targetFoNode.id;
-    const locationId = targetFoNode.assignedLocation?.id || null;
-
-    console.log(
-      `[Shopify Location Resolver] Order ${orderName}: dynamically resolved fulfillmentOrderId=${fulfillmentOrderId}, locationId=${locationId || "assigned"}`
-    );
-
-    // 2. Execute fulfillmentCreateV2 mutation with tracking information and buyer notification
+    // 2. Execute discrete atomic fulfillmentCreateV2 mutations per fulfillmentOrderId / location
     const FULFILLMENT_CREATE_V2_MUTATION = `#graphql
       mutation fulfillmentCreateV2($fulfillment: FulfillmentV2Input!) {
         fulfillmentCreateV2(fulfillment: $fulfillment) {
@@ -684,32 +754,72 @@ async function createShopifyFulfillmentOnBooking(params: {
       trackingInfo.url = trackingUrl.trim();
     }
 
-    const fulfillRes = await effectiveAdmin.graphql(FULFILLMENT_CREATE_V2_MUTATION, {
-      variables: {
-        fulfillment: {
-          notifyCustomer: true,
-          trackingInfo,
-          lineItemsByFulfillmentOrder: [
-            { fulfillmentOrderId },
-          ],
-        },
-      },
-    });
+    let successfulFulfillments = 0;
 
-    const fulfillJson: any = await fulfillRes.json();
-    const userErrors = fulfillJson?.data?.fulfillmentCreateV2?.userErrors || [];
-    if (userErrors.length > 0) {
-      console.warn(
-        `[Shopify Fulfillment Notice] userErrors for ${orderName}:`,
-        JSON.stringify(userErrors)
+    for (const foNode of targetFoNodes) {
+      const fulfillmentOrderId = foNode.id;
+      const locationId = foNode.assignedLocation?.id || "assigned";
+      const locationName = foNode.assignedLocation?.name || "";
+
+      // Extract discrete line item allocations for this specific location/fulfillment order
+      const foLineItemEdges = foNode.lineItems?.edges || [];
+      const fulfillmentOrderLineItems = foLineItemEdges
+        .map(({ node: foItem }: any) => {
+          const qty =
+            foItem.remainingQuantity !== undefined && foItem.remainingQuantity !== null
+              ? Number(foItem.remainingQuantity)
+              : Number(foItem.totalQuantity || 1);
+          return {
+            id: foItem.id,
+            quantity: qty > 0 ? qty : 1,
+          };
+        })
+        .filter((it: any) => it.id && it.quantity > 0);
+
+      console.log(
+        `[Shopify Location Resolver] Order ${orderName}: fulfilling FO=${fulfillmentOrderId} at location=${locationName || locationId} with ${fulfillmentOrderLineItems.length} items`
       );
-      return false;
+
+      const fulfillmentPayload: any = {
+        notifyCustomer: true,
+        trackingInfo,
+        lineItemsByFulfillmentOrder: [
+          {
+            fulfillmentOrderId,
+            ...(fulfillmentOrderLineItems.length > 0
+              ? { fulfillmentOrderLineItems }
+              : {}),
+          },
+        ],
+      };
+
+      try {
+        const fulfillRes = await effectiveAdmin.graphql(FULFILLMENT_CREATE_V2_MUTATION, {
+          variables: { fulfillment: fulfillmentPayload },
+        });
+
+        const fulfillJson: any = await fulfillRes.json();
+        const userErrors = fulfillJson?.data?.fulfillmentCreateV2?.userErrors || [];
+        if (userErrors.length > 0) {
+          console.warn(
+            `[Shopify Multi-Location Notice] userErrors for ${orderName} (Location: ${locationId}, FO: ${fulfillmentOrderId}):`,
+            JSON.stringify(userErrors)
+          );
+        } else {
+          console.log(
+            `[Shopify Multi-Location Fulfillment Success] Order ${orderName} (${formattedOrderId}) fulfilled at location ${locationName || locationId} (FO: ${fulfillmentOrderId}) via ${courierName} tracking ${trackingNumber}`
+          );
+          successfulFulfillments++;
+        }
+      } catch (nodeFulfillErr: any) {
+        console.warn(
+          `[Shopify Multi-Location Error] FO execution failed for ${orderName} (${fulfillmentOrderId}):`,
+          nodeFulfillErr?.message || nodeFulfillErr
+        );
+      }
     }
 
-    console.log(
-      `[Shopify Fulfillment Success] Order ${orderName} (${formattedOrderId}) marked FULFILLED on Shopify via ${courierName} tracking ${trackingNumber} at location ${locationId || "assigned"}`
-    );
-    return true;
+    return successfulFulfillments > 0;
   } catch (err: any) {
     console.warn(
       `[Shopify Fulfillment Exception] Non-blocking fulfillment failure for order ${orderName}:`,
