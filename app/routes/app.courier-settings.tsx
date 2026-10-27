@@ -730,6 +730,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       updateSet.bahokWebhookSecret = rawExisting.bahokWebhookSecret;
     }
 
+    const defaultCourierParam = String(formData.get("defaultCourier") || "").trim();
+    if (defaultCourierParam && ["pathao", "steadfast", "redx", "carrybee", "bahok"].includes(defaultCourierParam)) {
+      updateSet.defaultCourier = defaultCourierParam;
+    }
+
     await CourierConfig.findOneAndUpdate(
       { shopDomain },
       { $set: updateSet },
@@ -1173,6 +1178,7 @@ export default function CourierSettingsPage() {
   const [bahokWebhookSecret, setBahokWebhookSecret] = useState(courierConfig.bahokWebhookSecret || "");
   const [showBahokToken, setShowBahokToken] = useState(false);
   const [showBahokWebhookSecret, setShowBahokWebhookSecret] = useState(false);
+  const [bahokParcelNote, setBahokParcelNote] = useState("");
 
   const isBahokConnected = Boolean(
     bahokApiKey.trim() &&
@@ -1190,6 +1196,8 @@ export default function CourierSettingsPage() {
     formData.append("bahokApiKey", bahokApiKey);
     formData.append("bahokApiToken", bahokApiToken);
     formData.append("bahokWebhookSecret", bahokWebhookSecret);
+    formData.append("defaultCourier", defaultCourier);
+    formData.append("bahokParcelNote", bahokParcelNote);
     submit(formData, { method: "post" });
   };
 
@@ -2437,15 +2445,14 @@ export default function CourierSettingsPage() {
                               label="Merchant ID"
                               value={bahokMerchantId}
                               onChange={(val) => setBahokMerchantId(val)}
-                              placeholder="e.g. BHK-12345"
+                              placeholder="Enter your Bahok Merchant ID (e.g. BHK-12345)"
                               autoComplete="off"
-                              helpText="Your Bahok Merchant Account ID."
                             />
                             <TextField
                               label="API Key"
                               value={bahokApiKey}
                               onChange={(val) => setBahokApiKey(val)}
-                              placeholder="e.g. bhk_live_key_..."
+                              placeholder="Enter your Bahok API Key"
                               autoComplete="off"
                             />
                             <TextField
@@ -2453,7 +2460,7 @@ export default function CourierSettingsPage() {
                               type={showBahokToken ? "text" : "password"}
                               value={bahokApiToken}
                               onChange={(val) => setBahokApiToken(val)}
-                              placeholder="••••••••••••••••"
+                              placeholder="Enter your Bahok Authorization Token"
                               autoComplete="off"
                               connectedRight={
                                 <Button
@@ -2463,7 +2470,22 @@ export default function CourierSettingsPage() {
                                   {showBahokToken ? "Hide" : "Show"}
                                 </Button>
                               }
-                              helpText="Bahok Authorization Token. Stored encrypted with AES-256-GCM."
+                            />
+                            <TextField
+                              label="Custom Webhook Secret (Optional)"
+                              type={showBahokWebhookSecret ? "text" : "password"}
+                              value={bahokWebhookSecret}
+                              onChange={(val) => setBahokWebhookSecret(val)}
+                              placeholder="Enter custom webhook secret (optional)"
+                              autoComplete="off"
+                              connectedRight={
+                                <Button
+                                  variant="plain"
+                                  onClick={() => setShowBahokWebhookSecret((prev) => !prev)}
+                                >
+                                  {showBahokWebhookSecret ? "Hide" : "Show"}
+                                </Button>
+                              }
                             />
                           </BlockStack>
                           <Divider />
@@ -2505,7 +2527,7 @@ export default function CourierSettingsPage() {
                               }
                             />
                             <TextField
-                              label="Bearer Token / Secret"
+                              label="Webhook Auth Token"
                               value={bahokWebhookSecret || webhookSecret}
                               readOnly
                               autoComplete="off"
@@ -2535,33 +2557,29 @@ export default function CourierSettingsPage() {
                       {activeSetupTab === "settings" && (
                         <BlockStack gap="400">
                           <BlockStack gap="100">
-                            <Text as="h3" variant="headingMd" fontWeight="bold">Default Fulfillment & Webhook Secret</Text>
+                            <Text as="h3" variant="headingMd" fontWeight="bold">Bahok Fulfillment Defaults</Text>
                             <Text as="p" variant="bodySm" tone="subdued">
-                              Configure custom Bahok webhook secret and delivery preferences.
+                              Configure default parcel preferences and automated dispatch parameters for Bahok Courier.
                             </Text>
                           </BlockStack>
                           <Divider />
-                          <BlockStack gap="300">
-                            <TextField
-                              label="Custom Webhook Secret (Optional)"
-                              type={showBahokWebhookSecret ? "text" : "password"}
-                              value={bahokWebhookSecret}
-                              onChange={(val) => setBahokWebhookSecret(val)}
-                              placeholder="••••••••••••••••"
-                              autoComplete="off"
-                              connectedRight={
-                                <Button
-                                  variant="plain"
-                                  onClick={() => setShowBahokWebhookSecret((prev) => !prev)}
-                                >
-                                  {showBahokWebhookSecret ? "Hide" : "Show"}
-                                </Button>
-                              }
-                              helpText="Optional custom webhook secret if provided separately by Bahok."
+                          <BlockStack gap="400">
+                            <Checkbox
+                              label="Set Bahok as default courier"
+                              checked={defaultCourier === "bahok"}
+                              onChange={(newChecked) => {
+                                setDefaultCourier(newChecked ? "bahok" : "pathao");
+                              }}
                             />
-                            <Text as="p" variant="bodySm" tone="subdued">
-                              Bahok provides reliable nationwide doorstep parcel delivery across all major divisions with automated consignment booking.
-                            </Text>
+                            <TextField
+                              label="Default Parcel Note"
+                              value={bahokParcelNote}
+                              onChange={(val) => setBahokParcelNote(val)}
+                              placeholder="e.g. Please call customer before delivery"
+                              multiline={3}
+                              autoComplete="off"
+                              helpText="Don't use any special characters or emoji characters."
+                            />
                           </BlockStack>
                           <Divider />
                           <InlineStack align="end">
