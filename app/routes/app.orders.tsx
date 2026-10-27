@@ -3165,6 +3165,10 @@ export default function OrdersFulfillmentPage() {
     "100% Authentic Bangladeshi Products • Fast Nationwide Delivery"
   );
 
+  // Standalone printing configuration error banner states
+  const [showLabelConfigError, setShowLabelConfigError] = useState(false);
+  const [showInvoiceConfigError, setShowInvoiceConfigError] = useState(false);
+
   // Secondary dropdown for batch document printing (4x6 Shipping Labels vs A4 Invoices)
   const [isPrintPopoverActive, setIsPrintPopoverActive] = useState(false);
   const [printDocumentMode, setPrintDocumentMode] = useState<
@@ -3848,6 +3852,75 @@ export default function OrdersFulfillmentPage() {
     formData.append("actionType", "bulkBookCouriers");
     formData.append("ordersPayload", JSON.stringify(selectedOrderObjects));
     submit(formData, { method: "post" });
+  };
+
+  const isCourierActive = (courierNameOrKey?: string | null) => {
+    if (!courierNameOrKey) return false;
+    const c = courierNameOrKey.toLowerCase();
+    if (c.includes("pathao")) return activeCouriers.pathao;
+    if (c.includes("steadfast")) return activeCouriers.steadfast;
+    if (c.includes("redx")) return activeCouriers.redx;
+    if (c.includes("carrybee")) return activeCouriers.carrybee;
+    if (c.includes("bahok")) return activeCouriers.bahok;
+    return false;
+  };
+
+  const handleBulkAssignCourier = (courierKey: string) => {
+    setSelectedCouriersByOrder((prev) => {
+      const updated = { ...prev };
+      for (const id of selectedResources) {
+        updated[id] = courierKey;
+      }
+      return updated;
+    });
+    setShowLabelConfigError(false);
+    setShowInvoiceConfigError(false);
+  };
+
+  const handlePrintLabels = () => {
+    const selectedOrdersList = displayedOrders.filter((o) =>
+      selectedResources.includes(o.id)
+    );
+    if (selectedOrdersList.length === 0) return;
+
+    const hasMissingCourier = selectedOrdersList.some((order) => {
+      const chosen = selectedCouriersByOrder[order.id] || order.assignedCourier;
+      return !isCourierActive(chosen);
+    });
+
+    if (hasMissingCourier) {
+      setShowLabelConfigError(true);
+      setShowInvoiceConfigError(false);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
+
+    setShowLabelConfigError(false);
+    setShowInvoiceConfigError(false);
+    handlePrintBatchDocuments("labels_4x6");
+  };
+
+  const handlePrintInvoices = () => {
+    const selectedOrdersList = displayedOrders.filter((o) =>
+      selectedResources.includes(o.id)
+    );
+    if (selectedOrdersList.length === 0) return;
+
+    const hasMissingCourier = selectedOrdersList.some((order) => {
+      const chosen = selectedCouriersByOrder[order.id] || order.assignedCourier;
+      return !isCourierActive(chosen);
+    });
+
+    if (hasMissingCourier) {
+      setShowInvoiceConfigError(true);
+      setShowLabelConfigError(false);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
+
+    setShowLabelConfigError(false);
+    setShowInvoiceConfigError(false);
+    handlePrintBatchDocuments("invoices_a4");
   };
 
   const handlePrintBatchDocuments = (mode: "labels_4x6" | "invoices_a4") => {
@@ -4899,6 +4972,30 @@ export default function OrdersFulfillmentPage() {
         <TitleBar title="Orders" />
 
         <Layout>
+          {showLabelConfigError && (
+            <Layout.Section>
+              <Banner
+                title="Courier Assignment Required"
+                tone="critical"
+                onDismiss={() => setShowLabelConfigError(false)}
+              >
+                <p>You need to assign a courier before downloading the shipping labels.</p>
+              </Banner>
+            </Layout.Section>
+          )}
+
+          {showInvoiceConfigError && (
+            <Layout.Section>
+              <Banner
+                title="Invoice Configuration Required"
+                tone="critical"
+                onDismiss={() => setShowInvoiceConfigError(false)}
+              >
+                <p>Invalid or missing invoice settings. Go to settings and configure your invoice template and brand details.</p>
+              </Banner>
+            </Layout.Section>
+          )}
+
           {showBanner && actionData?.message && (
             <Layout.Section>
               <Banner
@@ -5798,7 +5895,14 @@ export default function OrdersFulfillmentPage() {
                         selectedResources.length === 1 ? "" : "s"
                       } Selected`}
                     </Badge>
-                    <Button variant="plain" onClick={() => setSelectedResources([])}>
+                    <Button
+                      variant="plain"
+                      onClick={() => {
+                        setSelectedResources([]);
+                        setShowLabelConfigError(false);
+                        setShowInvoiceConfigError(false);
+                      }}
+                    >
                       Deselect All
                     </Button>
                     {isBatchOverPlanCap && (
@@ -5808,50 +5912,56 @@ export default function OrdersFulfillmentPage() {
                     )}
                   </InlineStack>
 
-                  {/* Right: Print Selector Dropdown + Send Selected Button */}
+                  {/* Right: Dynamic Side-by-Side Courier Buttons & Standalone Print Actions */}
                   <InlineStack gap="300" blockAlign="center" wrap>
-                    {/* Secondary dropdown resource selector: Print Batch Documents */}
-                    <Popover
-                      active={isPrintPopoverActive}
-                      activator={
+                    {/* Courier Assignment Buttons (conditionally rendered by active integration status) */}
+                    <InlineStack gap="200" blockAlign="center" wrap>
+                      {activeCouriers.pathao && (
                         <Button
-                          disclosure
-                          onClick={() => setIsPrintPopoverActive((prev) => !prev)}
+                          onClick={() => handleBulkAssignCourier("pathao")}
                         >
-                          🖨️ Print Batch Documents
+                          Assign Pathao
                         </Button>
-                      }
-                      onClose={() => setIsPrintPopoverActive(false)}
-                    >
-                      <ActionList
-                        actionRole="menuitem"
-                        items={[
-                          {
-                            content: "🏷️ 4x6 Shipping Labels",
-                            helpText: "Compact thermal barcode labels (100x150mm)",
-                            onAction: () =>
-                              handlePrintBatchDocuments("labels_4x6"),
-                          },
-                          {
-                            content: "📄 A4 Invoices",
-                            helpText: "Full-page itemized packing slip invoices",
-                            onAction: () =>
-                              handlePrintBatchDocuments("invoices_a4"),
-                          },
-                        ]}
-                      />
-                    </Popover>
+                      )}
+                      {activeCouriers.steadfast && (
+                        <Button
+                          onClick={() => handleBulkAssignCourier("steadfast")}
+                        >
+                          Assign Steadfast
+                        </Button>
+                      )}
+                      {activeCouriers.redx && (
+                        <Button
+                          onClick={() => handleBulkAssignCourier("redx")}
+                        >
+                          Assign RedX
+                        </Button>
+                      )}
+                      {activeCouriers.carrybee && (
+                        <Button
+                          onClick={() => handleBulkAssignCourier("carrybee")}
+                        >
+                          Assign CarryBee
+                        </Button>
+                      )}
+                      {activeCouriers.bahok && (
+                        <Button
+                          onClick={() => handleBulkAssignCourier("bahok")}
+                        >
+                          Assign Bahok
+                        </Button>
+                      )}
+                    </InlineStack>
 
-                    {/* Primary Prominent Button: Send (X) Selected to Courier */}
-                    <Button
-                      variant="primary"
-                      size="large"
-                      loading={isBulkSubmitting}
-                      onClick={handleBulkSendToCourier}
-                      disabled={isBatchOverPlanCap}
-                    >
-                      {`📦 Send (${selectedResources.length}) Selected to Courier`}
-                    </Button>
+                    {/* Standalone Printing Action Buttons */}
+                    <InlineStack gap="200" blockAlign="center">
+                      <Button onClick={handlePrintLabels}>
+                        Print Labels
+                      </Button>
+                      <Button onClick={handlePrintInvoices}>
+                        Print Invoices
+                      </Button>
+                    </InlineStack>
                   </InlineStack>
                 </InlineStack>
               </div>
