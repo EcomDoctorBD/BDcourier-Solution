@@ -39,6 +39,7 @@ import {
   Link,
   DatePicker,
   Tooltip,
+  ProgressBar,
 } from "@shopify/polaris";
 
 import { authenticate, unauthenticated, sessionStorage } from "../shopify.server";
@@ -4997,11 +4998,12 @@ export default function OrdersFulfillmentPage() {
   ];
 
   // Official Polaris Native Bulk Actions Pipeline
-  const promotedBulkActions = [
+  const promotedBulkActions: any[] = [
     {
       content: isBulkSubmitting ? "Booking Orders..." : "Book Selected Orders",
       onAction: handleBulkSendToCourier,
       disabled: isSubmitting || isBulkSubmitting || isBatchOverPlanCap,
+      loading: isBulkSubmitting,
     },
     ...(activeCouriers.pathao
       ? [
@@ -5009,6 +5011,7 @@ export default function OrdersFulfillmentPage() {
             content: "Assign Pathao",
             onAction: () => handleBulkAssignCourier("pathao"),
             disabled: isSubmitting || isBulkSubmitting,
+            loading: isBulkSubmitting,
           },
         ]
       : []),
@@ -5018,6 +5021,7 @@ export default function OrdersFulfillmentPage() {
             content: "Assign Steadfast",
             onAction: () => handleBulkAssignCourier("steadfast"),
             disabled: isSubmitting || isBulkSubmitting,
+            loading: isBulkSubmitting,
           },
         ]
       : []),
@@ -5027,6 +5031,7 @@ export default function OrdersFulfillmentPage() {
             content: "Assign RedX",
             onAction: () => handleBulkAssignCourier("redx"),
             disabled: isSubmitting || isBulkSubmitting,
+            loading: isBulkSubmitting,
           },
         ]
       : []),
@@ -5036,6 +5041,7 @@ export default function OrdersFulfillmentPage() {
             content: "Assign CarryBee",
             onAction: () => handleBulkAssignCourier("carrybee"),
             disabled: isSubmitting || isBulkSubmitting,
+            loading: isBulkSubmitting,
           },
         ]
       : []),
@@ -5045,6 +5051,7 @@ export default function OrdersFulfillmentPage() {
             content: "Assign Bahok",
             onAction: () => handleBulkAssignCourier("bahok"),
             disabled: isSubmitting || isBulkSubmitting,
+            loading: isBulkSubmitting,
           },
         ]
       : []),
@@ -5052,11 +5059,13 @@ export default function OrdersFulfillmentPage() {
       content: "Print Labels",
       onAction: handlePrintLabels,
       disabled: isSubmitting || isBulkSubmitting,
+      loading: isBulkSubmitting,
     },
     {
       content: "Print Invoices",
       onAction: handlePrintInvoices,
       disabled: isSubmitting || isBulkSubmitting,
+      loading: isBulkSubmitting,
     },
   ];
 
@@ -9262,6 +9271,37 @@ export default function OrdersFulfillmentPage() {
                       {usageSummary.bulkBatchLimit} orders per bulk batch.
                     </p>
                   </Banner>
+                </Box>
+              )}
+
+              {/* Advanced Audit Point 6: Asynchronous Mass Dispatch Progress & Wait Indicator */}
+              {isBulkSubmitting && (
+                <Box paddingBlock="300" paddingInline="400">
+                  <div
+                    className="bg-blue-50/70 dark:bg-blue-950/40 rounded-lg p-3 border border-blue-200 dark:border-blue-900 flex flex-col gap-2"
+                    style={{
+                      backgroundColor: "var(--p-color-bg-surface-info, rgba(239, 246, 255, 0.7))",
+                      border: "1px solid var(--p-color-border-info, #bfdbfe)",
+                      borderRadius: "8px",
+                      padding: "12px 16px",
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "8px",
+                    }}
+                  >
+                    <InlineStack align="space-between" blockAlign="center">
+                      <InlineStack gap="200" blockAlign="center">
+                        <Spinner size="small" />
+                        <Text as="span" variant="bodySm" fontWeight="semibold">
+                          Processing bulk order dispatch, please wait...
+                        </Text>
+                      </InlineStack>
+                      <Badge tone="info" size="small">
+                        {`${selectedResources.length} Orders in Flight`}
+                      </Badge>
+                    </InlineStack>
+                    <ProgressBar size="small" animated tone="primary" />
+                  </div>
                 </Box>
               )}
 
