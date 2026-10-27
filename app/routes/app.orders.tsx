@@ -5871,6 +5871,7 @@ export default function OrdersFulfillmentPage() {
           {selectedResources.length > 0 && (
             <Layout.Section>
               <div
+                className="flex flex-row items-center justify-between w-full"
                 style={{
                   position: "sticky",
                   top: "12px",
@@ -5882,88 +5883,99 @@ export default function OrdersFulfillmentPage() {
                   background: "var(--p-color-bg-surface, #ffffff)",
                   padding: "14px 20px",
                   backdropFilter: "blur(8px)",
+                  display: "flex",
+                  flexDirection: "row",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  width: "100%",
+                  gap: "16px",
                 }}
               >
-                <InlineStack align="space-between" blockAlign="center" wrap gap="300">
-                  {/* Left: Counter & Clear Selection */}
-                  <InlineStack gap="300" blockAlign="center">
-                    <Badge
-                      tone={isBatchOverPlanCap ? "critical" : "info"}
-                      size="large"
-                    >
-                      {`${selectedResources.length} Order${
-                        selectedResources.length === 1 ? "" : "s"
-                      } Selected`}
-                    </Badge>
+                {/* LEFT SECTION: Displays the selection indicator text (e.g., "1 selected") */}
+                <div
+                  className="flex items-center gap-3 shrink-0"
+                  style={{ display: "flex", alignItems: "center", gap: "12px", flexShrink: 0 }}
+                >
+                  <Text variant="bodyMd" fontWeight="semibold" as="span">
+                    {`${selectedResources.length} selected`}
+                  </Text>
+                  <Button
+                    variant="plain"
+                    onClick={() => {
+                      setSelectedResources([]);
+                      setShowLabelConfigError(false);
+                      setShowInvoiceConfigError(false);
+                    }}
+                  >
+                    Deselect All
+                  </Button>
+                  {isBatchOverPlanCap && (
+                    <Text variant="bodySm" tone="critical">
+                      ⚠️ Limit exceeded (Max {usageSummary.bulkBatchLimit} per batch)
+                    </Text>
+                  )}
+                </div>
+
+                {/* MIDDLE SECTION: Houses our side-by-side conditional courier buttons ("Assign Pathao", etc.) */}
+                <div
+                  className="flex items-center justify-center gap-2 flex-1"
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: "8px",
+                    flex: 1,
+                  }}
+                >
+                  {activeCouriers.pathao && (
                     <Button
-                      variant="plain"
-                      onClick={() => {
-                        setSelectedResources([]);
-                        setShowLabelConfigError(false);
-                        setShowInvoiceConfigError(false);
-                      }}
+                      onClick={() => handleBulkAssignCourier("pathao")}
                     >
-                      Deselect All
+                      Assign Pathao
                     </Button>
-                    {isBatchOverPlanCap && (
-                      <Text variant="bodySm" tone="critical">
-                        ⚠️ Limit exceeded (Max {usageSummary.bulkBatchLimit} per batch)
-                      </Text>
-                    )}
-                  </InlineStack>
+                  )}
+                  {activeCouriers.steadfast && (
+                    <Button
+                      onClick={() => handleBulkAssignCourier("steadfast")}
+                    >
+                      Assign Steadfast
+                    </Button>
+                  )}
+                  {activeCouriers.redx && (
+                    <Button
+                      onClick={() => handleBulkAssignCourier("redx")}
+                    >
+                      Assign RedX
+                    </Button>
+                  )}
+                  {activeCouriers.carrybee && (
+                    <Button
+                      onClick={() => handleBulkAssignCourier("carrybee")}
+                    >
+                      Assign CarryBee
+                    </Button>
+                  )}
+                  {activeCouriers.bahok && (
+                    <Button
+                      onClick={() => handleBulkAssignCourier("bahok")}
+                    >
+                      Assign Bahok
+                    </Button>
+                  )}
+                </div>
 
-                  {/* Right: Dynamic Side-by-Side Courier Buttons & Standalone Print Actions */}
-                  <InlineStack gap="300" blockAlign="center" wrap>
-                    {/* Courier Assignment Buttons (conditionally rendered by active integration status) */}
-                    <InlineStack gap="200" blockAlign="center" wrap>
-                      {activeCouriers.pathao && (
-                        <Button
-                          onClick={() => handleBulkAssignCourier("pathao")}
-                        >
-                          Assign Pathao
-                        </Button>
-                      )}
-                      {activeCouriers.steadfast && (
-                        <Button
-                          onClick={() => handleBulkAssignCourier("steadfast")}
-                        >
-                          Assign Steadfast
-                        </Button>
-                      )}
-                      {activeCouriers.redx && (
-                        <Button
-                          onClick={() => handleBulkAssignCourier("redx")}
-                        >
-                          Assign RedX
-                        </Button>
-                      )}
-                      {activeCouriers.carrybee && (
-                        <Button
-                          onClick={() => handleBulkAssignCourier("carrybee")}
-                        >
-                          Assign CarryBee
-                        </Button>
-                      )}
-                      {activeCouriers.bahok && (
-                        <Button
-                          onClick={() => handleBulkAssignCourier("bahok")}
-                        >
-                          Assign Bahok
-                        </Button>
-                      )}
-                    </InlineStack>
-
-                    {/* Standalone Printing Action Buttons */}
-                    <InlineStack gap="200" blockAlign="center">
-                      <Button onClick={handlePrintLabels}>
-                        Print Labels
-                      </Button>
-                      <Button onClick={handlePrintInvoices}>
-                        Print Invoices
-                      </Button>
-                    </InlineStack>
-                  </InlineStack>
-                </InlineStack>
+                {/* RIGHT SECTION: Displays the relocated "Print Labels" and "Print Invoices" buttons directly side-by-side */}
+                <div
+                  className="flex items-center gap-2 shrink-0"
+                  style={{ display: "flex", alignItems: "center", gap: "8px", flexShrink: 0 }}
+                >
+                  <Button onClick={handlePrintLabels}>
+                    Print Labels
+                  </Button>
+                  <Button onClick={handlePrintInvoices}>
+                    Print Invoices
+                  </Button>
+                </div>
               </div>
             </Layout.Section>
           )}
