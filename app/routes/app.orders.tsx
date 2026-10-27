@@ -312,8 +312,13 @@ export function calculateCodAmount(order: {
   totalPrice?: string | number;
   [key: string]: any;
 }): number {
-  const financialStatus = String(order.displayFinancialStatus || "").toUpperCase().trim();
-  if (financialStatus === "PAID" || financialStatus === "REFUNDED") {
+  const financialStatus = String(order.displayFinancialStatus || order.financialStatus || "").toUpperCase().trim();
+  if (
+    financialStatus === "PAID" ||
+    financialStatus === "AUTHORIZED" ||
+    financialStatus === "REFUNDED" ||
+    financialStatus === "VOIDED"
+  ) {
     return 0;
   }
 
@@ -1399,6 +1404,8 @@ async function dispatchSingleOrderToCourier(params: {
   manualAreaId?: number | null;
   manualAreaName?: string | null;
   admin?: any;
+  financialStatus?: string;
+  totalPrice?: string | number;
 }): Promise<{
   success: boolean;
   orderId: string;
@@ -1429,6 +1436,8 @@ async function dispatchSingleOrderToCourier(params: {
     manualZoneId,
     manualAreaId,
     manualAreaName,
+    financialStatus,
+    totalPrice,
   } = params;
 
   // 1. Pre-Flight Double-Booking Atomic Check (Issue 8.1 & Extra Trap #5)
@@ -1589,7 +1598,26 @@ async function dispatchSingleOrderToCourier(params: {
     addressResolution.cleanAddress ||
     shippingAddress ||
     "";
-  const amountToCollect = Math.max(0, Math.round(Number(codAmount) || 0));
+
+  // 1. AUTOMATIC ZERO-LOCK FOR PREPAID / AUTHORIZED ORDERS
+  const rawFinStatus = String(financialStatus || "").toLowerCase().trim();
+  const isPrepaidOrder =
+    rawFinStatus === "paid" ||
+    rawFinStatus === "authorized";
+
+  let amountToCollect = 0;
+  if (!isPrepaidOrder) {
+    const parsedCod = Math.max(0, Math.round(Number(codAmount) || 0));
+    const maxPayable = Math.round(
+      Number(String(totalPrice || "0").replace(/[^0-9.]/g, "")) || 0
+    );
+    // Hard financial boundary guardrail: COD cannot exceed total remaining order value
+    if (maxPayable > 0 && parsedCod > maxPayable) {
+      amountToCollect = maxPayable;
+    } else {
+      amountToCollect = parsedCod;
+    }
+  }
 
   let courierDisplayName = "";
   let finalTracking = "";
@@ -2035,8 +2063,8 @@ async function dispatchSingleOrderToCourier(params: {
         customerName,
         customerPhone: cleanPhone,
         shippingAddress: cleanAddress,
-        codAmount,
-        courierCashCollected: codAmount,
+        codAmount: String(amountToCollect),
+        courierCashCollected: String(amountToCollect),
         courierStatus: "in_transit",
         shopifySyncedPaidFulfilled: shopifyFulfilledSuccessfully,
         shopifySyncedAt: shopifyFulfilledSuccessfully ? new Date() : undefined,
@@ -2100,7 +2128,7 @@ async function dispatchSingleOrderToCourier(params: {
       customerPhone: cleanPhone,
       shippingAddress: cleanAddress,
       isInsideDhaka: isInsideDhakaResolved,
-      codAmount,
+      codAmount: String(amountToCollect),
       currencyCode,
       warehouseNote: effectiveWarehouseNote,
       lineItems,
@@ -2941,6 +2969,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           manualAreaId: item.manualAreaId ? Number(item.manualAreaId) : null,
           manualAreaName: item.manualAreaName ? String(item.manualAreaName) : null,
           admin,
+          financialStatus: String(item.financialStatus || item.displayFinancialStatus || ""),
+          totalPrice: item.totalPrice,
         });
       })
     );
@@ -3068,6 +3098,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     manualAreaId,
     manualAreaName,
     admin,
+    financialStatus: String(formData.get("financialStatus") || ""),
+    totalPrice: formData.get("totalPrice") ? String(formData.get("totalPrice")) : undefined,
   });
 
   return {
@@ -3278,6 +3310,8 @@ export default function OrdersFulfillmentPage() {
   >(initialDispatchedOrders || {});
   const [batchPrintSlips, setBatchPrintSlips] = useState<DispatchedSlipRecord[]>([]);
   const [showPackingSlipView, setShowPackingSlipView] = useState(false);
+  const [customCodAmountsByOrder, setCustomCodAmountsByOrder] = useState<Record<string, string>>({});
+  const [showCodEdit, setShowCodEdit] = useState<Record<string, boolean>>({});
 
   const planNormalized = usageSummary.currentPlan.toLowerCase();
   const isFreePlan = planNormalized === "free";
@@ -3924,6 +3958,31 @@ export default function OrdersFulfillmentPage() {
     const isUnlocked = Boolean(manuallyUnlockedOrders[order.id]);
     const customNote = warehouseNotesByOrder[order.id] ?? order.warehouseNote;
 
+    const isPrepaid =
+      order.financialStatus?.toLowerCase() === "paid" ||
+      order.financialStatus?.toLowerCase() === "authorized" ||
+      order.displayFinancialStatus?.toUpperCase() === "PAID";
+
+    const customCodVal = customCodAmountsByOrder[order.id];
+    const maxOrderPrice = Math.round(
+      Number(String(order.totalPrice || "0").replace(/[^0-9.]/g, "")) || 0
+    );
+    const enteredCodNum =
+      customCodVal !== undefined && customCodVal.trim() !== ""
+        ? Math.round(Number(String(customCodVal).replace(/[^0-9.]/g, "")) || 0)
+        : null;
+
+    // Rigid real-time intercept: block dispatch if custom COD exceeds order total
+    if (!isPrepaid && enteredCodNum !== null && maxOrderPrice > 0 && enteredCodNum > maxOrderPrice) {
+      return;
+    }
+
+    const effectiveCod = isPrepaid
+      ? "0"
+      : enteredCodNum !== null
+      ? String(enteredCodNum)
+      : String(order.codAmount);
+
     const formData = new FormData();
     formData.append("actionType", "dispatchOrder");
     formData.append("orderId", order.id);
@@ -3933,9 +3992,11 @@ export default function OrdersFulfillmentPage() {
     formData.append("customerPhone", order.customerPhone);
     formData.append("shippingAddress", order.shippingAddress);
     formData.append("isInsideDhaka", String(order.isInsideDhaka));
-    formData.append("codAmount", String(order.codAmount));
+    formData.append("codAmount", effectiveCod);
     formData.append("currencyCode", order.currencyCode);
     formData.append("warehouseNote", customNote);
+    formData.append("financialStatus", String(order.financialStatus || order.displayFinancialStatus || ""));
+    formData.append("totalPrice", String(order.totalPrice || ""));
     formData.append("lineItemsJson", JSON.stringify(order.lineItems));
     formData.append("isRiskyLocked", String(order.isRiskyLocked));
     formData.append("manualOverrideConfirmed", String(isUnlocked));
@@ -3983,6 +4044,26 @@ export default function OrdersFulfillmentPage() {
           ? rawCourier
           : courierSelectOptions[0]?.value || rawCourier;
 
+        const isPrepaid =
+          order.financialStatus?.toLowerCase() === "paid" ||
+          order.financialStatus?.toLowerCase() === "authorized" ||
+          order.displayFinancialStatus?.toUpperCase() === "PAID";
+
+        const customCodVal = customCodAmountsByOrder[order.id];
+        const maxOrderPrice = Math.round(
+          Number(String(order.totalPrice || "0").replace(/[^0-9.]/g, "")) || 0
+        );
+        const enteredCodNum =
+          customCodVal !== undefined && customCodVal.trim() !== ""
+            ? Math.round(Number(String(customCodVal).replace(/[^0-9.]/g, "")) || 0)
+            : null;
+
+        const effectiveCod = isPrepaid
+          ? "0"
+          : enteredCodNum !== null
+          ? String(Math.min(enteredCodNum, maxOrderPrice > 0 ? maxOrderPrice : enteredCodNum))
+          : String(order.codAmount);
+
         return {
           orderId: order.id,
           orderName: order.name,
@@ -3991,12 +4072,14 @@ export default function OrdersFulfillmentPage() {
           customerPhone: order.customerPhone,
           shippingAddress: order.shippingAddress,
           isInsideDhaka: order.isInsideDhaka,
-          codAmount: String(order.codAmount),
+          codAmount: effectiveCod,
           currencyCode: order.currencyCode,
           warehouseNote: warehouseNotesByOrder[order.id] ?? order.warehouseNote,
           lineItems: order.lineItems,
           isRiskyLocked: order.isRiskyLocked,
           manualOverrideConfirmed: Boolean(manuallyUnlockedOrders[order.id]),
+          financialStatus: String(order.financialStatus || order.displayFinancialStatus || ""),
+          totalPrice: String(order.totalPrice || ""),
           manualCityId: manualCityIds[order.id] || null,
           manualZoneId: manualZoneIds[order.id] || null,
           manualAreaId: manualAreaIds[order.id] || null,
@@ -4215,6 +4298,33 @@ export default function OrdersFulfillmentPage() {
   const bulkActions = promotedBulkActions;
 
   const rowMarkup = displayedOrders.map((order, index) => {
+    const isRowPrepaid =
+      order.financialStatus?.toLowerCase() === "paid" ||
+      order.financialStatus?.toLowerCase() === "authorized" ||
+      order.displayFinancialStatus?.toUpperCase() === "PAID" ||
+      order.codAmount === 0;
+
+    const rowCustomCodVal = customCodAmountsByOrder[order.id];
+    const rowMaxPrice = Math.round(
+      Number(String(order.totalPrice || "0").replace(/[^0-9.]/g, "")) || 0
+    );
+    const rowEnteredCodNum =
+      rowCustomCodVal !== undefined && rowCustomCodVal.trim() !== ""
+        ? Math.round(Number(String(rowCustomCodVal).replace(/[^0-9.]/g, "")) || 0)
+        : null;
+
+    const isRowCodOverflow =
+      !isRowPrepaid &&
+      rowEnteredCodNum !== null &&
+      rowMaxPrice > 0 &&
+      rowEnteredCodNum > rowMaxPrice;
+
+    const rowEffectiveCod = isRowPrepaid
+      ? "0"
+      : rowEnteredCodNum !== null
+      ? String(rowEnteredCodNum)
+      : String(order.codAmount);
+
     const rawSelectedCourier =
       selectedCouriersByOrder[order.id] || order.assignedCourier;
     const isSelectedActive = courierSelectOptions.some(
@@ -4557,31 +4667,84 @@ export default function OrdersFulfillmentPage() {
         {/* Column 4: Payment Status & Collectable COD */}
         <IndexTable.Cell>
           <div
+            onClick={(e) => e.stopPropagation()}
             className="flex items-center"
             style={{ display: "flex", alignItems: "center" }}
           >
-            <Box minWidth="130px" maxWidth="170px">
+            <Box minWidth="140px" maxWidth="210px">
               <BlockStack gap="100">
                 <Text variant="bodySm" fontWeight="bold" as="span">
                   {`${order.currencyCode} ${order.totalPrice}`}
                 </Text>
                 <InlineStack gap="100" wrap>
                   <Badge
-                    tone={order.displayFinancialStatus?.toUpperCase() === "PAID" ? "success" : "attention"}
+                    tone={isRowPrepaid ? "success" : "attention"}
                     size="small"
                   >
-                    {order.displayFinancialStatus || "UNPAID"}
+                    {order.displayFinancialStatus || (isRowPrepaid ? "PAID" : "UNPAID")}
                   </Badge>
-                  {order.codAmount === 0 ? (
+                  {isRowPrepaid ? (
                     <Badge tone="success" size="small">
                       PREPAID (৳0 COD)
                     </Badge>
-                  ) : (
-                    <Badge tone="attention" size="small">
-                      {`COD: ৳${order.codAmount}`}
-                    </Badge>
-                  )}
+                  ) : !showCodEdit[order.id] ? (
+                    <InlineStack gap="050" blockAlign="center">
+                      <Badge tone="attention" size="small">
+                        {`COD: ৳${rowEffectiveCod}`}
+                      </Badge>
+                      {!dispatchedInfo && (
+                        <Button
+                          variant="plain"
+                          size="slim"
+                          onClick={() =>
+                            setShowCodEdit((prev) => ({ ...prev, [order.id]: true }))
+                          }
+                        >
+                          ✏️ Edit
+                        </Button>
+                      )}
+                    </InlineStack>
+                  ) : null}
                 </InlineStack>
+
+                {/* Custom COD Input Field & Real-time Validation Guardrail */}
+                {!isRowPrepaid && !dispatchedInfo && showCodEdit[order.id] && (
+                  <BlockStack gap="050">
+                    <InlineStack gap="100" blockAlign="center">
+                      <div style={{ maxWidth: "110px" }}>
+                        <TextField
+                          label="Custom COD Amount"
+                          labelHidden
+                          type="number"
+                          size="slim"
+                          autoComplete="off"
+                          prefix="৳"
+                          value={customCodAmountsByOrder[order.id] ?? String(order.codAmount)}
+                          onChange={(val) => {
+                            setCustomCodAmountsByOrder((prev) => ({
+                              ...prev,
+                              [order.id]: val,
+                            }));
+                          }}
+                        />
+                      </div>
+                      <Button
+                        size="slim"
+                        variant="plain"
+                        onClick={() =>
+                          setShowCodEdit((prev) => ({ ...prev, [order.id]: false }))
+                        }
+                      >
+                        ✕ Done
+                      </Button>
+                    </InlineStack>
+                    {isRowCodOverflow && (
+                      <Text as="p" variant="bodyXs" tone="critical">
+                        ⚠️ COD amount cannot exceed the total order value.
+                      </Text>
+                    )}
+                  </BlockStack>
+                )}
               </BlockStack>
             </Box>
           </div>
@@ -5014,9 +5177,10 @@ export default function OrdersFulfillmentPage() {
                 variant="primary"
                 size="slim"
                 loading={isRowSubmitting}
+                disabled={isRowCodOverflow}
                 onClick={() => handleSendSingleOrder(order)}
               >
-                Send to Courier
+                Confirm & Dispatch
               </Button>
             )}
           </div>
