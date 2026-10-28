@@ -6183,7 +6183,7 @@ export default function OrdersFulfillmentPage() {
             className="flex items-center"
             style={{ display: "flex", alignItems: "center", width: "100%" }}
           >
-            <div className="max-w-[110px] w-28" style={{ maxWidth: "110px" }}>
+            <div className="max-w-[105px] w-[105px]" style={{ maxWidth: "105px", width: "105px" }}>
               <TextField
                 label="Warehouse Packaging Note"
                 labelHidden
@@ -9568,77 +9568,6 @@ export default function OrdersFulfillmentPage() {
                 </Box>
               )}
 
-              {/* White Sticky Floating Bulk Actions Bar */}
-              {selectedResources.length > 0 && (
-                <Box paddingBlock="200" paddingInline="400">
-                  <div
-                    style={{
-                      position: "sticky",
-                      top: "0px",
-                      zIndex: 35,
-                      backgroundColor: "var(--p-color-bg-surface, #ffffff)",
-                      border: "1px solid var(--p-color-border-subdued, #e1e3e5)",
-                      borderRadius: "8px",
-                      padding: "10px 16px",
-                      boxShadow: "0 4px 12px rgba(0, 0, 0, 0.08)",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "space-between",
-                      marginBottom: "8px",
-                    }}
-                  >
-                    <InlineStack gap="300" blockAlign="center">
-                      <Text as="span" variant="bodyMd" fontWeight="semibold">
-                        {selectedResources.length} {selectedResources.length === 1 ? "order" : "orders"} selected
-                      </Text>
-                    </InlineStack>
-                    <InlineStack gap="200" blockAlign="center">
-                      <Popover
-                        active={isUpdateStatusPopoverOpen}
-                        activator={
-                          <Button
-                            variant="primary"
-                            disclosure
-                            onClick={() => setIsUpdateStatusPopoverOpen((prev) => !prev)}
-                            disabled={isSubmitting || isBulkSubmitting}
-                          >
-                            Update Status
-                          </Button>
-                        }
-                        onClose={() => setIsUpdateStatusPopoverOpen(false)}
-                      >
-                        <ActionList
-                          actionRole="menuitem"
-                          items={[
-                            {
-                              content: "Move to Pending",
-                              onAction: () => {
-                                setIsUpdateStatusPopoverOpen(false);
-                                handleBulkUpdateStatus("pending");
-                              },
-                            },
-                            {
-                              content: "Move to Cancelled",
-                              onAction: () => {
-                                setIsUpdateStatusPopoverOpen(false);
-                                handleBulkUpdateStatus("cancelled");
-                              },
-                              destructive: true,
-                            },
-                          ]}
-                        />
-                      </Popover>
-                      <Button onClick={handlePrintLabels} disabled={isSubmitting || isBulkSubmitting}>
-                        Print Labels
-                      </Button>
-                      <Button onClick={handlePrintInvoices} disabled={isSubmitting || isBulkSubmitting}>
-                        Print Invoices
-                      </Button>
-                    </InlineStack>
-                  </div>
-                </Box>
-              )}
-
               {/* Advanced Audit Point 6: Asynchronous Mass Dispatch Progress & Wait Indicator */}
               {isBulkSubmitting && (
                 <Box paddingBlock="300" paddingInline="400">
@@ -9716,6 +9645,8 @@ export default function OrdersFulfillmentPage() {
                     selectable={true}
                     loading={isBulkSubmitting || navigation.state === "loading"}
                     headings={tableHeadings as any}
+                    promotedBulkActions={promotedBulkActions}
+                    bulkActions={bulkActions}
                   >
                     {rowMarkup}
                   </IndexTable>
