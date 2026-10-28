@@ -3728,21 +3728,48 @@ export default function CourierSettingsPage() {
               alignItems: "start",
             }}
           >
-            {/* LEFT PANEL: UPDATE SETTINGS FORM CONTROLS */}
-            <Card padding="500">
-              <BlockStack gap="400">
-                <BlockStack gap="100">
-                  <Text as="h3" variant="headingMd" fontWeight="bold">
-                    Update Settings
-                  </Text>
-                  <Text as="p" variant="bodySm" tone="subdued">
-                    Customize your thermal shipping label dimensions, store branding, and dispatch information.
-                  </Text>
-                </BlockStack>
-
-                <Divider />
-
+                        {/* LEFT PANEL: TWO SEPARATE WHITE CARDS (16px GAP) */}
+            <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+              {/* BLOCK 1: Title "Label Design Template" */}
+              <Card padding="500">
                 <BlockStack gap="300">
+                  <Text as="h2" variant="headingSm" fontWeight="bold">
+                    Label Design Template
+                  </Text>
+                  <ChoiceList
+                    title="Label Design Template"
+                    titleHidden
+                    choices={[
+                      {
+                        label: "Standard",
+                        value: "standard",
+                        helpText: "Free & Starter plan",
+                      },
+                      {
+                        label: "Modern",
+                        value: "brand_centric",
+                        helpText: "Growth & Pro plan",
+                      },
+                      {
+                        label: "Premium",
+                        value: "smart_warehouse",
+                        helpText: "Advanced & Enterprise plan",
+                      },
+                    ]}
+                    selected={labelStyle ? [labelStyle] : ["standard"]}
+                    onChange={(selected) => setLabelStyle(selected[0] || "standard")}
+                  />
+                </BlockStack>
+              </Card>
+
+              {/* BLOCK 2: Title "Brand Details" */}
+              <Card padding="500">
+                <BlockStack gap="400">
+                  <Text as="h2" variant="headingSm" fontWeight="bold">
+                    Brand Details
+                  </Text>
+
+                  {/* Label Size Dropdown placed at the very top of Block 2 */}
                   <Select
                     label="Label Size *"
                     options={[
@@ -3762,57 +3789,6 @@ export default function CourierSettingsPage() {
                     onChange={(val) => setLabelSize(val)}
                   />
 
-                  {/* LABEL DESIGN TEMPLATE (CHOICELIST) WITH PLAN-TIER LOGIC */}
-                  <BlockStack gap="200">
-                    <Text as="span" variant="bodySm" fontWeight="medium">
-                      Label Design Template
-                    </Text>
-                    <ChoiceList
-                      title="Label Design Template"
-                      titleHidden
-                      choices={[
-                        {
-                          label: "Standard Courier Label",
-                          value: "standard",
-                          helpText: (
-                            <span className="flex items-center gap-1.5 text-xs text-gray-500 mt-0.5">
-                              <span className="inline-block px-1.5 py-0.5 bg-gray-100 text-gray-700 font-semibold rounded text-[10px]">
-                                Free & Starter
-                              </span>
-                              <span>Available on Free & Starter Plans</span>
-                            </span>
-                          ),
-                        },
-                        {
-                          label: "Brand-Centric Premium Label (Pro)",
-                          value: "brand_centric",
-                          helpText: (
-                            <span className="flex items-center gap-1.5 text-xs text-gray-500 mt-0.5">
-                              <span className="inline-block px-1.5 py-0.5 bg-blue-100 text-blue-700 font-semibold rounded text-[10px]">
-                                Requires Pro/Growth
-                              </span>
-                              <span>Requires Pro/Growth Plan upgrade</span>
-                            </span>
-                          ),
-                        },
-                        {
-                          label: "Smart Warehouse Slip (Enterprise)",
-                          value: "smart_warehouse",
-                          helpText: (
-                            <span className="flex items-center gap-1.5 text-xs text-gray-500 mt-0.5">
-                              <span className="inline-block px-1.5 py-0.5 bg-purple-100 text-purple-700 font-semibold rounded text-[10px]">
-                                Requires Enterprise
-                              </span>
-                              <span>Requires Advanced/Enterprise Plan upgrade</span>
-                            </span>
-                          ),
-                        },
-                      ]}
-                      selected={labelStyle ? [labelStyle] : ["standard"]}
-                      onChange={(selected) => setLabelStyle(selected[0] || "standard")}
-                    />
-                  </BlockStack>
-
                   {/* PRO TIER FIELD: Social Media Handle */}
                   {labelStyle === "brand_centric" && (
                     <TextField
@@ -3821,7 +3797,6 @@ export default function CourierSettingsPage() {
                       onChange={(val) => setSocialHandle(val)}
                       placeholder="e.g. @safeparcelbd or fb.com/safeparcelbd"
                       autoComplete="off"
-                      helpText="Printed on label header to encourage social media follows and customer engagement."
                     />
                   )}
 
@@ -3850,7 +3825,6 @@ export default function CourierSettingsPage() {
                             setWarehouseWarning(val);
                           }
                         }}
-                        helpText="Select preset handling instruction or customize text below."
                       />
                       <TextField
                         label="Warning Label Text"
@@ -3869,7 +3843,6 @@ export default function CourierSettingsPage() {
                     onChange={(val) => setBrandName(val)}
                     placeholder="e.g. My Awesome Shop"
                     autoComplete="off"
-                    helpText="Required for generating the shipping label header."
                   />
 
                   {/* CRITICAL CONDITIONAL FORM LOGIC: Hidden on compact sizes */}
@@ -3928,28 +3901,28 @@ export default function CourierSettingsPage() {
                       </DropZone>
                     )}
                   </BlockStack>
+
+                  <Divider />
+
+                  <InlineStack align="space-between" blockAlign="center">
+                    <Button
+                      variant="plain"
+                      tone="critical"
+                      onClick={handleResetShippingLabel}
+                    >
+                      Reset
+                    </Button>
+                    <Button
+                      variant="primary"
+                      loading={isSubmittingShippingLabel}
+                      onClick={handleSaveShippingLabelSettings}
+                    >
+                      Save Settings
+                    </Button>
+                  </InlineStack>
                 </BlockStack>
-
-                <Divider />
-
-                <InlineStack align="space-between" blockAlign="center">
-                  <Button
-                    variant="plain"
-                    tone="critical"
-                    onClick={handleResetShippingLabel}
-                  >
-                    Reset
-                  </Button>
-                  <Button
-                    variant="primary"
-                    loading={isSubmittingShippingLabel}
-                    onClick={handleSaveShippingLabelSettings}
-                  >
-                    Save Settings
-                  </Button>
-                </InlineStack>
-              </BlockStack>
-            </Card>
+              </Card>
+            </div>
 
             {/* RIGHT PANEL: PREVIEW (DEMO DATA) LIVE REACT ENGINE */}
             <Card padding="500">
