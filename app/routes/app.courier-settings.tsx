@@ -1727,30 +1727,61 @@ export default function CourierSettingsPage() {
     "2in x 2.95in",
   ].includes(labelSize);
 
+  // Form field visibility rules:
+  // - Brand Contacts (Phone, Address, Social Handle): Large sizes + "4in x 2in" (wide) + "2in x 2.95in" (tall)
+  const canShowBrandContacts = ![
+    "3in x 2in",
+    "2in x 1.5in",
+    "1.5in x 1in",
+    "2in x 1in",
+    "2in x 1.15in",
+    "2.2in x 1.4in",
+  ].includes(labelSize);
+
+  // - Warehouse Warning & Theme: Large sizes ("4in x 6in", "3in x 4in", "3in x 3in") + "2in x 2.95in" (tall vertical space)
+  const canShowWarehouseWarning = [
+    "4in x 6in",
+    "3in x 4in",
+    "3in x 3in",
+    "2in x 2.95in",
+  ].includes(labelSize);
+
+  const isUltraSmall = [
+    "1.5in x 1in",
+    "2in x 1in",
+    "2in x 1.15in",
+    "2.2in x 1.4in",
+  ].includes(labelSize);
+  const isWideHorizontal = labelSize === "4in x 2in";
+  const isTallNarrow = labelSize === "2in x 2.95in";
+  const isSquare3x3 = labelSize === "3in x 3in";
+  const isMedium3x4 = labelSize === "3in x 4in";
+  const isFullSlip = ["4in x 6in", "3in x 4in", "3in x 3in"].includes(labelSize);
+
   const getLabelDimensions = (size: string) => {
     switch (size) {
       case "4in x 6in":
         return { maxWidth: "320px", minHeight: "460px", padding: "16px 18px", aspectRatio: "2 / 3" };
       case "3in x 4in":
-        return { maxWidth: "300px", minHeight: "390px", padding: "14px 16px", aspectRatio: "3 / 4" };
+        return { maxWidth: "300px", minHeight: "400px", padding: "10px 12px", aspectRatio: "3 / 4" };
       case "3in x 3in":
-        return { maxWidth: "300px", minHeight: "300px", padding: "14px 14px", aspectRatio: "1 / 1" };
+        return { maxWidth: "300px", minHeight: "300px", padding: "8px 10px", aspectRatio: "1 / 1" };
       case "4in x 2in":
-        return { maxWidth: "340px", minHeight: "170px", padding: "10px 14px", aspectRatio: "2 / 1" };
+        return { maxWidth: "340px", minHeight: "170px", padding: "6px 12px", aspectRatio: "2 / 1" };
       case "3in x 2in":
         return { maxWidth: "300px", minHeight: "195px", padding: "10px 12px", aspectRatio: "3 / 2" };
       case "2in x 1.5in":
         return { maxWidth: "260px", minHeight: "190px", padding: "8px 10px", aspectRatio: "4 / 3" };
       case "2in x 2.95in":
-        return { maxWidth: "220px", minHeight: "315px", padding: "10px 10px", aspectRatio: "2 / 2.95" };
+        return { maxWidth: "220px", minHeight: "315px", padding: "8px 8px", aspectRatio: "2 / 2.95" };
       case "2.2in x 1.4in":
-        return { maxWidth: "260px", minHeight: "160px", padding: "8px 10px", aspectRatio: "2.2 / 1.4" };
+        return { maxWidth: "260px", minHeight: "165px", padding: "4px 6px", aspectRatio: "2.2 / 1.4" };
       case "2in x 1.15in":
-        return { maxWidth: "250px", minHeight: "140px", padding: "6px 8px", aspectRatio: "2 / 1.15" };
+        return { maxWidth: "250px", minHeight: "144px", padding: "4px 6px", aspectRatio: "2 / 1.15" };
       case "2in x 1in":
-        return { maxWidth: "250px", minHeight: "125px", padding: "6px 8px", aspectRatio: "2 / 1" };
+        return { maxWidth: "250px", minHeight: "125px", padding: "4px 6px", aspectRatio: "2 / 1" };
       case "1.5in x 1in":
-        return { maxWidth: "225px", minHeight: "145px", padding: "6px 8px", aspectRatio: "1.5 / 1" };
+        return { maxWidth: "225px", minHeight: "150px", padding: "4px 6px", aspectRatio: "1.5 / 1" };
       default:
         return { maxWidth: "320px", minHeight: "460px", padding: "16px 18px", aspectRatio: "2 / 3" };
     }
@@ -3888,8 +3919,8 @@ export default function CourierSettingsPage() {
                     onChange={(val) => setLabelSize(val)}
                   />
 
-                  {/* PRO TIER FIELD: Social Media Handle (Visible only for large sizes) */}
-                  {!isCompactLabel && labelStyle === "brand_centric" && (
+                  {/* PRO TIER FIELD: Social Media Handle (Enabled for large sizes, 4in x 2in, and 2in x 2.95in) */}
+                  {canShowBrandContacts && labelStyle === "brand_centric" && (
                     <TextField
                       label="Instagram / Facebook handle (@brand)"
                       value={socialHandle}
@@ -3899,8 +3930,8 @@ export default function CourierSettingsPage() {
                     />
                   )}
 
-                  {/* ENTERPRISE TIER FIELD: Fallback Custom Warehouse Warning Label & Theme (Visible only for large sizes) */}
-                  {!isCompactLabel && labelStyle === "smart_warehouse" && (
+                  {/* ENTERPRISE TIER FIELD: Fallback Custom Warehouse Warning Label & Theme (Enabled for large sizes and 2in x 2.95in) */}
+                  {canShowWarehouseWarning && labelStyle === "smart_warehouse" && (
                     <BlockStack gap="200">
                       <Select
                         label="Fallback Warehouse Warning Label"
@@ -3956,8 +3987,8 @@ export default function CourierSettingsPage() {
                     autoComplete="off"
                   />
 
-                  {/* CRITICAL CONDITIONAL FORM LOGIC: Hidden on compact sizes */}
-                  {!isCompactLabel && (
+                  {/* Additional Brand Contacts: Enabled for large sizes, 4in x 2in, and 2in x 2.95in */}
+                  {canShowBrandContacts && (
                     <>
                       <TextField
                         label="Brand Phone"
@@ -4134,111 +4165,259 @@ export default function CourierSettingsPage() {
                         display: "flex",
                         flexDirection: "column",
                         justifyContent: "space-between",
-                        gap: isCompactLabel ? "6px" : "10px",
+                        gap: isUltraSmall ? "2px" : isWideHorizontal ? "3px" : isSquare3x3 ? "3px" : isCompactLabel ? "6px" : "8px",
                         transition: "all 0.2s ease-in-out",
+                        boxSizing: "border-box",
+                        overflow: "hidden",
                       }}
                     >
                       {/* TOP HEADER SECTION */}
-                      <div style={{ textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center" }}>
-                        {brandLogo && (
-                          <img
-                            src={brandLogo}
-                            alt={brandName}
-                            style={{
-                              maxHeight: isCompactLabel ? "24px" : "40px",
-                              maxWidth: "180px",
-                              objectFit: "contain",
-                              marginBottom: isCompactLabel ? "3px" : "6px",
-                            }}
-                          />
-                        )}
-                        {brandName.trim() && (
-                          <div
-                            style={{
-                              fontWeight: 800,
-                              fontSize: isCompactLabel ? "12px" : "16px",
-                              textTransform: "uppercase",
-                              letterSpacing: "0.5px",
-                              lineHeight: 1.2,
-                              whiteSpace: "nowrap",
-                              overflow: "hidden",
-                              textOverflow: "ellipsis",
-                              maxWidth: "100%",
-                              maxHeight: isCompactLabel ? "18px" : "24px",
-                            }}
-                            title={brandName}
-                          >
-                            {brandName}
+                      {isUltraSmall ? (
+                        /* ULTRA-SMALL (1.5x1, 2x1, 2x1.15, 2.2x1.4): Single compact horizontal top row */
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "4px", width: "100%", overflow: "hidden" }}>
+                          {brandLogo && (
+                            <img
+                              src={brandLogo}
+                              alt={brandName}
+                              style={{ maxHeight: "13px", maxWidth: "45px", objectFit: "contain", flexShrink: 0 }}
+                            />
+                          )}
+                          {brandName.trim() && (
+                            <span
+                              style={{
+                                fontWeight: 800,
+                                fontSize: "8.5px",
+                                textTransform: "uppercase",
+                                whiteSpace: "nowrap",
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                                lineHeight: 1.1,
+                              }}
+                              title={brandName}
+                            >
+                              {brandName}
+                            </span>
+                          )}
+                        </div>
+                      ) : isWideHorizontal ? (
+                        /* 4in x 2in (Wide Strip): Brand Logo/Name on LEFT, Brand Phone/Address or Social on RIGHT */
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%", gap: "6px" }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: "5px", minWidth: 0, maxWidth: "55%" }}>
+                            {brandLogo && (
+                              <img
+                                src={brandLogo}
+                                alt={brandName}
+                                style={{ maxHeight: "18px", maxWidth: "60px", objectFit: "contain", flexShrink: 0 }}
+                              />
+                            )}
+                            {brandName.trim() && (
+                              <div
+                                style={{
+                                  fontWeight: 800,
+                                  fontSize: "11px",
+                                  textTransform: "uppercase",
+                                  whiteSpace: "nowrap",
+                                  overflow: "hidden",
+                                  textOverflow: "ellipsis",
+                                  lineHeight: 1.15,
+                                }}
+                                title={brandName}
+                              >
+                                {brandName}
+                              </div>
+                            )}
                           </div>
-                        )}
-                        {!isCompactLabel && labelStyle === "brand_centric" && socialHandle.trim() && (
-                          <div
-                            style={{
-                              fontSize: "10px",
-                              fontWeight: 700,
-                              color: "#1d4ed8",
-                              marginTop: "3px",
-                              display: "flex",
-                              alignItems: "center",
-                              justifyContent: "center",
-                              gap: "4px",
-                            }}
-                          >
-                            <span>📱 {socialHandle.startsWith("@") ? socialHandle : `@${socialHandle}`}</span>
+                          <div style={{ textAlign: "right", fontSize: "8.5px", color: "#333333", lineHeight: 1.2, minWidth: 0, maxWidth: "45%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                            {labelStyle === "brand_centric" && socialHandle.trim() ? (
+                              <span style={{ color: "#1d4ed8", fontWeight: 700 }}>
+                                📱 {socialHandle.startsWith("@") ? socialHandle : `@${socialHandle}`}
+                              </span>
+                            ) : (
+                              <>
+                                {brandPhone.trim() && <div>📞 {brandPhone}</div>}
+                                {brandAddress.trim() && !brandPhone.trim() && <div>📍 {brandAddress}</div>}
+                              </>
+                            )}
                           </div>
-                        )}
-                        {!isCompactLabel && (brandPhone.trim() || brandAddress.trim()) && (
-                          <div
-                            style={{
-                              fontSize: "10px",
-                              color: "#333333",
-                              marginTop: "4px",
-                              lineHeight: 1.3,
-                            }}
-                          >
-                            {brandPhone.trim() && <div>📞 {brandPhone}</div>}
-                            {brandAddress.trim() && <div>📍 {brandAddress}</div>}
-                          </div>
-                        )}
-                      </div>
+                        </div>
+                      ) : (
+                        /* Standard Top Header (4x6, 3x4, 3x3, 3x2, 2x1.5, 2x2.95) */
+                        <div style={{ textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center" }}>
+                          {brandLogo && (
+                            <img
+                              src={brandLogo}
+                              alt={brandName}
+                              style={{
+                                maxHeight: isSquare3x3 ? "20px" : isMedium3x4 ? "26px" : isCompactLabel ? "22px" : "36px",
+                                maxWidth: "160px",
+                                objectFit: "contain",
+                                marginBottom: isSquare3x3 ? "2px" : isCompactLabel ? "2px" : "4px",
+                              }}
+                            />
+                          )}
+                          {brandName.trim() && (
+                            <div
+                              style={{
+                                fontWeight: 800,
+                                fontSize: isSquare3x3 ? "11px" : isCompactLabel ? "11px" : "15px",
+                                textTransform: "uppercase",
+                                letterSpacing: "0.5px",
+                                lineHeight: 1.15,
+                                whiteSpace: "nowrap",
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                                maxWidth: "100%",
+                                maxHeight: isCompactLabel ? "16px" : "22px",
+                              }}
+                              title={brandName}
+                            >
+                              {brandName}
+                            </div>
+                          )}
+                          {canShowBrandContacts && labelStyle === "brand_centric" && socialHandle.trim() && (
+                            <div
+                              style={{
+                                fontSize: isTallNarrow ? "8.5px" : "9.5px",
+                                fontWeight: 700,
+                                color: "#1d4ed8",
+                                marginTop: "2px",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                gap: "3px",
+                              }}
+                            >
+                              <span>📱 {socialHandle.startsWith("@") ? socialHandle : `@${socialHandle}`}</span>
+                            </div>
+                          )}
+                          {canShowBrandContacts && (brandPhone.trim() || brandAddress.trim()) && (
+                            <div
+                              style={{
+                                fontSize: isTallNarrow ? "8px" : "9px",
+                                color: "#333333",
+                                marginTop: "2px",
+                                lineHeight: 1.2,
+                              }}
+                            >
+                              {brandPhone.trim() && <div>📞 {brandPhone}</div>}
+                              {brandAddress.trim() && <div>📍 {brandAddress}</div>}
+                            </div>
+                          )}
+                        </div>
+                      )}
 
                       <div style={{ borderBottom: "1.5px dashed #000000", width: "100%" }} />
 
                       {/* MIDDLE DEMO DATA SECTION (Order No, Customer, Phone, COD) */}
-                      <div
-                        style={{
-                          fontSize: isCompactLabel ? "10px" : "12px",
-                          lineHeight: isCompactLabel ? 1.35 : 1.45,
-                          display: "flex",
-                          flexDirection: "column",
-                          gap: isCompactLabel ? "2px" : "3px",
-                        }}
-                      >
-                        <div style={{ display: "flex", justifyContent: "space-between" }}>
-                          <span style={{ fontWeight: 700 }}>Order No:</span>
-                          <span style={{ fontWeight: 800 }}>#DD0001</span>
-                        </div>
-                        <div style={{ display: "flex", justifyContent: "space-between" }}>
-                          <span style={{ fontWeight: 700 }}>Name:</span>
-                          <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>নাফিস / Nahid</span>
-                        </div>
-                        <div style={{ display: "flex", justifyContent: "space-between" }}>
-                          <span style={{ fontWeight: 700 }}>Phone:</span>
-                          <span>01334455667</span>
-                        </div>
+                      {isUltraSmall ? (
+                        /* Ultra-compact Demo Data for 1.5x1, 2x1, 2x1.15, 2.2x1.4 */
                         <div
                           style={{
+                            fontSize: "8px",
+                            lineHeight: 1.15,
                             display: "flex",
-                            justifyContent: "space-between",
-                            borderTop: "1px dashed #000000",
-                            paddingTop: "2px",
-                            marginTop: "1px",
+                            flexDirection: "column",
+                            gap: "1px",
                           }}
                         >
-                          <span style={{ fontWeight: 700, textTransform: "uppercase" }}>Total COD:</span>
-                          <span style={{ fontWeight: 800 }}>৳1,250</span>
+                          <div style={{ display: "flex", justifyContent: "space-between" }}>
+                            <span style={{ fontWeight: 700 }}>Order:</span>
+                            <span style={{ fontWeight: 800 }}>#DD0001</span>
+                          </div>
+                          <div style={{ display: "flex", justifyContent: "space-between" }}>
+                            <span style={{ fontWeight: 700 }}>To:</span>
+                            <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "65%" }}>নাফিস / Nahid</span>
+                          </div>
+                          <div style={{ display: "flex", justifyContent: "space-between" }}>
+                            <span style={{ fontWeight: 700 }}>Phone:</span>
+                            <span>01334455667</span>
+                          </div>
+                          <div
+                            style={{
+                              display: "flex",
+                              justifyContent: "space-between",
+                              borderTop: "1px dashed #000000",
+                              paddingTop: "1px",
+                              marginTop: "1px",
+                            }}
+                          >
+                            <span style={{ fontWeight: 700 }}>COD:</span>
+                            <span style={{ fontWeight: 800 }}>৳1,250</span>
+                          </div>
                         </div>
-                      </div>
+                      ) : isWideHorizontal ? (
+                        /* 4in x 2in Grid Layout to save vertical space and prevent overflow */
+                        <div
+                          style={{
+                            fontSize: "8.5px",
+                            lineHeight: 1.2,
+                            display: "grid",
+                            gridTemplateColumns: "1fr 1fr",
+                            columnGap: "10px",
+                            rowGap: "1px",
+                          }}
+                        >
+                          <div style={{ display: "flex", justifyContent: "space-between" }}>
+                            <span style={{ fontWeight: 700 }}>Order No:</span>
+                            <span style={{ fontWeight: 800 }}>#DD0001</span>
+                          </div>
+                          <div style={{ display: "flex", justifyContent: "space-between" }}>
+                            <span style={{ fontWeight: 700 }}>Phone:</span>
+                            <span>01334455667</span>
+                          </div>
+                          <div style={{ display: "flex", justifyContent: "space-between" }}>
+                            <span style={{ fontWeight: 700 }}>Name:</span>
+                            <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>নাফিস / Nahid</span>
+                          </div>
+                          <div
+                            style={{
+                              display: "flex",
+                              justifyContent: "space-between",
+                              borderTop: "1px dashed #000000",
+                              paddingTop: "1px",
+                            }}
+                          >
+                            <span style={{ fontWeight: 700 }}>Total COD:</span>
+                            <span style={{ fontWeight: 800 }}>৳1,250</span>
+                          </div>
+                        </div>
+                      ) : (
+                        /* Standard Stacked Demo Data (4x6, 3x4, 3x3, 3x2, 2x1.5, 2x2.95) */
+                        <div
+                          style={{
+                            fontSize: isSquare3x3 ? "9.5px" : isCompactLabel ? "10px" : "11.5px",
+                            lineHeight: isSquare3x3 ? 1.2 : isCompactLabel ? 1.3 : 1.4,
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: isSquare3x3 ? "1px" : isCompactLabel ? "1px" : "2px",
+                          }}
+                        >
+                          <div style={{ display: "flex", justifyContent: "space-between" }}>
+                            <span style={{ fontWeight: 700 }}>Order No:</span>
+                            <span style={{ fontWeight: 800 }}>#DD0001</span>
+                          </div>
+                          <div style={{ display: "flex", justifyContent: "space-between" }}>
+                            <span style={{ fontWeight: 700 }}>Name:</span>
+                            <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>নাফিস / Nahid</span>
+                          </div>
+                          <div style={{ display: "flex", justifyContent: "space-between" }}>
+                            <span style={{ fontWeight: 700 }}>Phone:</span>
+                            <span>01334455667</span>
+                          </div>
+                          <div
+                            style={{
+                              display: "flex",
+                              justifyContent: "space-between",
+                              borderTop: "1px dashed #000000",
+                              paddingTop: "2px",
+                              marginTop: "1px",
+                            }}
+                          >
+                            <span style={{ fontWeight: 700, textTransform: "uppercase" }}>Total COD:</span>
+                            <span style={{ fontWeight: 800 }}>৳1,250</span>
+                          </div>
+                        </div>
+                      )}
 
                       <div style={{ borderBottom: "1.5px dashed #000000", width: "100%" }} />
 
@@ -4249,156 +4428,215 @@ export default function CourierSettingsPage() {
                           display: "flex",
                           flexDirection: "column",
                           alignItems: "center",
-                          gap: "2px",
+                          gap: "1px",
                         }}
                       >
                         <DynamicBarcodeGraphic
                           code="PREVIEW-TRACK-SAMPLE"
-                          height={isCompactLabel ? 22 : 36}
+                          height={
+                            isUltraSmall
+                              ? 13
+                              : isWideHorizontal
+                              ? 16
+                              : isSquare3x3
+                              ? 18
+                              : isMedium3x4
+                              ? 24
+                              : isCompactLabel
+                              ? 22
+                              : 34
+                          }
                           showText={true}
+                          fontSize={
+                            isUltraSmall
+                              ? "7.5px"
+                              : isWideHorizontal
+                              ? "8px"
+                              : isSquare3x3
+                              ? "8px"
+                              : isMedium3x4
+                              ? "9px"
+                              : isCompactLabel
+                              ? "8.5px"
+                              : "11px"
+                          }
                         />
                       </div>
 
-                      {/* DYNAMIC TEMPLATE-SPECIFIC FOOTER / EXTRA SECTION (Rendered ONLY for large sizes) */}
-                      {!isCompactLabel && labelStyle === "standard" && (
-                        <div
-                          style={{
-                            borderTop: "1.5px dashed #000000",
-                            paddingTop: "6px",
-                            marginTop: "2px",
-                            fontSize: "10px",
-                            color: "#374151",
-                            lineHeight: 1.3,
-                          }}
-                        >
-                          <strong>Note:</strong> Please handle with care • Fragile (Standard Fallback)
-                        </div>
-                      )}
+                      {/* DYNAMIC TEMPLATE-SPECIFIC FOOTER / EXTRA SECTION (Rendered for Full Slips + 2in x 2.95in) */}
+                      {(isFullSlip || isTallNarrow) && (
+                        <>
+                          {labelStyle === "standard" && (
+                            <div
+                              style={{
+                                borderTop: "1.5px dashed #000000",
+                                paddingTop: "4px",
+                                marginTop: "1px",
+                                fontSize: isSquare3x3 || isTallNarrow ? "8.5px" : "10px",
+                                color: "#374151",
+                                lineHeight: 1.25,
+                              }}
+                            >
+                              <strong>Note:</strong> Please handle with care • Fragile (Standard Fallback)
+                            </div>
+                          )}
 
-                      {!isCompactLabel && labelStyle === "brand_centric" && (
-                        <div
-                          style={{
-                            borderTop: "1.5px dashed #000000",
-                            paddingTop: "6px",
-                            marginTop: "2px",
-                            textAlign: "center",
-                            display: "flex",
-                            flexDirection: "column",
-                            gap: "4px",
-                          }}
-                        >
-                          <div
-                            style={{
-                              backgroundColor: "#111827",
-                              color: "#ffffff",
-                              padding: "5px 8px",
-                              borderRadius: "3px",
-                              fontWeight: 800,
-                              fontSize: "10px",
-                              textTransform: "uppercase",
-                              letterSpacing: "0.5px",
-                            }}
-                          >
-                            Thank you for shopping with us!
-                          </div>
-                        </div>
-                      )}
-
-                      {!isCompactLabel && labelStyle === "smart_warehouse" && (
-                        <div
-                          style={{
-                            borderTop: "2px solid #000000",
-                            paddingTop: "6px",
-                            marginTop: "2px",
-                            display: "flex",
-                            flexDirection: "column",
-                            gap: "5px",
-                          }}
-                        >
-                          {/* Fallback Custom Warehouse Warning / Note Banner */}
-                          {(() => {
-                            const theme = getWarningBannerTheme(warningBannerColor, warehouseWarning);
-                            return (
+                          {labelStyle === "brand_centric" && (
+                            <div
+                              style={{
+                                borderTop: "1.5px dashed #000000",
+                                paddingTop: "4px",
+                                marginTop: "1px",
+                                textAlign: "center",
+                                display: "flex",
+                                flexDirection: "column",
+                                gap: "2px",
+                              }}
+                            >
                               <div
                                 style={{
-                                  border: `1.5px solid ${theme.border}`,
-                                  backgroundColor: theme.bg,
-                                  color: theme.text,
-                                  padding: "3px 6px",
+                                  backgroundColor: "#111827",
+                                  color: "#ffffff",
+                                  padding: isSquare3x3 || isTallNarrow ? "3px 6px" : "4px 8px",
                                   borderRadius: "3px",
-                                  fontSize: "9px",
                                   fontWeight: 800,
-                                  textAlign: "center",
+                                  fontSize: isSquare3x3 || isTallNarrow ? "8.5px" : "10px",
                                   textTransform: "uppercase",
                                   letterSpacing: "0.5px",
                                 }}
                               >
-                                {theme.icon}{warehouseWarning || "FRAGILE / HANDLE WITH CARE"}
+                                Thank you for shopping with us!
                               </div>
-                            );
-                          })()}
+                            </div>
+                          )}
 
-                          {/* Clean Split-Line at Lower Margin */}
-                          <div
-                            style={{
-                              borderTop: "1px dashed #000000",
-                              paddingTop: "4px",
-                              display: "flex",
-                              justifyContent: "space-between",
-                              fontSize: "9px",
-                              fontWeight: 800,
-                              textTransform: "uppercase",
-                              color: "#000000",
-                            }}
-                          >
-                            <span>FULFILLMENT SLIP</span>
-                            <span>ITEMS: 2</span>
-                          </div>
-
-                          {/* Product Variant Arrays & SKU Lines */}
-                          <div
-                            style={{
-                              display: "flex",
-                              flexDirection: "column",
-                              gap: "3px",
-                              fontSize: "9px",
-                              color: "#111827",
-                            }}
-                          >
+                          {labelStyle === "smart_warehouse" && (
                             <div
                               style={{
+                                borderTop: "1.5px solid #000000",
+                                paddingTop: isSquare3x3 ? "3px" : "4px",
+                                marginTop: "1px",
                                 display: "flex",
-                                justifyContent: "space-between",
-                                alignItems: "baseline",
-                                borderBottom: "1px dotted #cccccc",
-                                paddingBottom: "2px",
+                                flexDirection: "column",
+                                gap: isSquare3x3 ? "2px" : "3px",
                               }}
                             >
-                              <div>
-                                <div style={{ fontWeight: 700 }}>Item: Dunhill Desire Red - Variant: L</div>
-                                <div style={{ fontSize: "8px", fontFamily: "monospace", color: "#4b5563" }}>
-                                  SKU: DNH-RED-L-01 | Bin: A-04
-                                </div>
-                              </div>
-                              <span style={{ fontWeight: 800 }}>Qty: 1</span>
+                              {/* Fallback Custom Warehouse Warning / Note Banner */}
+                              {(() => {
+                                const theme = getWarningBannerTheme(warningBannerColor, warehouseWarning);
+                                return (
+                                  <div
+                                    style={{
+                                      border: `1px solid ${theme.border}`,
+                                      backgroundColor: theme.bg,
+                                      color: theme.text,
+                                      padding: isSquare3x3 || isTallNarrow ? "2px 4px" : "3px 6px",
+                                      borderRadius: "3px",
+                                      fontSize: isSquare3x3 || isTallNarrow ? "8px" : "9px",
+                                      fontWeight: 800,
+                                      textAlign: "center",
+                                      textTransform: "uppercase",
+                                      letterSpacing: "0.5px",
+                                      whiteSpace: "nowrap",
+                                      overflow: "hidden",
+                                      textOverflow: "ellipsis",
+                                    }}
+                                  >
+                                    {theme.icon}{warehouseWarning || "FRAGILE / HANDLE WITH CARE"}
+                                  </div>
+                                );
+                              })()}
+
+                              {/* Clean Split-Line & Line Items for Full Slips (4x6, 3x4, 3x3) */}
+                              {isFullSlip && (
+                                <>
+                                  <div
+                                    style={{
+                                      borderTop: "1px dashed #000000",
+                                      paddingTop: "2px",
+                                      display: "flex",
+                                      justifyContent: "space-between",
+                                      fontSize: isSquare3x3 ? "7.5px" : "8.5px",
+                                      fontWeight: 800,
+                                      textTransform: "uppercase",
+                                      color: "#000000",
+                                    }}
+                                  >
+                                    <span>FULFILLMENT SLIP</span>
+                                    <span>ITEMS: 2</span>
+                                  </div>
+
+                                  {isSquare3x3 ? (
+                                    /* 3in x 3in Condensed Single-Line Item Summary to prevent any bottom overflow */
+                                    <div
+                                      style={{
+                                        fontSize: "7.5px",
+                                        color: "#111827",
+                                        lineHeight: 1.2,
+                                        display: "flex",
+                                        flexDirection: "column",
+                                        gap: "1px",
+                                      }}
+                                    >
+                                      <div style={{ display: "flex", justifyContent: "space-between", overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis" }}>
+                                        <span style={{ fontWeight: 700 }}>1. Dunhill Desire (L)</span>
+                                        <span style={{ fontFamily: "monospace", color: "#4b5563" }}>SKU: DNH-RED-L · x1</span>
+                                      </div>
+                                      <div style={{ display: "flex", justifyContent: "space-between", overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis" }}>
+                                        <span style={{ fontWeight: 700 }}>2. Denim Jean (32)</span>
+                                        <span style={{ fontFamily: "monospace", color: "#4b5563" }}>SKU: JNS-IND-32 · x1</span>
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    /* 4in x 6in and 3in x 4in Clean Item Rows */
+                                    <div
+                                      style={{
+                                        display: "flex",
+                                        flexDirection: "column",
+                                        gap: isMedium3x4 ? "1px" : "3px",
+                                        fontSize: isMedium3x4 ? "8px" : "9px",
+                                        color: "#111827",
+                                      }}
+                                    >
+                                      <div
+                                        style={{
+                                          display: "flex",
+                                          justifyContent: "space-between",
+                                          alignItems: "baseline",
+                                          borderBottom: "1px dotted #cccccc",
+                                          paddingBottom: isMedium3x4 ? "1px" : "2px",
+                                        }}
+                                      >
+                                        <div style={{ maxWidth: "80%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                          <div style={{ fontWeight: 700 }}>Item: Dunhill Desire Red - Variant: L</div>
+                                          <div style={{ fontSize: isMedium3x4 ? "7.5px" : "8px", fontFamily: "monospace", color: "#4b5563" }}>
+                                            SKU: DNH-RED-L-01 | Bin: A-04
+                                          </div>
+                                        </div>
+                                        <span style={{ fontWeight: 800 }}>Qty: 1</span>
+                                      </div>
+                                      <div
+                                        style={{
+                                          display: "flex",
+                                          justifyContent: "space-between",
+                                          alignItems: "baseline",
+                                        }}
+                                      >
+                                        <div style={{ maxWidth: "80%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                          <div style={{ fontWeight: 700 }}>Item: Denim Indigo Jean - Variant: 32</div>
+                                          <div style={{ fontSize: isMedium3x4 ? "7.5px" : "8px", fontFamily: "monospace", color: "#4b5563" }}>
+                                            SKU: JNS-IND-32-04 | Bin: B-02
+                                          </div>
+                                        </div>
+                                        <span style={{ fontWeight: 800 }}>Qty: 1</span>
+                                      </div>
+                                    </div>
+                                  )}
+                                </>
+                              )}
                             </div>
-                            <div
-                              style={{
-                                display: "flex",
-                                justifyContent: "space-between",
-                                alignItems: "baseline",
-                              }}
-                            >
-                              <div>
-                                <div style={{ fontWeight: 700 }}>Item: Denim Indigo Jean - Variant: 32</div>
-                                <div style={{ fontSize: "8px", fontFamily: "monospace", color: "#4b5563" }}>
-                                  SKU: JNS-IND-32-04 | Bin: B-02
-                                </div>
-                              </div>
-                              <span style={{ fontWeight: 800 }}>Qty: 1</span>
-                            </div>
-                          </div>
-                        </div>
+                          )}
+                        </>
                       )}
                     </div>
                   </div>

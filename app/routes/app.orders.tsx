@@ -7041,18 +7041,18 @@ export default function OrdersFulfillmentPage() {
 
                           // Master Audit Point 9: Compact Thermal Conditional Font-Scaling & Overflow Engine
                           const thermalTypography = {
-                            headerTitle: isMicro ? "9px" : isCompact ? "11px" : "14px",
-                            orderTitle: isMicro ? "9px" : isCompact ? "11px" : "13px",
-                            trackingNumber: isMicro ? "8.5px" : isCompact ? "10px" : "12px",
-                            customerHeader: isMicro ? "7.5px" : isCompact ? "8.5px" : "9.5px",
-                            customerName: isMicro ? "9.5px" : isCompact ? "11.5px" : "14px",
-                            customerPhone: isMicro ? "8.5px" : isCompact ? "10px" : "12px",
-                            addressText: isMicro ? "8px" : isCompact ? "9.5px" : "11.5px",
-                            codLabel: isMicro ? "7.5px" : isCompact ? "8.5px" : "9.5px",
-                            codAmount: isMicro ? "11px" : isCompact ? "13px" : "17px",
-                            itemsTotal: isMicro ? "9px" : isCompact ? "11px" : "13px",
-                            footerText: isMicro ? "7px" : isCompact ? "8px" : "9.5px",
-                            barcodeHeight: isMicro ? 22 : isCompact ? 28 : 42,
+                            headerTitle: isMicro ? "8.5px" : isCompact ? "11px" : "14px",
+                            orderTitle: isMicro ? "8.5px" : isCompact ? "11px" : "13px",
+                            trackingNumber: isMicro ? "7.5px" : isCompact ? "10px" : "12px",
+                            customerHeader: isMicro ? "7px" : isCompact ? "8.5px" : "9.5px",
+                            customerName: isMicro ? "8.5px" : isCompact ? "11.5px" : "14px",
+                            customerPhone: isMicro ? "8px" : isCompact ? "10px" : "12px",
+                            addressText: isMicro ? "7.5px" : isCompact ? "9.5px" : "11.5px",
+                            codLabel: isMicro ? "7px" : isCompact ? "8.5px" : "9.5px",
+                            codAmount: isMicro ? "10.5px" : isCompact ? "13px" : "17px",
+                            itemsTotal: isMicro ? "8.5px" : isCompact ? "11px" : "13px",
+                            footerText: isMicro ? "6.5px" : isCompact ? "8px" : "9.5px",
+                            barcodeHeight: isMicro ? 14 : isCompact ? 26 : 42,
                             addressLineClamp: isMicro ? 1 : isCompact ? 2 : 3,
                             noteLineClamp: isMicro ? 1 : isCompact ? 1 : 2,
                           };
@@ -7552,7 +7552,7 @@ export default function OrdersFulfillmentPage() {
                                     }}
                                   >
                                     {slip.lineItems
-                                      .slice(0, 3)
+                                      .slice(0, labelSize === "3in x 3in" ? 1 : 3)
                                       .map((it, idx) => (
                                         <div
                                           key={idx}
