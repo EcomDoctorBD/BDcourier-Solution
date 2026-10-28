@@ -3475,7 +3475,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     brandName: (storeConfig as any)?.brandName || "",
     brandPhone: (storeConfig as any)?.brandPhone || "",
     brandAddress: (storeConfig as any)?.brandAddress || "",
-    brandLogo: (storeConfig as any)?.brandLogo || "",
+    brandLogo:
+      (storeConfig as any)?.brandLogo ||
+      (storeConfig as any)?.invoiceBrandLogo ||
+      "",
     defaultParcelNote: (storeConfig as any)?.defaultParcelNote || "",
     pathaoParcelNote: (storeConfig as any)?.pathaoParcelNote || "",
     steadfastParcelNote: (storeConfig as any)?.steadfastParcelNote || "",

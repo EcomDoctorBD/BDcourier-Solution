@@ -386,6 +386,11 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     ),
   };
 
+  const unifiedBrandLogo =
+    (storeConfig as any)?.brandLogo ||
+    (storeConfig as any)?.invoiceBrandLogo ||
+    "";
+
   const shippingLabelConfig = {
     labelSize: (storeConfig as any)?.labelSize || "4in x 6in",
     labelStyle: (storeConfig as any)?.labelStyle || "standard",
@@ -394,7 +399,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     brandName: (storeConfig as any)?.brandName || "",
     brandPhone: (storeConfig as any)?.brandPhone || "",
     brandAddress: (storeConfig as any)?.brandAddress || "",
-    brandLogo: (storeConfig as any)?.brandLogo || "",
+    brandLogo: unifiedBrandLogo,
   };
 
   const invoiceConfig = {
@@ -404,7 +409,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     invoiceBrandAddress: (storeConfig as any)?.invoiceBrandAddress || (storeConfig as any)?.brandAddress || "",
     invoiceBrandEmail: (storeConfig as any)?.invoiceBrandEmail || "",
     invoiceBrandWebsite: (storeConfig as any)?.invoiceBrandWebsite || "",
-    invoiceBrandLogo: (storeConfig as any)?.invoiceBrandLogo || (storeConfig as any)?.brandLogo || "",
+    invoiceBrandLogo: unifiedBrandLogo,
     invoiceAccentColor: (storeConfig as any)?.invoiceAccentColor || "#2563eb",
   };
 
@@ -997,6 +1002,23 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const brandAddress = String(formData.get("brandAddress") || "").trim();
     const brandLogo = String(formData.get("brandLogo") || "").trim();
 
+    // Enforce 500KB file size validation (500 * 1024 = 512,000 bytes)
+    const MAX_LOGO_BYTES = 500 * 1024;
+    if (brandLogo && brandLogo.startsWith("data:")) {
+      const base64Data = brandLogo.split(",")[1] || "";
+      const approxBytes = Math.ceil((base64Data.length * 3) / 4);
+      if (approxBytes > MAX_LOGO_BYTES) {
+        return json(
+          {
+            success: false,
+            actionType: "saveShippingLabelSettings",
+            message: "Logo file size must be 500KB or less. Please upload a smaller image.",
+          },
+          { status: 400 }
+        );
+      }
+    }
+
     await CourierConfig.findOneAndUpdate(
       { shopDomain },
       {
@@ -1009,6 +1031,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           brandPhone,
           brandAddress,
           brandLogo,
+          invoiceBrandLogo: brandLogo, // Unified overwrite across templates
         },
       },
       { upsert: true, new: true, setDefaultsOnInsert: true }
@@ -1032,6 +1055,23 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const invoiceBrandLogo = String(formData.get("invoiceBrandLogo") || "").trim();
     const invoiceAccentColor = String(formData.get("invoiceAccentColor") || "#2563eb").trim();
 
+    // Enforce 500KB file size validation (500 * 1024 = 512,000 bytes)
+    const MAX_LOGO_BYTES = 500 * 1024;
+    if (invoiceBrandLogo && invoiceBrandLogo.startsWith("data:")) {
+      const base64Data = invoiceBrandLogo.split(",")[1] || "";
+      const approxBytes = Math.ceil((base64Data.length * 3) / 4);
+      if (approxBytes > MAX_LOGO_BYTES) {
+        return json(
+          {
+            success: false,
+            actionType: "saveInvoiceSettings",
+            message: "Logo file size must be 500KB or less. Please upload a smaller image.",
+          },
+          { status: 400 }
+        );
+      }
+    }
+
     await CourierConfig.findOneAndUpdate(
       { shopDomain },
       {
@@ -1043,6 +1083,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           invoiceBrandEmail,
           invoiceBrandWebsite,
           invoiceBrandLogo,
+          brandLogo: invoiceBrandLogo, // Unified overwrite across templates
           invoiceAccentColor,
         },
       },
@@ -1620,9 +1661,12 @@ export default function CourierSettingsPage() {
   const [brandAddress, setBrandAddress] = useState<string>(
     shippingLabelConfig?.brandAddress || ""
   );
-  const [brandLogo, setBrandLogo] = useState<string>(
-    shippingLabelConfig?.brandLogo || ""
-  );
+  const unifiedInitialLogo =
+    shippingLabelConfig?.brandLogo ||
+    invoiceConfig?.invoiceBrandLogo ||
+    "";
+  const [brandLogo, setBrandLogo] = useState<string>(unifiedInitialLogo);
+  const [logoError, setLogoError] = useState<string>("");
 
   const isCompactLabel = [
     "4in x 2in",
@@ -1668,15 +1712,32 @@ export default function CourierSettingsPage() {
     navigation.state === "submitting" &&
     navigation.formData?.get("actionType") === "saveShippingLabelSettings";
 
-  const handleLogoDrop = (_files: File[], acceptedFiles: File[]) => {
-    if (acceptedFiles.length > 0) {
+  const handleLogoUpload = (_files: File[], acceptedFiles: File[], rejectedFiles?: File[]) => {
+    setLogoError("");
+    if (rejectedFiles && rejectedFiles.length > 0) {
+      setLogoError("Logo file size must be 500KB or less. Please upload a smaller image.");
+      return;
+    }
+    if (acceptedFiles && acceptedFiles.length > 0) {
       const file = acceptedFiles[0];
+      const MAX_SIZE = 500 * 1024; // 512,000 bytes
+      if (file.size > MAX_SIZE) {
+        setLogoError("Logo file size must be 500KB or less. Please upload a smaller image.");
+        return;
+      }
       const reader = new FileReader();
       reader.onload = () => {
-        setBrandLogo(String(reader.result || ""));
+        const dataUrl = String(reader.result || "");
+        setBrandLogo(dataUrl);
+        setLogoError("");
       };
       reader.readAsDataURL(file);
     }
+  };
+
+  const handleRemoveLogo = () => {
+    setBrandLogo("");
+    setLogoError("");
   };
 
   const handleSaveShippingLabelSettings = () => {
@@ -1701,7 +1762,8 @@ export default function CourierSettingsPage() {
     setBrandName(shippingLabelConfig?.brandName || "");
     setBrandPhone(shippingLabelConfig?.brandPhone || "");
     setBrandAddress(shippingLabelConfig?.brandAddress || "");
-    setBrandLogo(shippingLabelConfig?.brandLogo || "");
+    setBrandLogo(shippingLabelConfig?.brandLogo || invoiceConfig?.invoiceBrandLogo || "");
+    setLogoError("");
   };
 
   // ==================== 8. INVOICE SETTINGS STATE ====================
@@ -1723,9 +1785,6 @@ export default function CourierSettingsPage() {
   const [invoiceBrandWebsite, setInvoiceBrandWebsite] = useState<string>(
     invoiceConfig?.invoiceBrandWebsite || "www.safeparcelbd.com"
   );
-  const [invoiceBrandLogo, setInvoiceBrandLogo] = useState<string>(
-    invoiceConfig?.invoiceBrandLogo || brandLogo || ""
-  );
   const [invoiceAccentColor, setInvoiceAccentColor] = useState<string>(
     invoiceConfig?.invoiceAccentColor || "#2563eb"
   );
@@ -1733,17 +1792,6 @@ export default function CourierSettingsPage() {
   const isSubmittingInvoice =
     navigation.state === "submitting" &&
     navigation.formData?.get("actionType") === "saveInvoiceSettings";
-
-  const handleInvoiceLogoDrop = (_files: File[], acceptedFiles: File[]) => {
-    if (acceptedFiles.length > 0) {
-      const file = acceptedFiles[0];
-      const reader = new FileReader();
-      reader.onload = () => {
-        setInvoiceBrandLogo(String(reader.result || ""));
-      };
-      reader.readAsDataURL(file);
-    }
-  };
 
   const handleSaveInvoiceSettings = () => {
     const formData = new FormData();
@@ -1754,7 +1802,7 @@ export default function CourierSettingsPage() {
     formData.append("invoiceBrandAddress", invoiceBrandAddress);
     formData.append("invoiceBrandEmail", invoiceBrandEmail);
     formData.append("invoiceBrandWebsite", invoiceBrandWebsite);
-    formData.append("invoiceBrandLogo", invoiceBrandLogo);
+    formData.append("invoiceBrandLogo", brandLogo);
     formData.append("invoiceAccentColor", invoiceAccentColor);
     submit(formData, { method: "post" });
   };
@@ -1766,8 +1814,9 @@ export default function CourierSettingsPage() {
     setInvoiceBrandAddress(invoiceConfig?.invoiceBrandAddress || brandAddress || "House 42, Road 11, Banani, Dhaka");
     setInvoiceBrandEmail(invoiceConfig?.invoiceBrandEmail || "support@safeparcelbd.com");
     setInvoiceBrandWebsite(invoiceConfig?.invoiceBrandWebsite || "www.safeparcelbd.com");
-    setInvoiceBrandLogo(invoiceConfig?.invoiceBrandLogo || brandLogo || "");
+    setBrandLogo(invoiceConfig?.invoiceBrandLogo || shippingLabelConfig?.brandLogo || "");
     setInvoiceAccentColor(invoiceConfig?.invoiceAccentColor || "#2563eb");
+    setLogoError("");
   };
 
   const selectedSettingsTabIndex = Math.max(
@@ -3869,36 +3918,75 @@ export default function CourierSettingsPage() {
                     <Text as="p" variant="bodyMd" fontWeight="medium">
                       Brand Logo
                     </Text>
+                    {logoError && (
+                      <div style={{ marginBottom: "8px" }}>
+                        <Banner tone="critical" onDismiss={() => setLogoError("")}>
+                          <p>{logoError}</p>
+                        </Banner>
+                      </div>
+                    )}
                     {brandLogo ? (
                       <div
                         style={{
-                          border: "1px solid var(--p-color-border, #E2E8F0)",
+                          overflow: "hidden",
                           borderRadius: "8px",
+                          border: "1px solid var(--p-color-border, #E2E8F0)",
                           padding: "12px",
                           backgroundColor: "var(--p-color-bg-surface-secondary, #F8FAFC)",
                         }}
                       >
                         <InlineStack align="space-between" blockAlign="center">
-                          <InlineStack gap="300" blockAlign="center">
-                            <Thumbnail size="small" source={brandLogo} alt={brandName || "Brand Logo"} />
+                          <div style={{ display: "flex", alignItems: "center", gap: "12px", overflow: "hidden" }}>
+                            <div
+                              style={{
+                                width: "auto",
+                                maxWidth: "180px",
+                                maxHeight: "64px",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                overflow: "hidden",
+                                backgroundColor: "#ffffff",
+                                border: "1px solid #f1f5f9",
+                                borderRadius: "6px",
+                                padding: "4px",
+                              }}
+                            >
+                              <img
+                                src={brandLogo}
+                                alt={brandName || "Brand Logo"}
+                                style={{
+                                  maxHeight: "64px",
+                                  maxWidth: "180px",
+                                  width: "auto",
+                                  height: "auto",
+                                  objectFit: "contain",
+                                  display: "block",
+                                  margin: "0 auto",
+                                }}
+                              />
+                            </div>
                             <Text as="span" variant="bodySm">
-                              Logo uploaded
+                              Custom Logo Uploaded
                             </Text>
-                          </InlineStack>
-                          <Button variant="plain" tone="critical" onClick={() => setBrandLogo("")}>
-                            Remove
+                          </div>
+                          <Button variant="plain" tone="critical" onClick={handleRemoveLogo}>
+                            Remove Logo
                           </Button>
                         </InlineStack>
                       </div>
                     ) : (
-                      <DropZone
-                        allowMultiple={false}
-                        accept="image/*"
-                        type="image"
-                        onDrop={handleLogoDrop}
-                      >
-                        <DropZone.FileUpload actionHint="Accepts .png, .jpg, .svg up to 2MB" />
-                      </DropZone>
+                      <div style={{ overflow: "hidden", borderRadius: "8px" }}>
+                        <DropZone
+                          allowMultiple={false}
+                          accept="image/*"
+                          type="image"
+                          onDrop={handleLogoUpload}
+                          variableHeight
+                        >
+                          <DropZone.FileUpload actionHint="Accepts .png, .jpg, .svg up to 500KB" />
+                        </DropZone>
+                      </div>
                     )}
                   </BlockStack>
 
@@ -4295,36 +4383,80 @@ export default function CourierSettingsPage() {
                     <Text as="span" variant="bodySm" fontWeight="medium">
                       Brand Logo
                     </Text>
-                    {invoiceBrandLogo ? (
-                      <div className="flex items-center gap-4 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
-                        <img
-                          src={invoiceBrandLogo}
-                          alt="Brand Logo"
-                          className="w-16 h-16 object-contain rounded bg-white border border-gray-100 p-1"
-                        />
-                        <BlockStack gap="100">
-                          <Text as="p" variant="bodySm" fontWeight="semibold">
-                            Custom Logo Uploaded
-                          </Text>
+                    {logoError && (
+                      <div style={{ marginBottom: "8px" }}>
+                        <Banner tone="critical" onDismiss={() => setLogoError("")}>
+                          <p>{logoError}</p>
+                        </Banner>
+                      </div>
+                    )}
+                    {brandLogo ? (
+                      <div
+                        style={{
+                          overflow: "hidden",
+                          borderRadius: "8px",
+                          border: "1px solid #e5e7eb",
+                          padding: "12px",
+                          backgroundColor: "#f9fafb",
+                        }}
+                      >
+                        <InlineStack align="space-between" blockAlign="center">
+                          <div style={{ display: "flex", alignItems: "center", gap: "12px", overflow: "hidden" }}>
+                            <div
+                              style={{
+                                width: "auto",
+                                maxWidth: "180px",
+                                maxHeight: "64px",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                overflow: "hidden",
+                                backgroundColor: "#ffffff",
+                                border: "1px solid #f1f5f9",
+                                borderRadius: "6px",
+                                padding: "4px",
+                              }}
+                            >
+                              <img
+                                src={brandLogo}
+                                alt={invoiceBrandName || "Brand Logo"}
+                                style={{
+                                  maxHeight: "64px",
+                                  maxWidth: "180px",
+                                  width: "auto",
+                                  height: "auto",
+                                  objectFit: "contain",
+                                  display: "block",
+                                  margin: "0 auto",
+                                }}
+                              />
+                            </div>
+                            <Text as="p" variant="bodySm" fontWeight="semibold">
+                              Custom Logo Uploaded
+                            </Text>
+                          </div>
                           <Button
                             size="micro"
                             tone="critical"
                             variant="plain"
-                            onClick={() => setInvoiceBrandLogo("")}
+                            onClick={handleRemoveLogo}
                           >
                             Remove Logo
                           </Button>
-                        </BlockStack>
+                        </InlineStack>
                       </div>
                     ) : (
-                      <DropZone
-                        allowMultiple={false}
-                        onDrop={handleInvoiceLogoDrop}
-                        variableHeight
-                        label="Upload store logo for invoice header"
-                      >
-                        <DropZone.FileUpload actionHint="Accepts .png, .jpg, .svg (Recommended 300x100px)" />
-                      </DropZone>
+                      <div style={{ overflow: "hidden", borderRadius: "8px" }}>
+                        <DropZone
+                          allowMultiple={false}
+                          accept="image/*"
+                          type="image"
+                          onDrop={handleLogoUpload}
+                          variableHeight
+                        >
+                          <DropZone.FileUpload actionHint="Accepts .png, .jpg, .svg up to 500KB" />
+                        </DropZone>
+                      </div>
                     )}
                   </BlockStack>
 
@@ -4533,9 +4665,9 @@ export default function CourierSettingsPage() {
                               {/* Top Row: Brand logo/name on top-left; large "INVOICE", Order ID: #1001, and Date on top-right */}
                               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
                                 <div>
-                                  {invoiceBrandLogo ? (
+                                  {brandLogo ? (
                                     <img
-                                      src={invoiceBrandLogo}
+                                      src={brandLogo}
                                       alt={invoiceBrandName || "Brand Logo"}
                                       style={{ height: "40px", maxWidth: "150px", objectFit: "contain", marginBottom: "6px" }}
                                     />
@@ -4605,9 +4737,9 @@ export default function CourierSettingsPage() {
                                 <thead>
                                   <tr style={{ background: "#1f2937", color: "#ffffff" }}>
                                     <th style={{ padding: "8px 10px", textAlign: "left", fontWeight: "600" }}>Item</th>
-                                    <th style={{ padding: "8px 10px", textAlign: "center", fontWeight: "600" }}>Qty</th>
-                                    <th style={{ padding: "8px 10px", textAlign: "right", fontWeight: "600" }}>Price</th>
-                                    <th style={{ padding: "8px 10px", textAlign: "right", fontWeight: "600" }}>Total</th>
+                                    <th style={{ padding: "8px 10px", textAlign: "center", fontWeight: "600", whiteSpace: "nowrap" }}>Qty</th>
+                                    <th style={{ padding: "8px 10px", textAlign: "right", fontWeight: "600", whiteSpace: "nowrap" }}>Price</th>
+                                    <th style={{ padding: "8px 10px", textAlign: "right", fontWeight: "600", whiteSpace: "nowrap" }}>Total</th>
                                   </tr>
                                 </thead>
                                 <tbody>
@@ -4618,9 +4750,9 @@ export default function CourierSettingsPage() {
                                       </div>
                                       <div style={{ fontSize: "10px", color: "#6b7280" }}>SKU: TSH-BLK-L-01</div>
                                     </td>
-                                    <td style={{ padding: "8px 10px", textAlign: "center", color: "#111827", fontWeight: "500" }}>2</td>
-                                    <td style={{ padding: "8px 10px", textAlign: "right", color: "#4b5563" }}>৳ 850</td>
-                                    <td style={{ padding: "8px 10px", textAlign: "right", fontWeight: "600", color: "#111827" }}>৳ 1,700</td>
+                                    <td style={{ padding: "8px 10px", textAlign: "center", color: "#111827", fontWeight: "500", whiteSpace: "nowrap" }}>2</td>
+                                    <td style={{ padding: "8px 10px", textAlign: "right", color: "#4b5563", whiteSpace: "nowrap" }}>৳ 850</td>
+                                    <td style={{ padding: "8px 10px", textAlign: "right", fontWeight: "600", color: "#111827", whiteSpace: "nowrap" }}>৳ 1,700</td>
                                   </tr>
                                   <tr style={{ borderBottom: "1px solid #e5e7eb" }}>
                                     <td style={{ padding: "8px 10px" }}>
@@ -4629,9 +4761,9 @@ export default function CourierSettingsPage() {
                                       </div>
                                       <div style={{ fontSize: "10px", color: "#6b7280" }}>SKU: JNS-IND-32-04</div>
                                     </td>
-                                    <td style={{ padding: "8px 10px", textAlign: "center", color: "#111827", fontWeight: "500" }}>1</td>
-                                    <td style={{ padding: "8px 10px", textAlign: "right", color: "#4b5563" }}>৳ 1,450</td>
-                                    <td style={{ padding: "8px 10px", textAlign: "right", fontWeight: "600", color: "#111827" }}>৳ 1,450</td>
+                                    <td style={{ padding: "8px 10px", textAlign: "center", color: "#111827", fontWeight: "500", whiteSpace: "nowrap" }}>1</td>
+                                    <td style={{ padding: "8px 10px", textAlign: "right", color: "#4b5563", whiteSpace: "nowrap" }}>৳ 1,450</td>
+                                    <td style={{ padding: "8px 10px", textAlign: "right", fontWeight: "600", color: "#111827", whiteSpace: "nowrap" }}>৳ 1,450</td>
                                   </tr>
                                 </tbody>
                               </table>
@@ -4640,20 +4772,20 @@ export default function CourierSettingsPage() {
                               <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "16px" }}>
                                 <div style={{ width: "220px", marginLeft: "auto", fontSize: "11px" }}>
                                   <div style={{ display: "flex", justifyContent: "space-between", color: "#4b5563", padding: "3px 0" }}>
-                                    <span>Subtotal:</span>
-                                    <span>৳ 3,150</span>
+                                    <span style={{ whiteSpace: "nowrap" }}>Subtotal:</span>
+                                    <span style={{ whiteSpace: "nowrap" }}>৳ 3,150</span>
                                   </div>
                                   <div style={{ display: "flex", justifyContent: "space-between", color: "#4b5563", padding: "3px 0" }}>
-                                    <span>Discount:</span>
-                                    <span style={{ color: "#059669", fontWeight: "500" }}>- ৳ 150</span>
+                                    <span style={{ whiteSpace: "nowrap" }}>Discount:</span>
+                                    <span style={{ color: "#059669", fontWeight: "500", whiteSpace: "nowrap" }}>- ৳ 150</span>
                                   </div>
                                   <div style={{ display: "flex", justifyContent: "space-between", color: "#4b5563", padding: "3px 0" }}>
-                                    <span>Shipping:</span>
-                                    <span>৳ 60</span>
+                                    <span style={{ whiteSpace: "nowrap" }}>Shipping:</span>
+                                    <span style={{ whiteSpace: "nowrap" }}>৳ 60</span>
                                   </div>
                                   <div style={{ borderTop: "2px solid #111827", marginTop: "6px", paddingTop: "6px", display: "flex", justifyContent: "space-between", fontWeight: "700", fontSize: "13px", color: "#111827" }}>
-                                    <span>Total Payable:</span>
-                                    <span>৳ 3,060</span>
+                                    <span style={{ whiteSpace: "nowrap" }}>Total Payable:</span>
+                                    <span style={{ whiteSpace: "nowrap" }}>৳ 3,060</span>
                                   </div>
                                 </div>
                               </div>
@@ -4725,9 +4857,9 @@ export default function CourierSettingsPage() {
                                 </div>
 
                                 <div style={{ textAlign: "right" }}>
-                                  {invoiceBrandLogo ? (
+                                  {brandLogo ? (
                                     <img
-                                      src={invoiceBrandLogo}
+                                      src={brandLogo}
                                       alt={invoiceBrandName || "Brand Logo"}
                                       style={{ height: "40px", maxWidth: "150px", objectFit: "contain", marginLeft: "auto", marginBottom: "6px" }}
                                     />
@@ -4790,9 +4922,9 @@ export default function CourierSettingsPage() {
                                 <thead>
                                   <tr style={{ borderBottom: "2px solid #e5e7eb", color: "#4b5563", fontWeight: "700", textTransform: "uppercase", fontSize: "10px" }}>
                                     <th style={{ padding: "8px 10px", textAlign: "left" }}>Product Description</th>
-                                    <th style={{ padding: "8px 8px", textAlign: "center" }}>Qty</th>
-                                    <th style={{ padding: "8px 8px", textAlign: "right" }}>Price</th>
-                                    <th style={{ padding: "8px 10px", textAlign: "right" }}>Total</th>
+                                    <th style={{ padding: "8px 8px", textAlign: "center", whiteSpace: "nowrap" }}>Qty</th>
+                                    <th style={{ padding: "8px 8px", textAlign: "right", whiteSpace: "nowrap" }}>Price</th>
+                                    <th style={{ padding: "8px 10px", textAlign: "right", whiteSpace: "nowrap" }}>Total</th>
                                   </tr>
                                 </thead>
                                 <tbody>
@@ -4801,18 +4933,18 @@ export default function CourierSettingsPage() {
                                       <div style={{ fontWeight: "600", color: "#111827" }}>Premium Cotton Drop-Shoulder T-Shirt</div>
                                       <div style={{ fontSize: "10px", color: "#6b7280" }}>Black / L · SKU: TSH-BLK-L-01</div>
                                     </td>
-                                    <td style={{ padding: "10px 8px", textAlign: "center", fontWeight: "600", color: "#111827" }}>2</td>
-                                    <td style={{ padding: "10px 8px", textAlign: "right", color: "#4b5563" }}>৳ 850</td>
-                                    <td style={{ padding: "10px", textAlign: "right", fontWeight: "700", color: "#111827" }}>৳ 1,700</td>
+                                    <td style={{ padding: "10px 8px", textAlign: "center", fontWeight: "600", color: "#111827", whiteSpace: "nowrap" }}>2</td>
+                                    <td style={{ padding: "10px 8px", textAlign: "right", color: "#4b5563", whiteSpace: "nowrap" }}>৳ 850</td>
+                                    <td style={{ padding: "10px", textAlign: "right", fontWeight: "700", color: "#111827", whiteSpace: "nowrap" }}>৳ 1,700</td>
                                   </tr>
                                   <tr style={{ borderBottom: "1px solid #f3f4f6" }}>
                                     <td style={{ padding: "10px" }}>
                                       <div style={{ fontWeight: "600", color: "#111827" }}>Slim Fit Stretch Denim Jeans</div>
                                       <div style={{ fontSize: "10px", color: "#6b7280" }}>Indigo / 32 · SKU: JNS-IND-32-04</div>
                                     </td>
-                                    <td style={{ padding: "10px 8px", textAlign: "center", fontWeight: "600", color: "#111827" }}>1</td>
-                                    <td style={{ padding: "10px 8px", textAlign: "right", color: "#4b5563" }}>৳ 1,450</td>
-                                    <td style={{ padding: "10px", textAlign: "right", fontWeight: "700", color: "#111827" }}>৳ 1,450</td>
+                                    <td style={{ padding: "10px 8px", textAlign: "center", fontWeight: "600", color: "#111827", whiteSpace: "nowrap" }}>1</td>
+                                    <td style={{ padding: "10px 8px", textAlign: "right", color: "#4b5563", whiteSpace: "nowrap" }}>৳ 1,450</td>
+                                    <td style={{ padding: "10px", textAlign: "right", fontWeight: "700", color: "#111827", whiteSpace: "nowrap" }}>৳ 1,450</td>
                                   </tr>
                                 </tbody>
                               </table>
@@ -4821,16 +4953,16 @@ export default function CourierSettingsPage() {
                               <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "16px" }}>
                                 <div style={{ width: "220px", background: "#f9fafb", padding: "12px", borderRadius: "8px", border: "1px solid #e5e7eb", fontSize: "11px" }}>
                                   <div style={{ display: "flex", justifyContent: "space-between", color: "#4b5563", padding: "3px 0" }}>
-                                    <span>Subtotal:</span>
-                                    <span>৳ 3,150</span>
+                                    <span style={{ whiteSpace: "nowrap" }}>Subtotal:</span>
+                                    <span style={{ whiteSpace: "nowrap" }}>৳ 3,150</span>
                                   </div>
                                   <div style={{ display: "flex", justifyContent: "space-between", color: "#4b5563", padding: "3px 0" }}>
-                                    <span>Discount:</span>
-                                    <span style={{ color: "#059669", fontWeight: "500" }}>- ৳ 150</span>
+                                    <span style={{ whiteSpace: "nowrap" }}>Discount:</span>
+                                    <span style={{ color: "#059669", fontWeight: "500", whiteSpace: "nowrap" }}>- ৳ 150</span>
                                   </div>
                                   <div style={{ display: "flex", justifyContent: "space-between", color: "#4b5563", padding: "3px 0" }}>
-                                    <span>Shipping:</span>
-                                    <span>৳ 60</span>
+                                    <span style={{ whiteSpace: "nowrap" }}>Shipping:</span>
+                                    <span style={{ whiteSpace: "nowrap" }}>৳ 60</span>
                                   </div>
                                   <div
                                     style={{
@@ -4844,8 +4976,8 @@ export default function CourierSettingsPage() {
                                       color: invoiceAccentColor,
                                     }}
                                   >
-                                    <span>Total Payable:</span>
-                                    <span>৳ 3,060</span>
+                                    <span style={{ whiteSpace: "nowrap" }}>Total Payable:</span>
+                                    <span style={{ whiteSpace: "nowrap" }}>৳ 3,060</span>
                                   </div>
                                 </div>
                               </div>
@@ -4891,9 +5023,9 @@ export default function CourierSettingsPage() {
                               {/* Brand & Warehouse Info Row */}
                               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", paddingBottom: "12px", borderBottom: "1px solid #d1d5db", fontSize: "11px" }}>
                                 <div>
-                                  {invoiceBrandLogo ? (
+                                  {brandLogo ? (
                                     <img
-                                      src={invoiceBrandLogo}
+                                      src={brandLogo}
                                       alt={invoiceBrandName || "Brand Logo"}
                                       style={{ height: "36px", maxWidth: "140px", objectFit: "contain", marginBottom: "4px" }}
                                     />
@@ -4946,10 +5078,10 @@ export default function CourierSettingsPage() {
                                 <thead>
                                   <tr style={{ background: "#1f2937", color: "#ffffff", fontWeight: "700", fontSize: "10px", textTransform: "uppercase" }}>
                                     <th style={{ padding: "8px 10px", textAlign: "left" }}>Item Details & Barcode</th>
-                                    <th style={{ padding: "8px 6px", textAlign: "center" }}>Bin</th>
-                                    <th style={{ padding: "8px 6px", textAlign: "center" }}>Pick</th>
-                                    <th style={{ padding: "8px 10px", textAlign: "right" }}>Price</th>
-                                    <th style={{ padding: "8px 10px", textAlign: "right" }}>Total</th>
+                                    <th style={{ padding: "8px 6px", textAlign: "center", whiteSpace: "nowrap" }}>Bin</th>
+                                    <th style={{ padding: "8px 6px", textAlign: "center", whiteSpace: "nowrap" }}>Pick</th>
+                                    <th style={{ padding: "8px 10px", textAlign: "right", whiteSpace: "nowrap" }}>Price</th>
+                                    <th style={{ padding: "8px 10px", textAlign: "right", whiteSpace: "nowrap" }}>Total</th>
                                   </tr>
                                 </thead>
                                 <tbody>
@@ -4972,14 +5104,14 @@ export default function CourierSettingsPage() {
                                         </div>
                                       </div>
                                     </td>
-                                    <td style={{ padding: "8px 6px", textAlign: "center", fontFamily: "monospace", fontSize: "10px", color: "#374151" }}>
+                                    <td style={{ padding: "8px 6px", textAlign: "center", fontFamily: "monospace", fontSize: "10px", color: "#374151", whiteSpace: "nowrap" }}>
                                       A-04-12
                                     </td>
-                                    <td style={{ padding: "8px 6px", textAlign: "center", fontWeight: "700", color: "#111827" }}>
+                                    <td style={{ padding: "8px 6px", textAlign: "center", fontWeight: "700", color: "#111827", whiteSpace: "nowrap" }}>
                                       2
                                     </td>
-                                    <td style={{ padding: "8px 10px", textAlign: "right", color: "#374151" }}>৳ 850</td>
-                                    <td style={{ padding: "8px 10px", textAlign: "right", fontWeight: "700", color: "#111827" }}>৳ 1,700</td>
+                                    <td style={{ padding: "8px 10px", textAlign: "right", color: "#374151", whiteSpace: "nowrap" }}>৳ 850</td>
+                                    <td style={{ padding: "8px 10px", textAlign: "right", fontWeight: "700", color: "#111827", whiteSpace: "nowrap" }}>৳ 1,700</td>
                                   </tr>
                                   <tr style={{ borderBottom: "1px solid #e5e7eb" }}>
                                     <td style={{ padding: "8px 10px" }}>
@@ -5000,14 +5132,14 @@ export default function CourierSettingsPage() {
                                         </div>
                                       </div>
                                     </td>
-                                    <td style={{ padding: "8px 6px", textAlign: "center", fontFamily: "monospace", fontSize: "10px", color: "#374151" }}>
+                                    <td style={{ padding: "8px 6px", textAlign: "center", fontFamily: "monospace", fontSize: "10px", color: "#374151", whiteSpace: "nowrap" }}>
                                       B-02-08
                                     </td>
-                                    <td style={{ padding: "8px 6px", textAlign: "center", fontWeight: "700", color: "#111827" }}>
+                                    <td style={{ padding: "8px 6px", textAlign: "center", fontWeight: "700", color: "#111827", whiteSpace: "nowrap" }}>
                                       1
                                     </td>
-                                    <td style={{ padding: "8px 10px", textAlign: "right", color: "#374151" }}>৳ 1,450</td>
-                                    <td style={{ padding: "8px 10px", textAlign: "right", fontWeight: "700", color: "#111827" }}>৳ 1,450</td>
+                                    <td style={{ padding: "8px 10px", textAlign: "right", color: "#374151", whiteSpace: "nowrap" }}>৳ 1,450</td>
+                                    <td style={{ padding: "8px 10px", textAlign: "right", fontWeight: "700", color: "#111827", whiteSpace: "nowrap" }}>৳ 1,450</td>
                                   </tr>
                                 </tbody>
                               </table>
@@ -5016,20 +5148,20 @@ export default function CourierSettingsPage() {
                               <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "14px" }}>
                                 <div style={{ width: "220px", fontSize: "11px" }}>
                                   <div style={{ display: "flex", justifyContent: "space-between", color: "#4b5563", padding: "2px 0" }}>
-                                    <span>Items Subtotal:</span>
-                                    <span>৳ 3,150</span>
+                                    <span style={{ whiteSpace: "nowrap" }}>Items Subtotal:</span>
+                                    <span style={{ whiteSpace: "nowrap" }}>৳ 3,150</span>
                                   </div>
                                   <div style={{ display: "flex", justifyContent: "space-between", color: "#4b5563", padding: "2px 0" }}>
-                                    <span>Discount:</span>
-                                    <span style={{ color: "#059669", fontWeight: "500" }}>- ৳ 150</span>
+                                    <span style={{ whiteSpace: "nowrap" }}>Discount:</span>
+                                    <span style={{ color: "#059669", fontWeight: "500", whiteSpace: "nowrap" }}>- ৳ 150</span>
                                   </div>
                                   <div style={{ display: "flex", justifyContent: "space-between", color: "#4b5563", padding: "2px 0" }}>
-                                    <span>Shipping Fee:</span>
-                                    <span>৳ 60</span>
+                                    <span style={{ whiteSpace: "nowrap" }}>Shipping Fee:</span>
+                                    <span style={{ whiteSpace: "nowrap" }}>৳ 60</span>
                                   </div>
                                   <div style={{ borderTop: "2px solid #111827", paddingTop: "4px", marginTop: "4px", display: "flex", justifyContent: "space-between", fontWeight: "900", fontSize: "13px", color: "#111827" }}>
-                                    <span>Total COD to Collect:</span>
-                                    <span>৳ 3,060</span>
+                                    <span style={{ whiteSpace: "nowrap" }}>Total COD to Collect:</span>
+                                    <span style={{ whiteSpace: "nowrap" }}>৳ 3,060</span>
                                   </div>
                                 </div>
                               </div>
