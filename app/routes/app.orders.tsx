@@ -6312,8 +6312,7 @@ export default function OrdersFulfillmentPage() {
       <style>{`
         @media print {
           @page {
-            size: auto;
-            margin: 0mm;
+            ${printDocumentMode === "invoices_a4" ? "size: A4 portrait; margin: 10mm;" : "size: auto; margin: 0mm;"}
           }
           html, body {
             margin: 0 !important;

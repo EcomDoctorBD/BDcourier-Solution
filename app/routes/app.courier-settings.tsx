@@ -4672,7 +4672,7 @@ export default function CourierSettingsPage() {
             </div>
 
             {/* RIGHT PANEL: PREVIEW (DEMO DATA) */}
-            <div>
+            <div style={{ position: "sticky", top: "20px" }}>
               <Card padding="500">
                 <BlockStack gap="400">
                   <InlineStack align="space-between" blockAlign="center">
@@ -4720,6 +4720,8 @@ export default function CourierSettingsPage() {
                         borderRadius: "8px",
                         border: "1px solid #f3f4f6",
                         overflowX: "auto",
+                        display: "flex",
+                        justifyContent: "center",
                       }}
                     >
                       <div
@@ -4727,20 +4729,26 @@ export default function CourierSettingsPage() {
                           background: "#ffffff",
                           border: "1px solid #e5e7eb",
                           borderRadius: "6px",
-                          padding: "28px",
-                          boxShadow: "0 2px 8px rgba(0,0,0,0.05)",
+                          padding: "20px 24px",
+                          boxShadow: "0 4px 16px rgba(0,0,0,0.06)",
                           width: "100%",
-                          maxWidth: "540px",
+                          maxWidth: "680px",
+                          aspectRatio: "210 / 297",
+                          minHeight: "680px",
                           margin: "0 auto",
                           boxSizing: "border-box",
                           color: "#1f2937",
                           fontSize: "12px",
                           fontFamily: "system-ui, -apple-system, sans-serif",
+                          display: "flex",
+                          flexDirection: "column",
+                          justifyContent: "space-between",
+                          overflow: "hidden",
                         }}
                       >
                         {/* ==================== A. CLASSIC TIER VIEW ==================== */}
                         {invoiceTemplate === "classic" && (
-                          <div style={{ display: "flex", flexDirection: "column", justifyContent: "space-between", minHeight: "680px" }}>
+                          <div style={{ display: "flex", flexDirection: "column", justifyContent: "space-between", height: "100%" }}>
                             <div>
                               {/* Top Row: Brand logo/name on top-left; large "INVOICE", Order ID: #1001, and Date on top-right */}
                               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
@@ -4813,43 +4821,43 @@ export default function CourierSettingsPage() {
                               </div>
 
                               {/* Items Table */}
-                              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "11px", marginTop: "16px" }}>
+                              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "11px", marginTop: "12px" }}>
                                 <thead>
                                   <tr style={{ background: "#1f2937", color: "#ffffff" }}>
-                                    <th style={{ padding: "8px 10px", textAlign: "left", fontWeight: "600" }}>Item</th>
-                                    <th style={{ padding: "8px 10px", textAlign: "center", fontWeight: "600", whiteSpace: "nowrap" }}>Qty</th>
-                                    <th style={{ padding: "8px 10px", textAlign: "right", fontWeight: "600", whiteSpace: "nowrap" }}>Price</th>
-                                    <th style={{ padding: "8px 10px", textAlign: "right", fontWeight: "600", whiteSpace: "nowrap" }}>Total</th>
+                                    <th style={{ padding: "6px 8px", textAlign: "left", fontWeight: "600" }}>Item</th>
+                                    <th style={{ padding: "6px 8px", textAlign: "center", fontWeight: "600", whiteSpace: "nowrap" }}>Qty</th>
+                                    <th style={{ padding: "6px 8px", textAlign: "right", fontWeight: "600", whiteSpace: "nowrap" }}>Price</th>
+                                    <th style={{ padding: "6px 8px", textAlign: "right", fontWeight: "600", whiteSpace: "nowrap" }}>Total</th>
                                   </tr>
                                 </thead>
                                 <tbody>
                                   <tr style={{ borderBottom: "1px solid #e5e7eb" }}>
-                                    <td style={{ padding: "8px 10px" }}>
+                                    <td style={{ padding: "6px 8px" }}>
                                       <div style={{ fontWeight: "600", color: "#111827" }}>
                                         Premium Cotton Drop-Shoulder T-Shirt - Black / L
                                       </div>
                                       <div style={{ fontSize: "10px", color: "#6b7280" }}>SKU: TSH-BLK-L-01</div>
                                     </td>
-                                    <td style={{ padding: "8px 10px", textAlign: "center", color: "#111827", fontWeight: "500", whiteSpace: "nowrap" }}>2</td>
-                                    <td style={{ padding: "8px 10px", textAlign: "right", color: "#4b5563", whiteSpace: "nowrap" }}>৳ 850</td>
-                                    <td style={{ padding: "8px 10px", textAlign: "right", fontWeight: "600", color: "#111827", whiteSpace: "nowrap" }}>৳ 1,700</td>
+                                    <td style={{ padding: "6px 8px", textAlign: "center", color: "#111827", fontWeight: "500", whiteSpace: "nowrap" }}>2</td>
+                                    <td style={{ padding: "6px 8px", textAlign: "right", color: "#4b5563", whiteSpace: "nowrap" }}>৳ 850</td>
+                                    <td style={{ padding: "6px 8px", textAlign: "right", fontWeight: "600", color: "#111827", whiteSpace: "nowrap" }}>৳ 1,700</td>
                                   </tr>
                                   <tr style={{ borderBottom: "1px solid #e5e7eb" }}>
-                                    <td style={{ padding: "8px 10px" }}>
+                                    <td style={{ padding: "6px 8px" }}>
                                       <div style={{ fontWeight: "600", color: "#111827" }}>
                                         Slim Fit Stretch Denim Jeans - Indigo / 32
                                       </div>
                                       <div style={{ fontSize: "10px", color: "#6b7280" }}>SKU: JNS-IND-32-04</div>
                                     </td>
-                                    <td style={{ padding: "8px 10px", textAlign: "center", color: "#111827", fontWeight: "500", whiteSpace: "nowrap" }}>1</td>
-                                    <td style={{ padding: "8px 10px", textAlign: "right", color: "#4b5563", whiteSpace: "nowrap" }}>৳ 1,450</td>
-                                    <td style={{ padding: "8px 10px", textAlign: "right", fontWeight: "600", color: "#111827", whiteSpace: "nowrap" }}>৳ 1,450</td>
+                                    <td style={{ padding: "6px 8px", textAlign: "center", color: "#111827", fontWeight: "500", whiteSpace: "nowrap" }}>1</td>
+                                    <td style={{ padding: "6px 8px", textAlign: "right", color: "#4b5563", whiteSpace: "nowrap" }}>৳ 1,450</td>
+                                    <td style={{ padding: "6px 8px", textAlign: "right", fontWeight: "600", color: "#111827", whiteSpace: "nowrap" }}>৳ 1,450</td>
                                   </tr>
                                 </tbody>
                               </table>
 
                               {/* Summary Box */}
-                              <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "16px" }}>
+                              <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "12px" }}>
                                 <div style={{ width: "220px", marginLeft: "auto", fontSize: "11px" }}>
                                   <div style={{ display: "flex", justifyContent: "space-between", color: "#4b5563", padding: "3px 0" }}>
                                     <span style={{ whiteSpace: "nowrap" }}>Subtotal:</span>
@@ -4872,7 +4880,7 @@ export default function CourierSettingsPage() {
                             </div>
 
                             {/* Footer */}
-                            <div style={{ marginTop: "24px", paddingTop: "16px", borderTop: "1px solid #e5e7eb", textAlign: "center", fontSize: "10px", color: "#6b7280" }}>
+                            <div style={{ marginTop: "16px", paddingTop: "12px", borderTop: "1px solid #e5e7eb", textAlign: "center", fontSize: "10px", color: "#6b7280" }}>
                               <p style={{ fontWeight: "600", color: "#1f2937", marginBottom: "2px" }}>
                                 Thank you for your business!
                               </p>
@@ -4885,7 +4893,7 @@ export default function CourierSettingsPage() {
 
                         {/* ==================== B. MODERN (PRO) TIER VIEW ==================== */}
                         {invoiceTemplate === "modern" && (
-                          <div style={{ display: "flex", flexDirection: "column", justifyContent: "space-between", minHeight: "680px" }}>
+                          <div style={{ display: "flex", flexDirection: "column", justifyContent: "space-between", height: "100%" }}>
                             <div>
                               {/* Top Accent bar */}
                               <div
@@ -4998,39 +5006,39 @@ export default function CourierSettingsPage() {
                               </div>
 
                               {/* Modern Order Table */}
-                              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "11px", marginTop: "12px" }}>
+                              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "11px", marginTop: "10px" }}>
                                 <thead>
                                   <tr style={{ borderBottom: "2px solid #e5e7eb", color: "#4b5563", fontWeight: "700", textTransform: "uppercase", fontSize: "10px" }}>
-                                    <th style={{ padding: "8px 10px", textAlign: "left" }}>Product Description</th>
-                                    <th style={{ padding: "8px 8px", textAlign: "center", whiteSpace: "nowrap" }}>Qty</th>
-                                    <th style={{ padding: "8px 8px", textAlign: "right", whiteSpace: "nowrap" }}>Price</th>
-                                    <th style={{ padding: "8px 10px", textAlign: "right", whiteSpace: "nowrap" }}>Total</th>
+                                    <th style={{ padding: "6px 8px", textAlign: "left" }}>Product Description</th>
+                                    <th style={{ padding: "6px 8px", textAlign: "center", whiteSpace: "nowrap" }}>Qty</th>
+                                    <th style={{ padding: "6px 8px", textAlign: "right", whiteSpace: "nowrap" }}>Price</th>
+                                    <th style={{ padding: "6px 8px", textAlign: "right", whiteSpace: "nowrap" }}>Total</th>
                                   </tr>
                                 </thead>
                                 <tbody>
                                   <tr style={{ borderBottom: "1px solid #f3f4f6" }}>
-                                    <td style={{ padding: "10px" }}>
+                                    <td style={{ padding: "6px 8px" }}>
                                       <div style={{ fontWeight: "600", color: "#111827" }}>Premium Cotton Drop-Shoulder T-Shirt</div>
                                       <div style={{ fontSize: "10px", color: "#6b7280" }}>Black / L · SKU: TSH-BLK-L-01</div>
                                     </td>
-                                    <td style={{ padding: "10px 8px", textAlign: "center", fontWeight: "600", color: "#111827", whiteSpace: "nowrap" }}>2</td>
-                                    <td style={{ padding: "10px 8px", textAlign: "right", color: "#4b5563", whiteSpace: "nowrap" }}>৳ 850</td>
-                                    <td style={{ padding: "10px", textAlign: "right", fontWeight: "700", color: "#111827", whiteSpace: "nowrap" }}>৳ 1,700</td>
+                                    <td style={{ padding: "6px 8px", textAlign: "center", fontWeight: "600", color: "#111827", whiteSpace: "nowrap" }}>2</td>
+                                    <td style={{ padding: "6px 8px", textAlign: "right", color: "#4b5563", whiteSpace: "nowrap" }}>৳ 850</td>
+                                    <td style={{ padding: "6px 8px", textAlign: "right", fontWeight: "700", color: "#111827", whiteSpace: "nowrap" }}>৳ 1,700</td>
                                   </tr>
                                   <tr style={{ borderBottom: "1px solid #f3f4f6" }}>
-                                    <td style={{ padding: "10px" }}>
+                                    <td style={{ padding: "6px 8px" }}>
                                       <div style={{ fontWeight: "600", color: "#111827" }}>Slim Fit Stretch Denim Jeans</div>
                                       <div style={{ fontSize: "10px", color: "#6b7280" }}>Indigo / 32 · SKU: JNS-IND-32-04</div>
                                     </td>
-                                    <td style={{ padding: "10px 8px", textAlign: "center", fontWeight: "600", color: "#111827", whiteSpace: "nowrap" }}>1</td>
-                                    <td style={{ padding: "10px 8px", textAlign: "right", color: "#4b5563", whiteSpace: "nowrap" }}>৳ 1,450</td>
-                                    <td style={{ padding: "10px", textAlign: "right", fontWeight: "700", color: "#111827", whiteSpace: "nowrap" }}>৳ 1,450</td>
+                                    <td style={{ padding: "6px 8px", textAlign: "center", fontWeight: "600", color: "#111827", whiteSpace: "nowrap" }}>1</td>
+                                    <td style={{ padding: "6px 8px", textAlign: "right", color: "#4b5563", whiteSpace: "nowrap" }}>৳ 1,450</td>
+                                    <td style={{ padding: "6px 8px", textAlign: "right", fontWeight: "700", color: "#111827", whiteSpace: "nowrap" }}>৳ 1,450</td>
                                   </tr>
                                 </tbody>
                               </table>
 
                               {/* Modern Financial Summary */}
-                              <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "16px" }}>
+                              <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "10px" }}>
                                 <div style={{ width: "220px", background: "#f9fafb", padding: "12px", borderRadius: "8px", border: "1px solid #e5e7eb", fontSize: "11px" }}>
                                   <div style={{ display: "flex", justifyContent: "space-between", color: "#4b5563", padding: "3px 0" }}>
                                     <span style={{ whiteSpace: "nowrap" }}>Subtotal:</span>
@@ -5064,7 +5072,7 @@ export default function CourierSettingsPage() {
                             </div>
 
                             {/* Modern Footer */}
-                            <div style={{ marginTop: "24px", paddingTop: "16px", borderTop: "1px solid #f3f4f6", display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "10px", color: "#6b7280" }}>
+                            <div style={{ marginTop: "14px", paddingTop: "10px", borderTop: "1px solid #f3f4f6", display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "10px", color: "#6b7280" }}>
                               <div>
                                 <span style={{ fontWeight: "700", color: "#374151" }}>{invoiceBrandName || "SafeParcel Store"}</span>
                                 {" · Official Store Invoice"}
@@ -5078,23 +5086,23 @@ export default function CourierSettingsPage() {
 
                         {/* ==================== C. WAREHOUSE FULFILLMENT (ENTERPRISE / NEW) TIER VIEW ==================== */}
                         {invoiceTemplate === "warehouse" && (
-                          <div style={{ display: "flex", flexDirection: "column", justifyContent: "space-between", minHeight: "680px" }}>
+                          <div style={{ display: "flex", flexDirection: "column", justifyContent: "space-between", height: "100%" }}>
                             <div>
                               {/* Warehouse Dual-Identity Banner Header: INVOICE / PACKING SLIP */}
-                              <div style={{ border: "2px solid #111827", padding: "10px", borderRadius: "4px", background: "#f9fafb", display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
+                              <div style={{ border: "2px solid #111827", padding: "8px 12px", borderRadius: "4px", background: "#f9fafb", display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
                                 <div>
-                                  <div style={{ fontSize: "15px", fontWeight: "900", letterSpacing: "1px", color: "#111827", textTransform: "uppercase" }}>
+                                  <div style={{ fontSize: "14px", fontWeight: "900", letterSpacing: "1px", color: "#111827", textTransform: "uppercase", whiteSpace: "nowrap" }}>
                                     INVOICE / PACKING SLIP
                                   </div>
-                                  <div style={{ fontSize: "10px", fontWeight: "600", color: "#4b5563", letterSpacing: "0.5px" }}>
+                                  <div style={{ fontSize: "10px", fontWeight: "600", color: "#4b5563", letterSpacing: "0.5px", whiteSpace: "nowrap" }}>
                                     ENTERPRISE WAREHOUSE DISPATCH · HUB: DAC-NORTH
                                   </div>
                                 </div>
                                 <div style={{ textAlign: "right" }}>
-                                  <div style={{ fontSize: "13px", fontWeight: "800", color: "#111827" }}>
+                                  <div style={{ fontSize: "13px", fontWeight: "800", color: "#111827", whiteSpace: "nowrap" }}>
                                     ORDER #1001
                                   </div>
-                                  <div style={{ fontSize: "10px", color: "#6b7280" }}>
+                                  <div style={{ fontSize: "10px", color: "#6b7280", whiteSpace: "nowrap" }}>
                                     27th Oct, 2026 · 14:32:00
                                   </div>
                                 </div>
@@ -5154,27 +5162,27 @@ export default function CourierSettingsPage() {
                               </div>
 
                               {/* Order Table with Barcode Metadata */}
-                              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "11px", marginTop: "12px" }}>
+                              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "11px", marginTop: "10px" }}>
                                 <thead>
                                   <tr style={{ background: "#1f2937", color: "#ffffff", fontWeight: "700", fontSize: "10px", textTransform: "uppercase" }}>
-                                    <th style={{ padding: "8px 10px", textAlign: "left" }}>Item Details & Barcode</th>
-                                    <th style={{ padding: "8px 6px", textAlign: "center", whiteSpace: "nowrap" }}>Bin</th>
-                                    <th style={{ padding: "8px 6px", textAlign: "center", whiteSpace: "nowrap" }}>Pick</th>
-                                    <th style={{ padding: "8px 10px", textAlign: "right", whiteSpace: "nowrap" }}>Price</th>
-                                    <th style={{ padding: "8px 10px", textAlign: "right", whiteSpace: "nowrap" }}>Total</th>
+                                    <th style={{ padding: "6px 8px", textAlign: "left" }}>Item Details & Barcode</th>
+                                    <th style={{ padding: "6px 6px", textAlign: "center", whiteSpace: "nowrap" }}>Bin</th>
+                                    <th style={{ padding: "6px 6px", textAlign: "center", whiteSpace: "nowrap" }}>Pick</th>
+                                    <th style={{ padding: "6px 8px", textAlign: "right", whiteSpace: "nowrap" }}>Price</th>
+                                    <th style={{ padding: "6px 8px", textAlign: "right", whiteSpace: "nowrap" }}>Total</th>
                                   </tr>
                                 </thead>
                                 <tbody>
                                   <tr style={{ borderBottom: "1px solid #e5e7eb" }}>
-                                    <td style={{ padding: "8px 10px" }}>
+                                    <td style={{ padding: "6px 8px" }}>
                                       <div style={{ fontWeight: "600", color: "#111827" }}>
                                         Premium Cotton Drop-Shoulder T-Shirt - Black / L
                                       </div>
-                                      <div style={{ marginTop: "4px", display: "flex", alignItems: "center", gap: "6px" }}>
-                                        <span style={{ fontFamily: "monospace", fontSize: "9px", background: "#f3f4f6", padding: "1px 4px", borderRadius: "3px", border: "1px solid #e5e7eb", color: "#374151", fontWeight: "700" }}>
+                                      <div style={{ marginTop: "3px", display: "flex", alignItems: "center", gap: "8px", flexWrap: "nowrap" }}>
+                                        <span style={{ fontFamily: "monospace", fontSize: "9px", background: "#f3f4f6", padding: "1px 5px", borderRadius: "3px", border: "1px solid #e5e7eb", color: "#374151", fontWeight: "700", whiteSpace: "nowrap" }}>
                                           SKU: TSH-BLK-L-01
                                         </span>
-                                        <div style={{ display: "flex", alignItems: "center", gap: "1px", height: "14px", padding: "0 4px", background: "#ffffff", border: "1px solid #e5e7eb" }}>
+                                        <div style={{ display: "flex", alignItems: "center", gap: "1px", height: "13px", padding: "0 4px", background: "#ffffff", border: "1px solid #e5e7eb", flexShrink: 0 }}>
                                           {[2,1,3,1,2,1,1,3,2,1,2,3,1,1,2,1,3,2,1,2].map((w, i) => (
                                             <span
                                               key={i}
@@ -5184,25 +5192,25 @@ export default function CourierSettingsPage() {
                                         </div>
                                       </div>
                                     </td>
-                                    <td style={{ padding: "8px 6px", textAlign: "center", fontFamily: "monospace", fontSize: "10px", color: "#374151", whiteSpace: "nowrap" }}>
+                                    <td style={{ padding: "6px 6px", textAlign: "center", fontFamily: "monospace", fontSize: "10px", color: "#374151", whiteSpace: "nowrap" }}>
                                       A-04-12
                                     </td>
-                                    <td style={{ padding: "8px 6px", textAlign: "center", fontWeight: "700", color: "#111827", whiteSpace: "nowrap" }}>
+                                    <td style={{ padding: "6px 6px", textAlign: "center", fontWeight: "700", color: "#111827", whiteSpace: "nowrap" }}>
                                       2
                                     </td>
-                                    <td style={{ padding: "8px 10px", textAlign: "right", color: "#374151", whiteSpace: "nowrap" }}>৳ 850</td>
-                                    <td style={{ padding: "8px 10px", textAlign: "right", fontWeight: "700", color: "#111827", whiteSpace: "nowrap" }}>৳ 1,700</td>
+                                    <td style={{ padding: "6px 8px", textAlign: "right", color: "#374151", whiteSpace: "nowrap" }}>৳ 850</td>
+                                    <td style={{ padding: "6px 8px", textAlign: "right", fontWeight: "700", color: "#111827", whiteSpace: "nowrap" }}>৳ 1,700</td>
                                   </tr>
                                   <tr style={{ borderBottom: "1px solid #e5e7eb" }}>
-                                    <td style={{ padding: "8px 10px" }}>
+                                    <td style={{ padding: "6px 8px" }}>
                                       <div style={{ fontWeight: "600", color: "#111827" }}>
                                         Slim Fit Stretch Denim Jeans - Indigo / 32
                                       </div>
-                                      <div style={{ marginTop: "4px", display: "flex", alignItems: "center", gap: "6px" }}>
-                                        <span style={{ fontFamily: "monospace", fontSize: "9px", background: "#f3f4f6", padding: "1px 4px", borderRadius: "3px", border: "1px solid #e5e7eb", color: "#374151", fontWeight: "700" }}>
+                                      <div style={{ marginTop: "3px", display: "flex", alignItems: "center", gap: "8px", flexWrap: "nowrap" }}>
+                                        <span style={{ fontFamily: "monospace", fontSize: "9px", background: "#f3f4f6", padding: "1px 5px", borderRadius: "3px", border: "1px solid #e5e7eb", color: "#374151", fontWeight: "700", whiteSpace: "nowrap" }}>
                                           SKU: JNS-IND-32-04
                                         </span>
-                                        <div style={{ display: "flex", alignItems: "center", gap: "1px", height: "14px", padding: "0 4px", background: "#ffffff", border: "1px solid #e5e7eb" }}>
+                                        <div style={{ display: "flex", alignItems: "center", gap: "1px", height: "13px", padding: "0 4px", background: "#ffffff", border: "1px solid #e5e7eb", flexShrink: 0 }}>
                                           {[1,3,1,2,1,3,2,1,1,2,3,1,2,1,1,3,1,2,2,1].map((w, i) => (
                                             <span
                                               key={i}
@@ -5212,20 +5220,20 @@ export default function CourierSettingsPage() {
                                         </div>
                                       </div>
                                     </td>
-                                    <td style={{ padding: "8px 6px", textAlign: "center", fontFamily: "monospace", fontSize: "10px", color: "#374151", whiteSpace: "nowrap" }}>
+                                    <td style={{ padding: "6px 6px", textAlign: "center", fontFamily: "monospace", fontSize: "10px", color: "#374151", whiteSpace: "nowrap" }}>
                                       B-02-08
                                     </td>
-                                    <td style={{ padding: "8px 6px", textAlign: "center", fontWeight: "700", color: "#111827", whiteSpace: "nowrap" }}>
+                                    <td style={{ padding: "6px 6px", textAlign: "center", fontWeight: "700", color: "#111827", whiteSpace: "nowrap" }}>
                                       1
                                     </td>
-                                    <td style={{ padding: "8px 10px", textAlign: "right", color: "#374151", whiteSpace: "nowrap" }}>৳ 1,450</td>
-                                    <td style={{ padding: "8px 10px", textAlign: "right", fontWeight: "700", color: "#111827", whiteSpace: "nowrap" }}>৳ 1,450</td>
+                                    <td style={{ padding: "6px 8px", textAlign: "right", color: "#374151", whiteSpace: "nowrap" }}>৳ 1,450</td>
+                                    <td style={{ padding: "6px 8px", textAlign: "right", fontWeight: "700", color: "#111827", whiteSpace: "nowrap" }}>৳ 1,450</td>
                                   </tr>
                                 </tbody>
                               </table>
 
                               {/* Warehouse Totals */}
-                              <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "14px" }}>
+                              <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "10px" }}>
                                 <div style={{ width: "220px", fontSize: "11px" }}>
                                   <div style={{ display: "flex", justifyContent: "space-between", color: "#4b5563", padding: "2px 0" }}>
                                     <span style={{ whiteSpace: "nowrap" }}>Items Subtotal:</span>
@@ -5248,7 +5256,7 @@ export default function CourierSettingsPage() {
                             </div>
 
                             {/* Order Status QR Code Vector Box */}
-                            <div style={{ marginTop: "20px", paddingTop: "12px", borderTop: "2px dashed #d1d5db" }}>
+                            <div style={{ marginTop: "14px", paddingTop: "10px", borderTop: "2px dashed #d1d5db" }}>
                               <div style={{ display: "flex", alignItems: "center", gap: "12px", padding: "10px", background: "#f9fafb", borderRadius: "6px", border: "1px solid #e5e7eb" }}>
                                 <div style={{ padding: "4px", background: "#ffffff", borderRadius: "4px", border: "1px solid #d1d5db", flexShrink: 0 }}>
                                   <svg
