@@ -4105,17 +4105,31 @@ export default function CourierSettingsPage() {
               </Card>
             </div>
 
-            {/* RIGHT PANEL: PREVIEW (DEMO DATA) LIVE REACT ENGINE */}
+            {/* RIGHT PANEL: PREVIEW LIVE REACT ENGINE */}
             <Card padding="500">
               <BlockStack gap="400">
-                <BlockStack gap="100">
-                  <Text as="h3" variant="headingMd" fontWeight="bold">
-                    {`Preview (Demo Data) (${labelSize})`}
+                <InlineStack align="space-between" blockAlign="center">
+                  <Text as="h2" variant="headingMd" fontWeight="bold">
+                    {`Preview (${labelSize})`}
                   </Text>
-                  <Text as="p" variant="bodySm" tone="subdued">
-                    Live dynamic preview of your thermal shipping label as it will be printed.
-                  </Text>
-                </BlockStack>
+                  {labelStyle && (
+                    <Badge
+                      tone={
+                        labelStyle === "smart_warehouse"
+                          ? "magic"
+                          : labelStyle === "brand_centric"
+                          ? "attention"
+                          : "info"
+                      }
+                    >
+                      {labelStyle === "smart_warehouse"
+                        ? "Premium"
+                        : labelStyle === "brand_centric"
+                        ? "Modern"
+                        : "Standard"}
+                    </Badge>
+                  )}
+                </InlineStack>
 
                 <Divider />
 
@@ -4909,13 +4923,13 @@ export default function CourierSettingsPage() {
               </Card>
             </div>
 
-            {/* RIGHT PANEL: PREVIEW (DEMO DATA) */}
+            {/* RIGHT PANEL: PREVIEW */}
             <div style={{ position: "sticky", top: "20px" }}>
               <Card padding="500">
                 <BlockStack gap="400">
                   <InlineStack align="space-between" blockAlign="center">
                     <Text as="h2" variant="headingMd" fontWeight="bold">
-                      Preview (Demo Data)
+                      Preview
                     </Text>
                     {invoiceTemplate && (
                       <Badge
