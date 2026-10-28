@@ -5548,12 +5548,27 @@ export default function OrdersFulfillmentPage() {
                     {/* Product Metadata Details */}
                     <BlockStack gap="050">
                       <InlineStack gap="100" blockAlign="center" wrap={false}>
-                        <Text variant="bodySm" fontWeight="semibold" truncate>
-                          {order.lineItems[0].title}
-                        </Text>
-                        <Badge tone="info" size="small">
-                          {`x${order.lineItems[0].quantity}`}
-                        </Badge>
+                        <div
+                          className="truncate max-w-[7ch]"
+                          style={{
+                            maxWidth: "7ch",
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap",
+                            display: "inline-block",
+                            flexShrink: 1,
+                          }}
+                          title={order.lineItems[0].title}
+                        >
+                          <Text variant="bodySm" fontWeight="semibold" as="span" truncate>
+                            {order.lineItems[0].title}
+                          </Text>
+                        </div>
+                        <div style={{ flexShrink: 0 }}>
+                          <Badge tone="info" size="small">
+                            {`×${order.lineItems[0].quantity}`}
+                          </Badge>
+                        </div>
                       </InlineStack>
 
                       {order.lineItems[0].variantTitle && (
