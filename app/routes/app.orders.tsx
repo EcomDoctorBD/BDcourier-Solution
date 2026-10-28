@@ -2687,6 +2687,37 @@ async function assertResilientAdminSession(
   throw new Error("Unable to establish valid Shopify Admin session context");
 }
 
+export function shouldRevalidate({
+  currentUrl,
+  nextUrl,
+  formMethod,
+  defaultShouldRevalidate,
+}: any) {
+  // Always revalidate after form action mutations (POST, PUT, DELETE)
+  if (formMethod && formMethod.toUpperCase() !== "GET") {
+    return true;
+  }
+
+  const currentTab = (currentUrl.searchParams.get("tab") || "new").toLowerCase().trim();
+  const nextTab = (nextUrl.searchParams.get("tab") || "new").toLowerCase().trim();
+
+  // If only the active 'tab' changed, skip server-side loader calls for instant 0ms client-side switching
+  if (
+    currentUrl.pathname === nextUrl.pathname &&
+    currentTab !== nextTab &&
+    (currentUrl.searchParams.get("q") || "") === (nextUrl.searchParams.get("q") || "") &&
+    (currentUrl.searchParams.get("startDate") || "") === (nextUrl.searchParams.get("startDate") || "") &&
+    (currentUrl.searchParams.get("endDate") || "") === (nextUrl.searchParams.get("endDate") || "") &&
+    (currentUrl.searchParams.get("cursor") || "") === (nextUrl.searchParams.get("cursor") || "") &&
+    (currentUrl.searchParams.get("after") || "") === (nextUrl.searchParams.get("after") || "") &&
+    (currentUrl.searchParams.get("before") || "") === (nextUrl.searchParams.get("before") || "")
+  ) {
+    return false;
+  }
+
+  return defaultShouldRevalidate;
+}
+
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   // Initialize URL and filter parameters securely at the very top of the loader block
   const url = new URL(request.url);
@@ -2897,41 +2928,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     }
   }
 
-  // Dynamic layout chunking: effectiveTab aligned with tabParam, pageSize scoped at loader top
-  const effectiveTab = tabParam;
-
-  // Seven-day threshold computation (UTC ISO format for Shopify Admin index queries)
-  const sevenDaysAgoDate = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
-  const hasCustomDateRange = Boolean(startDateParam || endDateParam);
-
-  // Tier 2 Dynamic GraphQL Query Builder based on parsed search params
+  // Comprehensive single fetch of recent orders across all statuses without 7-day limits
   const queryParts: string[] = [];
-
-  if (effectiveTab === "old_orders") {
-    // Dynamic archived & historical order query
-    queryParts.push("(fulfillment_status:fulfilled OR status:closed OR status:cancelled)");
-  } else if (effectiveTab === "cancelled") {
-    if (hasCustomDateRange) {
-      // Calendar override: custom range queries historical cancelled records dynamically
-      queryParts.push("(status:cancelled OR financial_status:voided)");
-    } else {
-      // Default: cancelled/voided within the last 7 days
-      queryParts.push(`(status:cancelled OR financial_status:voided) created_at:>=${sevenDaysAgoDate}`);
-    }
-  } else if (effectiveTab === "pending") {
-    // Unfulfilled rows matching manual locking criteria
-    queryParts.push("fulfillment_status:unfulfilled");
-  } else if (effectiveTab === "all") {
-    if (hasCustomDateRange) {
-      queryParts.push("(status:open OR status:closed OR status:cancelled)");
-    } else {
-      // Default: Last 7 days + The Unprocessed Safeguard (unfulfilled orders regardless of age)
-      queryParts.push(`(created_at:>=${sevenDaysAgoDate} OR fulfillment_status:unfulfilled)`);
-    }
-  } else {
-    // "new" tab: UNRESTRICTED AGE - All unhandled orders perpetually live until action taken
-    queryParts.push("fulfillment_status:unfulfilled");
-  }
 
   // Raw search query filter token across order IDs, customer names
   if (rawSearchQ) {
@@ -2944,15 +2942,18 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     }
   }
 
-  // Date range filter tokens (Shopify index criteria syntax) - strictly bypassed for "new" tab
-  if (effectiveTab !== "new") {
-    if (startDateParam && endDateParam) {
-      queryParts.push(`created_at:>=${startDateParam} created_at:<=${endDateParam}`);
-    } else if (startDateParam) {
-      queryParts.push(`created_at:>=${startDateParam}`);
-    } else if (endDateParam) {
-      queryParts.push(`created_at:<=${endDateParam}`);
-    }
+  // Date range filter tokens (Shopify index criteria syntax)
+  if (startDateParam && endDateParam) {
+    queryParts.push(`created_at:>=${startDateParam} created_at:<=${endDateParam}`);
+  } else if (startDateParam) {
+    queryParts.push(`created_at:>=${startDateParam}`);
+  } else if (endDateParam) {
+    queryParts.push(`created_at:<=${endDateParam}`);
+  }
+
+  // Fetch comprehensive recent orders across all statuses (open, closed, cancelled)
+  if (!rawSearchQ && !startDateParam && !endDateParam) {
+    queryParts.push("(status:open OR status:closed OR status:cancelled)");
   }
 
   const shopifyQueryString = queryParts.join(" ");
@@ -4316,10 +4317,8 @@ export default function OrdersFulfillmentPage() {
 
   useEffect(() => {
     const target = urlTab || "new";
-    if (target !== selectedTabId) {
-      setSelectedTabId(target);
-    }
-  }, [urlTab, selectedTabId]);
+    setSelectedTabId(target);
+  }, [urlTab]);
 
   const handleMonthChange = useCallback((month: number, year: number) => {
     setPickerMonthYear({ month, year });
@@ -4518,36 +4517,12 @@ export default function OrdersFulfillmentPage() {
         Boolean(order.isClosed) ||
         order.fulfillmentStatus?.toUpperCase() === "CLOSED";
 
-      const hasCustomDate = Boolean(
-        (dateRange?.start || dateRange?.end) ||
-        searchParams.get("startDate") ||
-        searchParams.get("endDate") ||
-        activeFilters?.startDate ||
-        activeFilters?.endDate
-      );
-
       const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
 
       switch (tabId) {
-        case "all": {
-          if (hasCustomDate) {
-            return true;
-          }
-          const orderTime = new Date(order.createdAt).getTime();
-          if (orderTime >= sevenDaysAgo) {
-            return true;
-          }
-          // The Unprocessed Safeguard:
-          // Raw unhandled order older than 7 days stays visible in All and New
-          const isRawUnprocessed =
-            !dispatched &&
-            !isCancelledOrder &&
-            !isClosedOrder &&
-            !["accepted", "processing", "in_review", "pending", "hold"].includes(courierStatus) &&
-            (order.fulfillmentStatus?.toUpperCase() === "UNFULFILLED" || !order.fulfillmentStatus);
-
-          return isRawUnprocessed;
-        }
+        case "all":
+          // Unrestricted All tab: renders all recent active orders regardless of age
+          return true;
         case "new":
           return (
             !dispatched &&
@@ -4591,12 +4566,9 @@ export default function OrdersFulfillmentPage() {
               order.fulfillmentStatus?.toUpperCase() === "FULFILLED" ||
               Boolean(order.reconciliation?.autoSyncedPaidFulfilled))
           );
-        case "cancelled": {
-          if (!isCancelledOrder) return false;
-          if (hasCustomDate) return true;
-          const orderTime = new Date(order.cancelledAt || order.createdAt).getTime();
-          return orderTime >= sevenDaysAgo;
-        }
+        case "cancelled":
+          // Unrestricted Cancelled tab: renders any cancelled or voided order in memory regardless of age
+          return isCancelledOrder;
         case "returned":
           if (isCancelledOrder) return false;
           return courierStatus === "returned";
@@ -4637,7 +4609,7 @@ export default function OrdersFulfillmentPage() {
           return true;
       }
     },
-    [dispatchedOrders, checkIsLocked, dateRange, searchParams, activeFilters, manualStatusOverrides]
+    [dispatchedOrders, checkIsLocked, manualStatusOverrides]
   );
 
   // Exact 11 Functional Tabs
