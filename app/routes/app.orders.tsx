@@ -2938,13 +2938,15 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     }
   }
 
-  // Date range filter tokens (Shopify index criteria syntax)
-  if (startDateParam && endDateParam) {
-    queryParts.push(`created_at:>=${startDateParam} created_at:<=${endDateParam}`);
-  } else if (startDateParam) {
-    queryParts.push(`created_at:>=${startDateParam}`);
-  } else if (endDateParam) {
-    queryParts.push(`created_at:<=${endDateParam}`);
+  // Date range filter tokens (Shopify index criteria syntax) - strictly bypassed for "new" tab
+  if (effectiveTab !== "new") {
+    if (startDateParam && endDateParam) {
+      queryParts.push(`created_at:>=${startDateParam} created_at:<=${endDateParam}`);
+    } else if (startDateParam) {
+      queryParts.push(`created_at:>=${startDateParam}`);
+    } else if (endDateParam) {
+      queryParts.push(`created_at:<=${endDateParam}`);
+    }
   }
 
   const shopifyQueryString = queryParts.join(" ");
@@ -4512,6 +4514,8 @@ export default function OrdersFulfillmentPage() {
             !order.isClosed &&
             !isCancelledOrder &&
             !isClosedOrder &&
+            !isLocked &&
+            !["accepted", "processing", "in_review", "pending", "hold"].includes(courierStatus) &&
             (order.fulfillmentStatus?.toUpperCase() === "UNFULFILLED" ||
               !order.fulfillmentStatus)
           );
@@ -4688,8 +4692,8 @@ export default function OrdersFulfillmentPage() {
         return false;
       }
 
-      // 3. Date Range Selector Filter
-      if (dateRange && (dateRange.start || dateRange.end)) {
+      // 3. Date Range Selector Filter (Bypassed for "new" tab to maintain perpetual unhandled visibility)
+      if (selectedTabId !== "new" && dateRange && (dateRange.start || dateRange.end)) {
         const orderTime = new Date(order.createdAt).getTime();
         if (dateRange.start && orderTime < dateRange.start.getTime()) {
           return false;
