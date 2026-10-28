@@ -6183,7 +6183,7 @@ export default function OrdersFulfillmentPage() {
             className="flex items-center"
             style={{ display: "flex", alignItems: "center", width: "100%" }}
           >
-            <Box minWidth="140px" maxWidth="180px">
+            <div className="max-w-[110px] w-28" style={{ maxWidth: "110px" }}>
               <TextField
                 label="Warehouse Packaging Note"
                 labelHidden
@@ -6195,10 +6195,10 @@ export default function OrdersFulfillmentPage() {
                     [order.id]: val,
                   }))
                 }
-                placeholder="Packaging note..."
+                placeholder="Note..."
                 autoComplete="off"
               />
-            </Box>
+            </div>
           </div>
         </IndexTable.Cell>
 
