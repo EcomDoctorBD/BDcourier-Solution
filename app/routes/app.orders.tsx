@@ -5461,13 +5461,11 @@ export default function OrdersFulfillmentPage() {
         {/* Column 2: Products & Line Items with Stacked Images */}
         <IndexTable.Cell className="products-col-cell w-[15%] max-w-[15%] overflow-hidden">
           <div
-            className="flex items-center w-[15%] max-w-[15%] overflow-hidden"
+            className="flex items-center w-full"
             style={{
               display: "flex",
               alignItems: "center",
-              width: "15%",
-              maxWidth: "15%",
-              overflow: "hidden",
+              width: "100%",
             }}
           >
             <Box width="100%" maxWidth="100%">
@@ -5476,19 +5474,26 @@ export default function OrdersFulfillmentPage() {
                   <>
                     {/* Stacked Thumbnails Container */}
                     <div
+                      className="flex items-center flex-shrink-0"
                       style={{
                         display: "flex",
                         alignItems: "center",
                         position: "relative",
                         minHeight: "40px",
+                        flexShrink: 0,
                       }}
                     >
                       {order.lineItems.slice(0, 3).map((item, idx) => (
                         <div
                           key={idx}
+                          className="w-10 h-10 flex-shrink-0"
                           style={{
                             width: "38px",
                             height: "38px",
+                            minWidth: "38px",
+                            maxWidth: "38px",
+                            aspectRatio: "1/1",
+                            flexShrink: 0,
                             borderRadius: "8px",
                             border: "2px solid var(--p-color-bg-surface, #FFFFFF)",
                             boxShadow: "0 1px 3px rgba(0, 0, 0, 0.12)",
@@ -5497,7 +5502,9 @@ export default function OrdersFulfillmentPage() {
                             marginLeft: idx === 0 ? "0" : "-12px",
                             zIndex: 10 - idx,
                             position: "relative",
-                            flexShrink: 0,
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
                             transition: "transform 0.15s ease",
                           }}
                           title={`${item.title} (x${item.quantity})`}
@@ -5505,11 +5512,14 @@ export default function OrdersFulfillmentPage() {
                           <img
                             src={item.imageUrl || DEFAULT_PRODUCT_PLACEHOLDER}
                             alt={item.title}
+                            className="w-full h-full object-contain flex-shrink-0"
                             style={{
                               width: "100%",
                               height: "100%",
-                              objectFit: "cover",
+                              aspectRatio: "1/1",
+                              objectFit: "contain",
                               display: "block",
+                              flexShrink: 0,
                             }}
                             onError={(e) => {
                               (e.target as HTMLImageElement).src =
@@ -5520,7 +5530,7 @@ export default function OrdersFulfillmentPage() {
                       ))}
                       {order.lineItems.length > 3 && (
                         <div
-                          className="rounded-md"
+                          className="rounded-md flex-shrink-0"
                           style={{
                             height: "22px",
                             padding: "0 8px",
@@ -5535,6 +5545,7 @@ export default function OrdersFulfillmentPage() {
                             justifyContent: "center",
                             marginLeft: "6px",
                             whiteSpace: "nowrap",
+                            flexShrink: 0,
                           }}
                         >
                           +{order.lineItems.length - 3} items
