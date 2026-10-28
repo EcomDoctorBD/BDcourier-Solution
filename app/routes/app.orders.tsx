@@ -5212,8 +5212,8 @@ export default function OrdersFulfillmentPage() {
     { title: "Customer" },
     { title: "Payment & COD" },
     { title: "Fraud Check" },
-    { title: "Courier & Tracking" },
-    { title: "Warehouse Note" },
+    { title: "Select Courier" },
+    { title: "Note" },
     { title: "Action" },
   ];
 
@@ -6242,7 +6242,7 @@ export default function OrdersFulfillmentPage() {
                 disabled={isSubmitting || isRowSubmitting || isRowProcessing || isRowCodOverflow}
                 onClick={() => handleSendSingleOrder(order)}
               >
-                {isHistoricalCancelledOrReturned ? "🔄 Re-dispatch" : "Confirm & Dispatch"}
+                {isHistoricalCancelledOrReturned ? "🔄 Re-dispatch" : "Send to Courier"}
               </Button>
             )}
           </div>
