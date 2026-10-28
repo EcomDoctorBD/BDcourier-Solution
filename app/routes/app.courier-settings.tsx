@@ -4350,7 +4350,7 @@ export default function CourierSettingsPage() {
                     titleHidden
                     choices={[
                       {
-                        label: "Classic",
+                        label: "Standard",
                         value: "classic",
                         helpText: "Free & Starter plan",
                       },
@@ -4360,7 +4360,7 @@ export default function CourierSettingsPage() {
                         helpText: "Growth & Pro plan",
                       },
                       {
-                        label: "New",
+                        label: "Premium",
                         value: "warehouse",
                         helpText: "Advanced & Enterprise plan",
                       },
@@ -4610,10 +4610,10 @@ export default function CourierSettingsPage() {
                         }
                       >
                         {invoiceTemplate === "warehouse"
-                          ? "New"
+                          ? "Premium"
                           : invoiceTemplate === "modern"
                           ? "Modern"
-                          : "Classic"}
+                          : "Standard"}
                       </Badge>
                     )}
                   </InlineStack>
@@ -4628,7 +4628,7 @@ export default function CourierSettingsPage() {
                         ℹ️ Please select an invoice template
                       </Text>
                       <Text as="p" variant="bodySm" tone="subdued">
-                        Select Classic, Modern, or New from the left panel to load the interactive A4 sheet preview.
+                        Select Standard, Modern, or Premium from the left panel to load the interactive A4 sheet preview.
                       </Text>
                     </div>
                   ) : (
