@@ -2974,8 +2974,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
                     }
                   }
                   variant {
-                    weight
-                    weightUnit
+                    id
                     image {
                       url
                       altText
@@ -3031,8 +3030,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
                   sku
                   quantity
                   variant {
-                    weight
-                    weightUnit
+                    id
                   }
                   originalUnitPriceSet {
                     shopMoney {
@@ -3131,8 +3129,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
             node.totalPriceSet?.shopMoney?.amount ||
             "0.00",
           imageUrl,
-          weight: item.variant?.weight !== undefined ? Number(item.variant?.weight) : undefined,
-          weightUnit: item.variant?.weightUnit ? String(item.variant?.weightUnit) : undefined,
+          weight: item.variant?.weight !== undefined ? Number(item.variant?.weight) : 0,
+          weightUnit: item.variant?.weightUnit ? String(item.variant?.weightUnit) : "kg",
         };
       });
 
@@ -3217,8 +3215,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
               node.totalPriceSet?.shopMoney?.amount ||
               "0.00",
             imageUrl,
-            weight: item.variant?.weight !== undefined ? Number(item.variant?.weight) : undefined,
-            weightUnit: item.variant?.weightUnit ? String(item.variant?.weightUnit) : undefined,
+            weight: item.variant?.weight !== undefined ? Number(item.variant?.weight) : 0,
+            weightUnit: item.variant?.weightUnit ? String(item.variant?.weightUnit) : "kg",
           };
         });
 
