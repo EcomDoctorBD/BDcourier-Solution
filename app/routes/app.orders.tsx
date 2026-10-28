@@ -5306,6 +5306,14 @@ export default function OrdersFulfillmentPage() {
       order.displayFinancialStatus?.toUpperCase() === "PAID" ||
       order.codAmount === 0;
 
+    const rawFinancialStatus = (order.displayFinancialStatus || order.financialStatus || "").toUpperCase().trim();
+    const isRowPaid = rawFinancialStatus === "PAID" || order.financialStatus?.toLowerCase() === "paid";
+    const isRowRefunded =
+      rawFinancialStatus === "REFUNDED" ||
+      rawFinancialStatus === "PARTIALLY_REFUNDED" ||
+      order.financialStatus?.toLowerCase() === "refunded";
+    const isRowPaidOrRefunded = isRowPaid || isRowRefunded || isRowPrepaid;
+
     const rowCustomCodVal = customCodAmountsByOrder[order.id];
     const rowMaxPrice = Math.round(
       Number(String(order.totalPrice || "0").replace(/[^0-9.]/g, "")) || 0
@@ -5707,22 +5715,32 @@ export default function OrdersFulfillmentPage() {
                 <Text variant="bodySm" fontWeight="bold" as="span">
                   {`${order.currencyCode} ${order.totalPrice}`}
                 </Text>
-                <InlineStack gap="100" wrap>
+                <BlockStack gap="050">
                   <Badge
-                    tone={isRowPrepaid ? "success" : "attention"}
+                    tone={
+                      isRowPaid
+                        ? "success"
+                        : isRowRefunded
+                        ? "info"
+                        : "attention"
+                    }
                     size="small"
                   >
-                    {order.displayFinancialStatus || (isRowPrepaid ? "PAID" : "UNPAID")}
+                    {order.displayFinancialStatus || (isRowPrepaid ? "PAID" : "PENDING")}
                   </Badge>
-                  {isRowPrepaid ? (
-                    <Badge tone="success" size="small">
-                      PREPAID (৳0 COD)
-                    </Badge>
-                  ) : !showCodEdit[order.id] ? (
+                  {!isRowPaidOrRefunded && !showCodEdit[order.id] && (
                     <InlineStack gap="050" blockAlign="center">
-                      <Badge tone="attention" size="small">
+                      <span
+                        className="text-xs text-gray-500"
+                        style={{
+                          fontSize: "11px",
+                          color: "#6b7280",
+                          fontWeight: 500,
+                          lineHeight: "14px",
+                        }}
+                      >
                         {`COD: ৳${rowEffectiveCod}`}
-                      </Badge>
+                      </span>
                       {!dispatchedInfo && (
                         <Button
                           variant="plain"
@@ -5735,8 +5753,8 @@ export default function OrdersFulfillmentPage() {
                         </Button>
                       )}
                     </InlineStack>
-                  ) : null}
-                </InlineStack>
+                  )}
+                </BlockStack>
 
                 {/* Custom COD Input Field & Real-time Validation Guardrail */}
                 {!isRowPrepaid && !dispatchedInfo && showCodEdit[order.id] && (
