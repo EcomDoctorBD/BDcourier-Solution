@@ -5449,11 +5449,13 @@ export default function OrdersFulfillmentPage() {
                 </Text>
               </InlineStack>
 
-              <div>
-                <Badge tone={order.isInsideDhaka ? "info" : "attention"} size="small">
-                  {order.isInsideDhaka ? "📍 Inside Dhaka" : "🚚 Outside Dhaka"}
-                </Badge>
-              </div>
+              {!isFreePlan && (
+                <div style={{ width: "fit-content", display: "inline-flex", alignSelf: "flex-start" }}>
+                  <Badge tone="info" size="small">
+                    {order.isInsideDhaka ? "Inside Dhaka" : "Outside Dhaka"}
+                  </Badge>
+                </div>
+              )}
             </BlockStack>
           </div>
         </IndexTable.Cell>
