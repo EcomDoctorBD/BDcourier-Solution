@@ -5727,18 +5727,20 @@ export default function OrdersFulfillmentPage() {
                   {`${order.currencyCode} ${order.totalPrice}`}
                 </Text>
                 <BlockStack gap="050">
-                  <Badge
-                    tone={
-                      isRowPaid
-                        ? "success"
-                        : isRowRefunded
-                        ? "info"
-                        : "attention"
-                    }
-                    size="small"
-                  >
-                    {order.displayFinancialStatus || (isRowPrepaid ? "PAID" : "PENDING")}
-                  </Badge>
+                  <div style={{ width: "fit-content", display: "inline-flex", alignSelf: "flex-start" }}>
+                    <Badge
+                      tone={
+                        isRowPaid
+                          ? "success"
+                          : isRowRefunded
+                          ? "info"
+                          : "attention"
+                      }
+                      size="small"
+                    >
+                      {order.displayFinancialStatus || (isRowPrepaid ? "PAID" : "PENDING")}
+                    </Badge>
+                  </div>
                   {!isRowPaidOrRefunded && !showCodEdit[order.id] && (
                     <InlineStack gap="050" blockAlign="center">
                       <span
