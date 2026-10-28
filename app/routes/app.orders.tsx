@@ -9716,8 +9716,6 @@ export default function OrdersFulfillmentPage() {
                     selectable={true}
                     loading={isBulkSubmitting || navigation.state === "loading"}
                     headings={tableHeadings as any}
-                    promotedBulkActions={promotedBulkActions}
-                    bulkActions={bulkActions}
                   >
                     {rowMarkup}
                   </IndexTable>
