@@ -4892,9 +4892,6 @@ export default function CourierSettingsPage() {
                           />
                         ))}
                       </div>
-                      <Text as="p" variant="bodyXs" tone="subdued">
-                        Dynamically styles top accent bar, highlights, and totals.
-                      </Text>
                     </BlockStack>
                   )}
 
@@ -5341,9 +5338,9 @@ export default function CourierSettingsPage() {
                           <div style={{ display: "flex", flexDirection: "column", justifyContent: "space-between", height: "100%" }}>
                             <div>
                               {/* Warehouse Dual-Identity Banner Header: INVOICE / PACKING SLIP */}
-                              <div style={{ border: "2px solid #111827", padding: "8px 12px", borderRadius: "4px", background: "#f9fafb", display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
+                              <div style={{ border: `2px solid ${invoiceAccentColor || "#2563eb"}`, padding: "8px 12px", borderRadius: "4px", background: "#f9fafb", display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
                                 <div>
-                                  <div style={{ fontSize: "14px", fontWeight: "900", letterSpacing: "1px", color: "#111827", textTransform: "uppercase", whiteSpace: "nowrap" }}>
+                                  <div style={{ fontSize: "14px", fontWeight: "900", letterSpacing: "1px", color: invoiceAccentColor || "#2563eb", textTransform: "uppercase", whiteSpace: "nowrap" }}>
                                     INVOICE / PACKING SLIP
                                   </div>
                                   <div style={{ fontSize: "10px", fontWeight: "600", color: "#4b5563", letterSpacing: "0.5px", whiteSpace: "nowrap" }}>
@@ -5404,7 +5401,7 @@ export default function CourierSettingsPage() {
                                   <div style={{ fontSize: "10px", fontWeight: "700", color: "#374151", textTransform: "uppercase" }}>
                                     Payment Instructions
                                   </div>
-                                  <div style={{ fontSize: "12px", fontWeight: "700", color: "#dc2626", marginTop: "2px" }}>
+                                  <div style={{ fontSize: "12px", fontWeight: "700", color: invoiceAccentColor || "#2563eb", marginTop: "2px" }}>
                                     COLLECT CASH: ৳ 3,060
                                   </div>
                                   <div style={{ fontSize: "10px", color: "#4b5563", marginTop: "2px" }}>
@@ -5416,7 +5413,7 @@ export default function CourierSettingsPage() {
                               {/* Order Table with Barcode Metadata */}
                               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "11px", marginTop: "10px" }}>
                                 <thead>
-                                  <tr style={{ background: "#1f2937", color: "#ffffff", fontWeight: "700", fontSize: "10px", textTransform: "uppercase" }}>
+                                  <tr style={{ backgroundColor: invoiceAccentColor || "#2563eb", color: "#ffffff", fontWeight: "700", fontSize: "10px", textTransform: "uppercase" }}>
                                     <th style={{ padding: "6px 8px", textAlign: "left" }}>Item Details & Barcode</th>
                                     <th style={{ padding: "6px 6px", textAlign: "center", whiteSpace: "nowrap" }}>Bin</th>
                                     <th style={{ padding: "6px 6px", textAlign: "center", whiteSpace: "nowrap" }}>Pick</th>
@@ -5499,7 +5496,7 @@ export default function CourierSettingsPage() {
                                     <span style={{ whiteSpace: "nowrap" }}>Shipping Fee:</span>
                                     <span style={{ whiteSpace: "nowrap" }}>৳ 60</span>
                                   </div>
-                                  <div style={{ borderTop: "2px solid #111827", paddingTop: "4px", marginTop: "4px", display: "flex", justifyContent: "space-between", fontWeight: "900", fontSize: "13px", color: "#111827" }}>
+                                  <div style={{ borderTop: `2px solid ${invoiceAccentColor || "#2563eb"}`, paddingTop: "4px", marginTop: "4px", display: "flex", justifyContent: "space-between", fontWeight: "900", fontSize: "13px", color: invoiceAccentColor || "#2563eb" }}>
                                     <span style={{ whiteSpace: "nowrap" }}>Total COD to Collect:</span>
                                     <span style={{ whiteSpace: "nowrap" }}>৳ 3,060</span>
                                   </div>
@@ -5548,10 +5545,10 @@ export default function CourierSettingsPage() {
                                 </div>
                                 <div style={{ flex: 1 }}>
                                   <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "2px" }}>
-                                    <span style={{ fontWeight: "700", fontSize: "11px", color: "#111827", textTransform: "uppercase" }}>
+                                    <span style={{ fontWeight: "700", fontSize: "11px", color: invoiceAccentColor || "#2563eb", textTransform: "uppercase" }}>
                                       Order Status QR Code
                                     </span>
-                                    <span style={{ fontSize: "9px", background: "#f3e8ff", color: "#6b21a8", fontWeight: "700", padding: "1px 6px", borderRadius: "3px" }}>
+                                    <span style={{ fontSize: "9px", background: `${invoiceAccentColor || "#2563eb"}15`, color: invoiceAccentColor || "#2563eb", border: `1px solid ${invoiceAccentColor || "#2563eb"}33`, fontWeight: "700", padding: "1px 6px", borderRadius: "3px" }}>
                                       Enterprise
                                     </span>
                                   </div>

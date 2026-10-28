@@ -8839,6 +8839,8 @@ export default function OrdersFulfillmentPage() {
                         }
 
                         // C. WAREHOUSE FULFILLMENT (ENTERPRISE) MANIFEST INVOICE
+                        const accent =
+                          invoiceConfig?.invoiceAccentColor || "#2563eb";
                         return (
                           <div
                             key={`${slip.orderId}-${index}-warehouse`}
@@ -8867,7 +8869,7 @@ export default function OrdersFulfillmentPage() {
                               {/* Warehouse Dual-Identity Banner Header */}
                               <div
                                 style={{
-                                  border: "2px solid #111827",
+                                  border: `2px solid ${accent}`,
                                   padding: "10px 14px",
                                   borderRadius: "4px",
                                   backgroundColor: "#f8fafc",
@@ -8884,6 +8886,7 @@ export default function OrdersFulfillmentPage() {
                                       fontWeight: 900,
                                       letterSpacing: "1.5px",
                                       textTransform: "uppercase",
+                                      color: accent,
                                     }}
                                   >
                                     INVOICE / PACKING MANIFEST
@@ -9069,7 +9072,7 @@ export default function OrdersFulfillmentPage() {
                                       color:
                                         Number(slip.codAmount) === 0
                                           ? "#047857"
-                                          : "#dc2626",
+                                          : accent,
                                       marginTop: "2px",
                                       whiteSpace: "nowrap",
                                       fontVariantNumeric: "tabular-nums",
@@ -9118,7 +9121,7 @@ export default function OrdersFulfillmentPage() {
                                 <thead>
                                   <tr
                                     style={{
-                                      backgroundColor: "#1f2937",
+                                      backgroundColor: accent,
                                       color: "#ffffff",
                                       textAlign: "left",
                                       fontSize: "10px",
