@@ -5197,7 +5197,18 @@ export default function OrdersFulfillmentPage() {
   // Reorganized 8-Column Table Headings for High-Converting Courier Fulfillment
   const tableHeadings = [
     { title: "Order" },
-    { title: "Products" },
+    {
+      id: "products-column-heading",
+      title: (
+        <div
+          data-col="products"
+          className="w-[15%] max-w-[15%] overflow-hidden"
+          style={{ width: "15%", maxWidth: "15%" }}
+        >
+          Products
+        </div>
+      ),
+    },
     { title: "Customer" },
     { title: "Payment & COD" },
     { title: "Fraud Check" },
@@ -5440,12 +5451,18 @@ export default function OrdersFulfillmentPage() {
         </IndexTable.Cell>
 
         {/* Column 2: Products & Line Items with Stacked Images */}
-        <IndexTable.Cell>
+        <IndexTable.Cell className="products-col-cell w-[15%] max-w-[15%] overflow-hidden">
           <div
-            className="flex items-center"
-            style={{ display: "flex", alignItems: "center" }}
+            className="flex items-center w-[15%] max-w-[15%] overflow-hidden"
+            style={{
+              display: "flex",
+              alignItems: "center",
+              width: "15%",
+              maxWidth: "15%",
+              overflow: "hidden",
+            }}
           >
-            <Box minWidth="190px" maxWidth="250px">
+            <Box width="100%" maxWidth="100%">
               <BlockStack gap="150">
                 {order.lineItems.length > 0 ? (
                   <>
@@ -6263,6 +6280,14 @@ export default function OrdersFulfillmentPage() {
         .orders-tabs-nowrap-container ul {
           flex-wrap: nowrap !important;
           white-space: nowrap !important;
+        }
+        /* Products Column Rigid 15% Width Lock */
+        th:has([data-col="products"]),
+        td:has(.products-col-cell),
+        .products-col-cell {
+          width: 15% !important;
+          max-width: 15% !important;
+          overflow: hidden !important;
         }
         /* Force-unlock Polaris Popover width constraints for DatePicker */
         .date-picker-popover-viewport {
