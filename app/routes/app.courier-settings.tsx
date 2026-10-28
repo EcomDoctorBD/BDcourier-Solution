@@ -262,6 +262,48 @@ function SparklesIcon(props: SVGProps<SVGSVGElement>) {
   );
 }
 
+export const getWarningBannerTheme = (colorCode: string, noteText: string = "") => {
+  const isThankYou = /thank|thanks|ধন্যবাদ/i.test(noteText);
+  switch (colorCode) {
+    case "#dcfce7": // Thank You Green
+      return {
+        bg: "#dcfce7",
+        text: "#166534",
+        border: "#22c55e",
+        icon: isThankYou ? "💖 " : "✨ ",
+      };
+    case "#dbeafe": // Info Blue
+      return {
+        bg: "#dbeafe",
+        text: "#1e40af",
+        border: "#3b82f6",
+        icon: isThankYou ? "" : "ℹ️ ",
+      };
+    case "#fce7f3": // Soft Pink / Purple
+      return {
+        bg: "#fce7f3",
+        text: "#9d174d",
+        border: "#ec4899",
+        icon: isThankYou ? "💖 " : "✨ ",
+      };
+    case "#f3f4f6": // Clean Gray / White
+      return {
+        bg: "#f3f4f6",
+        text: "#1f2937",
+        border: "#9ca3af",
+        icon: "",
+      };
+    case "#fef3c7": // Warning Yellow (Default)
+    default:
+      return {
+        bg: "#fef3c7",
+        text: "#92400e",
+        border: "#f59e0b",
+        icon: isThankYou ? "✨ " : "⚠️ ",
+      };
+  }
+};
+
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
   const shopDomain = session.shop;
@@ -396,6 +438,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     labelStyle: (storeConfig as any)?.labelStyle || "standard",
     socialHandle: (storeConfig as any)?.socialHandle || "",
     warehouseWarning: (storeConfig as any)?.warehouseWarning || "FRAGILE / HANDLE WITH CARE",
+    warningBannerColor: (storeConfig as any)?.warningBannerColor || "#fef3c7",
     brandName: (storeConfig as any)?.brandName || "",
     brandPhone: (storeConfig as any)?.brandPhone || "",
     brandAddress: (storeConfig as any)?.brandAddress || "",
@@ -997,6 +1040,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const labelStyle = String(formData.get("labelStyle") || "standard").trim();
     const socialHandle = String(formData.get("socialHandle") || "").trim();
     const warehouseWarning = String(formData.get("warehouseWarning") || "FRAGILE / HANDLE WITH CARE").trim();
+    const warningBannerColor = String(formData.get("warningBannerColor") || "#fef3c7").trim();
     const brandName = String(formData.get("brandName") || "").trim();
     const brandPhone = String(formData.get("brandPhone") || "").trim();
     const brandAddress = String(formData.get("brandAddress") || "").trim();
@@ -1027,6 +1071,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           labelStyle,
           socialHandle,
           warehouseWarning,
+          warningBannerColor,
           brandName,
           brandPhone,
           brandAddress,
@@ -1652,6 +1697,9 @@ export default function CourierSettingsPage() {
   const [warehouseWarning, setWarehouseWarning] = useState<string>(
     shippingLabelConfig?.warehouseWarning || "FRAGILE / HANDLE WITH CARE"
   );
+  const [warningBannerColor, setWarningBannerColor] = useState<string>(
+    shippingLabelConfig?.warningBannerColor || "#fef3c7"
+  );
   const [brandName, setBrandName] = useState<string>(
     shippingLabelConfig?.brandName || ""
   );
@@ -1682,29 +1730,29 @@ export default function CourierSettingsPage() {
   const getLabelDimensions = (size: string) => {
     switch (size) {
       case "4in x 6in":
-        return { maxWidth: "320px", minHeight: "440px", padding: "18px 20px" };
-      case "4in x 2in":
-        return { maxWidth: "340px", minHeight: "190px", padding: "12px 16px" };
+        return { maxWidth: "320px", minHeight: "460px", padding: "16px 18px", aspectRatio: "2 / 3" };
       case "3in x 4in":
-        return { maxWidth: "290px", minHeight: "360px", padding: "16px 18px" };
+        return { maxWidth: "300px", minHeight: "390px", padding: "14px 16px", aspectRatio: "3 / 4" };
       case "3in x 3in":
-        return { maxWidth: "280px", minHeight: "280px", padding: "14px 16px" };
+        return { maxWidth: "300px", minHeight: "300px", padding: "14px 14px", aspectRatio: "1 / 1" };
+      case "4in x 2in":
+        return { maxWidth: "340px", minHeight: "170px", padding: "10px 14px", aspectRatio: "2 / 1" };
       case "3in x 2in":
-        return { maxWidth: "280px", minHeight: "200px", padding: "12px 14px" };
+        return { maxWidth: "300px", minHeight: "195px", padding: "10px 12px", aspectRatio: "3 / 2" };
       case "2in x 1.5in":
-        return { maxWidth: "260px", minHeight: "195px", padding: "10px 12px" };
-      case "1.5in x 1in":
-        return { maxWidth: "230px", minHeight: "160px", padding: "8px 10px" };
-      case "2in x 1in":
-        return { maxWidth: "250px", minHeight: "150px", padding: "8px 12px" };
-      case "2in x 1.15in":
-        return { maxWidth: "250px", minHeight: "160px", padding: "9px 12px" };
-      case "2.2in x 1.4in":
-        return { maxWidth: "260px", minHeight: "175px", padding: "10px 12px" };
+        return { maxWidth: "260px", minHeight: "190px", padding: "8px 10px", aspectRatio: "4 / 3" };
       case "2in x 2.95in":
-        return { maxWidth: "220px", minHeight: "320px", padding: "12px 12px" };
+        return { maxWidth: "220px", minHeight: "315px", padding: "10px 10px", aspectRatio: "2 / 2.95" };
+      case "2.2in x 1.4in":
+        return { maxWidth: "260px", minHeight: "160px", padding: "8px 10px", aspectRatio: "2.2 / 1.4" };
+      case "2in x 1.15in":
+        return { maxWidth: "250px", minHeight: "140px", padding: "6px 8px", aspectRatio: "2 / 1.15" };
+      case "2in x 1in":
+        return { maxWidth: "250px", minHeight: "125px", padding: "6px 8px", aspectRatio: "2 / 1" };
+      case "1.5in x 1in":
+        return { maxWidth: "225px", minHeight: "145px", padding: "6px 8px", aspectRatio: "1.5 / 1" };
       default:
-        return { maxWidth: "320px", minHeight: "440px", padding: "18px 20px" };
+        return { maxWidth: "320px", minHeight: "460px", padding: "16px 18px", aspectRatio: "2 / 3" };
     }
   };
 
@@ -1747,6 +1795,7 @@ export default function CourierSettingsPage() {
     formData.append("labelStyle", labelStyle);
     formData.append("socialHandle", socialHandle);
     formData.append("warehouseWarning", warehouseWarning);
+    formData.append("warningBannerColor", warningBannerColor);
     formData.append("brandName", brandName);
     formData.append("brandPhone", brandPhone);
     formData.append("brandAddress", brandAddress);
@@ -1759,6 +1808,7 @@ export default function CourierSettingsPage() {
     setLabelStyle(shippingLabelConfig?.labelStyle || "standard");
     setSocialHandle(shippingLabelConfig?.socialHandle || "");
     setWarehouseWarning(shippingLabelConfig?.warehouseWarning || "FRAGILE / HANDLE WITH CARE");
+    setWarningBannerColor(shippingLabelConfig?.warningBannerColor || "#fef3c7");
     setBrandName(shippingLabelConfig?.brandName || "");
     setBrandPhone(shippingLabelConfig?.brandPhone || "");
     setBrandAddress(shippingLabelConfig?.brandAddress || "");
@@ -3838,8 +3888,8 @@ export default function CourierSettingsPage() {
                     onChange={(val) => setLabelSize(val)}
                   />
 
-                  {/* PRO TIER FIELD: Social Media Handle */}
-                  {labelStyle === "brand_centric" && (
+                  {/* PRO TIER FIELD: Social Media Handle (Visible only for large sizes) */}
+                  {!isCompactLabel && labelStyle === "brand_centric" && (
                     <TextField
                       label="Instagram / Facebook handle (@brand)"
                       value={socialHandle}
@@ -3849,8 +3899,8 @@ export default function CourierSettingsPage() {
                     />
                   )}
 
-                  {/* ENTERPRISE TIER FIELD: Fallback Custom Warehouse Warning Label */}
-                  {labelStyle === "smart_warehouse" && (
+                  {/* ENTERPRISE TIER FIELD: Fallback Custom Warehouse Warning Label & Theme (Visible only for large sizes) */}
+                  {!isCompactLabel && labelStyle === "smart_warehouse" && (
                     <BlockStack gap="200">
                       <Select
                         label="Fallback Warehouse Warning Label"
@@ -3860,7 +3910,7 @@ export default function CourierSettingsPage() {
                           { label: "VERIFY CONTENTS BEFORE DELIVERY", value: "VERIFY CONTENTS BEFORE DELIVERY" },
                           { label: "KEEP DRY / APPAREL GOODS", value: "KEEP DRY / APPAREL GOODS" },
                           { label: "HIGH VALUE CONSIGNMENT", value: "HIGH VALUE CONSIGNMENT" },
-                          { label: "Custom Warning...", value: "custom" },
+                          { label: "Custom Warning / Note...", value: "custom" },
                         ]}
                         value={[
                           "FRAGILE / HANDLE WITH CARE",
@@ -3876,12 +3926,24 @@ export default function CourierSettingsPage() {
                         }}
                       />
                       <TextField
-                        label="Warning Label Text"
+                        label="Warning / Note Text"
                         labelHidden
                         value={warehouseWarning}
                         onChange={(val) => setWarehouseWarning(val)}
-                        placeholder="e.g. FRAGILE / HANDLE WITH CARE"
+                        placeholder="e.g. FRAGILE / HANDLE WITH CARE or Thank you for your order!"
                         autoComplete="off"
+                      />
+                      <Select
+                        label="Banner Background Color"
+                        options={[
+                          { label: "Warning Yellow (Default)", value: "#fef3c7" },
+                          { label: "Thank You Green", value: "#dcfce7" },
+                          { label: "Info Blue", value: "#dbeafe" },
+                          { label: "Soft Pink / Purple", value: "#fce7f3" },
+                          { label: "Clean Gray / White", value: "#f3f4f6" },
+                        ]}
+                        value={warningBannerColor}
+                        onChange={(val) => setWarningBannerColor(val)}
                       />
                     </BlockStack>
                   )}
@@ -4067,11 +4129,12 @@ export default function CourierSettingsPage() {
                         fontFamily: "'Courier New', Courier, monospace, sans-serif",
                         maxWidth: getLabelDimensions(labelSize).maxWidth,
                         minHeight: getLabelDimensions(labelSize).minHeight,
+                        aspectRatio: getLabelDimensions(labelSize).aspectRatio,
                         width: "100%",
                         display: "flex",
                         flexDirection: "column",
                         justifyContent: "space-between",
-                        gap: "10px",
+                        gap: isCompactLabel ? "6px" : "10px",
                         transition: "all 0.2s ease-in-out",
                       }}
                     >
@@ -4082,10 +4145,10 @@ export default function CourierSettingsPage() {
                             src={brandLogo}
                             alt={brandName}
                             style={{
-                              maxHeight: isCompactLabel ? "32px" : "44px",
+                              maxHeight: isCompactLabel ? "24px" : "40px",
                               maxWidth: "180px",
                               objectFit: "contain",
-                              marginBottom: "6px",
+                              marginBottom: isCompactLabel ? "3px" : "6px",
                             }}
                           />
                         )}
@@ -4093,7 +4156,7 @@ export default function CourierSettingsPage() {
                           <div
                             style={{
                               fontWeight: 800,
-                              fontSize: isCompactLabel ? "14px" : "17px",
+                              fontSize: isCompactLabel ? "12px" : "16px",
                               textTransform: "uppercase",
                               letterSpacing: "0.5px",
                               lineHeight: 1.2,
@@ -4101,14 +4164,14 @@ export default function CourierSettingsPage() {
                               overflow: "hidden",
                               textOverflow: "ellipsis",
                               maxWidth: "100%",
-                              maxHeight: isCompactLabel ? "20px" : "26px",
+                              maxHeight: isCompactLabel ? "18px" : "24px",
                             }}
                             title={brandName}
                           >
                             {brandName}
                           </div>
                         )}
-                        {labelStyle === "brand_centric" && socialHandle.trim() && (
+                        {!isCompactLabel && labelStyle === "brand_centric" && socialHandle.trim() && (
                           <div
                             style={{
                               fontSize: "10px",
@@ -4141,14 +4204,14 @@ export default function CourierSettingsPage() {
 
                       <div style={{ borderBottom: "1.5px dashed #000000", width: "100%" }} />
 
-                      {/* MIDDLE DEMO DATA SECTION */}
+                      {/* MIDDLE DEMO DATA SECTION (Order No, Customer, Phone, COD) */}
                       <div
                         style={{
-                          fontSize: isCompactLabel ? "11px" : "12px",
-                          lineHeight: 1.45,
+                          fontSize: isCompactLabel ? "10px" : "12px",
+                          lineHeight: isCompactLabel ? 1.35 : 1.45,
                           display: "flex",
                           flexDirection: "column",
-                          gap: "3px",
+                          gap: isCompactLabel ? "2px" : "3px",
                         }}
                       >
                         <div style={{ display: "flex", justifyContent: "space-between" }}>
@@ -4157,11 +4220,23 @@ export default function CourierSettingsPage() {
                         </div>
                         <div style={{ display: "flex", justifyContent: "space-between" }}>
                           <span style={{ fontWeight: 700 }}>Name:</span>
-                          <span>নাফিস / Nahid</span>
+                          <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>নাফিস / Nahid</span>
                         </div>
                         <div style={{ display: "flex", justifyContent: "space-between" }}>
                           <span style={{ fontWeight: 700 }}>Phone:</span>
                           <span>01334455667</span>
+                        </div>
+                        <div
+                          style={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            borderTop: "1px dashed #000000",
+                            paddingTop: "2px",
+                            marginTop: "1px",
+                          }}
+                        >
+                          <span style={{ fontWeight: 700, textTransform: "uppercase" }}>Total COD:</span>
+                          <span style={{ fontWeight: 800 }}>৳1,250</span>
                         </div>
                       </div>
 
@@ -4174,18 +4249,18 @@ export default function CourierSettingsPage() {
                           display: "flex",
                           flexDirection: "column",
                           alignItems: "center",
-                          gap: "4px",
+                          gap: "2px",
                         }}
                       >
                         <DynamicBarcodeGraphic
                           code="PREVIEW-TRACK-SAMPLE"
-                          height={isCompactLabel ? 28 : 38}
+                          height={isCompactLabel ? 22 : 36}
                           showText={true}
                         />
                       </div>
 
-                      {/* DYNAMIC TEMPLATE-SPECIFIC FOOTER / EXTRA SECTION */}
-                      {labelStyle === "standard" && (
+                      {/* DYNAMIC TEMPLATE-SPECIFIC FOOTER / EXTRA SECTION (Rendered ONLY for large sizes) */}
+                      {!isCompactLabel && labelStyle === "standard" && (
                         <div
                           style={{
                             borderTop: "1.5px dashed #000000",
@@ -4200,7 +4275,7 @@ export default function CourierSettingsPage() {
                         </div>
                       )}
 
-                      {labelStyle === "brand_centric" && (
+                      {!isCompactLabel && labelStyle === "brand_centric" && (
                         <div
                           style={{
                             borderTop: "1.5px dashed #000000",
@@ -4229,7 +4304,7 @@ export default function CourierSettingsPage() {
                         </div>
                       )}
 
-                      {labelStyle === "smart_warehouse" && (
+                      {!isCompactLabel && labelStyle === "smart_warehouse" && (
                         <div
                           style={{
                             borderTop: "2px solid #000000",
@@ -4240,23 +4315,28 @@ export default function CourierSettingsPage() {
                             gap: "5px",
                           }}
                         >
-                          {/* Fallback Custom Warehouse Warning Label */}
-                          <div
-                            style={{
-                              border: "1.5px solid #000000",
-                              backgroundColor: "#fef3c7",
-                              color: "#92400e",
-                              padding: "3px 6px",
-                              borderRadius: "3px",
-                              fontSize: "9px",
-                              fontWeight: 800,
-                              textAlign: "center",
-                              textTransform: "uppercase",
-                              letterSpacing: "0.5px",
-                            }}
-                          >
-                            ⚠️ {warehouseWarning || "FRAGILE / HANDLE WITH CARE"}
-                          </div>
+                          {/* Fallback Custom Warehouse Warning / Note Banner */}
+                          {(() => {
+                            const theme = getWarningBannerTheme(warningBannerColor, warehouseWarning);
+                            return (
+                              <div
+                                style={{
+                                  border: `1.5px solid ${theme.border}`,
+                                  backgroundColor: theme.bg,
+                                  color: theme.text,
+                                  padding: "3px 6px",
+                                  borderRadius: "3px",
+                                  fontSize: "9px",
+                                  fontWeight: 800,
+                                  textAlign: "center",
+                                  textTransform: "uppercase",
+                                  letterSpacing: "0.5px",
+                                }}
+                              >
+                                {theme.icon}{warehouseWarning || "FRAGILE / HANDLE WITH CARE"}
+                              </div>
+                            );
+                          })()}
 
                           {/* Clean Split-Line at Lower Margin */}
                           <div

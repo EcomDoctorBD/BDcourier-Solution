@@ -507,6 +507,11 @@ const courierConfigSchema = new mongoose.Schema(
       default: "FRAGILE / HANDLE WITH CARE",
       trim: true,
     },
+    warningBannerColor: {
+      type: String,
+      default: "#fef3c7",
+      trim: true,
+    },
     // Default Courier Parcel Notes
     pathaoParcelNote: {
       type: String,

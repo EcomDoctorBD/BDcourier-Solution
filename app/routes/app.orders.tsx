@@ -3472,6 +3472,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     socialHandle: (storeConfig as any)?.socialHandle || "",
     warehouseWarning:
       (storeConfig as any)?.warehouseWarning || "FRAGILE / HANDLE WITH CARE",
+    warningBannerColor:
+      (storeConfig as any)?.warningBannerColor || "#fef3c7",
     brandName: (storeConfig as any)?.brandName || "",
     brandPhone: (storeConfig as any)?.brandPhone || "",
     brandAddress: (storeConfig as any)?.brandAddress || "",
@@ -3972,6 +3974,48 @@ const formatDateToYMD = (d: Date | null): string => {
   const month = String(d.getMonth() + 1).padStart(2, "0");
   const day = String(d.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
+};
+
+export const getWarningBannerTheme = (colorCode: string, noteText: string = "") => {
+  const isThankYou = /thank|thanks|ধন্যবাদ/i.test(noteText);
+  switch (colorCode) {
+    case "#dcfce7": // Thank You Green
+      return {
+        bg: "#dcfce7",
+        text: "#166534",
+        border: "#22c55e",
+        icon: isThankYou ? "💖 " : "✨ ",
+      };
+    case "#dbeafe": // Info Blue
+      return {
+        bg: "#dbeafe",
+        text: "#1e40af",
+        border: "#3b82f6",
+        icon: isThankYou ? "" : "ℹ️ ",
+      };
+    case "#fce7f3": // Soft Pink / Purple
+      return {
+        bg: "#fce7f3",
+        text: "#9d174d",
+        border: "#ec4899",
+        icon: isThankYou ? "💖 " : "✨ ",
+      };
+    case "#f3f4f6": // Clean Gray / White
+      return {
+        bg: "#f3f4f6",
+        text: "#1f2937",
+        border: "#9ca3af",
+        icon: "",
+      };
+    case "#fef3c7": // Warning Yellow (Default)
+    default:
+      return {
+        bg: "#fef3c7",
+        text: "#92400e",
+        border: "#f59e0b",
+        icon: isThankYou ? "✨ " : "⚠️ ",
+      };
+  }
 };
 
 export const getPrintLabelDimensions = (size: string) => {
@@ -7443,7 +7487,7 @@ export default function OrdersFulfillmentPage() {
                                 </div>
                               )}
 
-                              {activeLabelStyle === "smart_warehouse" && (
+                              {activeLabelStyle === "smart_warehouse" && !isCompact && (
                                 <div
                                   style={{
                                     display: "flex",
@@ -7454,27 +7498,35 @@ export default function OrdersFulfillmentPage() {
                                     overflow: "hidden",
                                   }}
                                 >
-                                  <div
-                                    style={{
-                                      border: "1px solid #000000",
-                                      backgroundColor: "#fef3c7",
-                                      color: "#92400e",
-                                      padding: "1px 4px",
-                                      borderRadius: "2px",
-                                      fontSize: isMicro ? "6.5px" : "7.5px",
-                                      fontWeight: 800,
-                                      textAlign: "center",
-                                      textTransform: "uppercase",
-                                      letterSpacing: "0.5px",
-                                      whiteSpace: "nowrap",
-                                      overflow: "hidden",
-                                      textOverflow: "ellipsis",
-                                    }}
-                                  >
-                                    ⚠️{" "}
-                                    {shippingLabelConfig?.warehouseWarning ||
-                                      "FRAGILE / HANDLE WITH CARE"}
-                                  </div>
+                                  {(() => {
+                                    const theme = getWarningBannerTheme(
+                                      shippingLabelConfig?.warningBannerColor || "#fef3c7",
+                                      shippingLabelConfig?.warehouseWarning || ""
+                                    );
+                                    return (
+                                      <div
+                                        style={{
+                                          border: `1px solid ${theme.border || "#000000"}`,
+                                          backgroundColor: theme.bg,
+                                          color: theme.text,
+                                          padding: "1px 4px",
+                                          borderRadius: "2px",
+                                          fontSize: isMicro ? "6.5px" : "7.5px",
+                                          fontWeight: 800,
+                                          textAlign: "center",
+                                          textTransform: "uppercase",
+                                          letterSpacing: "0.5px",
+                                          whiteSpace: "nowrap",
+                                          overflow: "hidden",
+                                          textOverflow: "ellipsis",
+                                        }}
+                                      >
+                                        {theme.icon}
+                                        {shippingLabelConfig?.warehouseWarning ||
+                                          "FRAGILE / HANDLE WITH CARE"}
+                                      </div>
+                                    );
+                                  })()}
                                   <div
                                     style={{
                                       borderTop: "1px dashed #000000",
@@ -7501,7 +7553,7 @@ export default function OrdersFulfillmentPage() {
                                     }}
                                   >
                                     {slip.lineItems
-                                      .slice(0, isMicro ? 1 : isCompact ? 2 : 3)
+                                      .slice(0, 3)
                                       .map((it, idx) => (
                                         <div
                                           key={idx}
