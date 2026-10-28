@@ -4076,6 +4076,40 @@ export default function OrdersFulfillmentPage() {
   const [manuallyUnlockedOrders, setManuallyUnlockedOrders] = useState<
     Record<string, boolean>
   >({});
+  const [manualStatusOverrides, setManualStatusOverrides] = useState<
+    Record<string, "pending" | "cancelled">
+  >({});
+  const [isUpdateStatusPopoverOpen, setIsUpdateStatusPopoverOpen] = useState(false);
+
+  const handleBulkUpdateStatus = useCallback(
+    (targetStatus: "pending" | "cancelled") => {
+      if (selectedResources.length === 0) return;
+
+      setManualStatusOverrides((prev) => {
+        const next = { ...prev };
+        for (const id of selectedResources) {
+          next[id] = targetStatus;
+        }
+        return next;
+      });
+
+      setDispatchedOrders((prev) => {
+        const updated = { ...prev };
+        for (const id of selectedResources) {
+          if (updated[id]) {
+            updated[id] = {
+              ...updated[id],
+              courierStatus: targetStatus,
+            };
+          }
+        }
+        return updated;
+      });
+
+      setSelectedResources([]);
+    },
+    [selectedResources]
+  );
   const [lockedRiskOrders, setLockedRiskOrders] = useState<
     Record<string, boolean>
   >({});
@@ -4458,8 +4492,10 @@ export default function OrdersFulfillmentPage() {
 
   const matchesTab = useCallback(
     (order: NormalizedOrder, tabId: string) => {
+      const manualStatus = manualStatusOverrides[order.id];
       const dispatched = dispatchedOrders[order.id];
       const courierStatus = (
+        manualStatus ||
         dispatched?.courierStatus ||
         order.reconciliation?.courierStatus ||
         ""
@@ -4526,10 +4562,12 @@ export default function OrdersFulfillmentPage() {
             (courierStatus === "accepted" ||
               courierStatus === "in_review" ||
               courierStatus === "processing" ||
-              courierStatus === "pending")
+              courierStatus === "pending" ||
+              courierStatus === "" ||
+              !courierStatus)
           );
         case "pending":
-          if (isCancelledOrder || isClosedOrder) return false;
+          if (isCancelledOrder || isClosedOrder || Boolean(dispatched)) return false;
           return isLocked || courierStatus === "pending" || courierStatus === "hold";
         case "shipping":
           if (isCancelledOrder || isClosedOrder) return false;
@@ -4594,7 +4632,7 @@ export default function OrdersFulfillmentPage() {
           return true;
       }
     },
-    [dispatchedOrders, checkIsLocked, dateRange, searchParams, activeFilters]
+    [dispatchedOrders, checkIsLocked, dateRange, searchParams, activeFilters, manualStatusOverrides]
   );
 
   // Exact 11 Functional Tabs
@@ -5194,10 +5232,18 @@ export default function OrdersFulfillmentPage() {
   // Official Polaris Native Bulk Actions Pipeline
   const promotedBulkActions: any[] = [
     {
-      content: isBulkSubmitting ? "Booking Orders..." : "Book Selected Orders",
-      onAction: handleBulkSendToCourier,
-      disabled: isSubmitting || isBulkSubmitting || isBatchOverPlanCap,
-      loading: isBulkSubmitting,
+      title: "Update Status",
+      actions: [
+        {
+          content: "Move to Pending",
+          onAction: () => handleBulkUpdateStatus("pending"),
+        },
+        {
+          content: "Move to Cancelled",
+          onAction: () => handleBulkUpdateStatus("cancelled"),
+          destructive: true,
+        },
+      ],
     },
     ...(activeCouriers.pathao
       ? [
@@ -9473,6 +9519,77 @@ export default function OrdersFulfillmentPage() {
                       {usageSummary.bulkBatchLimit} orders per bulk batch.
                     </p>
                   </Banner>
+                </Box>
+              )}
+
+              {/* White Sticky Floating Bulk Actions Bar */}
+              {selectedResources.length > 0 && (
+                <Box paddingBlock="200" paddingInline="400">
+                  <div
+                    style={{
+                      position: "sticky",
+                      top: "0px",
+                      zIndex: 35,
+                      backgroundColor: "var(--p-color-bg-surface, #ffffff)",
+                      border: "1px solid var(--p-color-border-subdued, #e1e3e5)",
+                      borderRadius: "8px",
+                      padding: "10px 16px",
+                      boxShadow: "0 4px 12px rgba(0, 0, 0, 0.08)",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      marginBottom: "8px",
+                    }}
+                  >
+                    <InlineStack gap="300" blockAlign="center">
+                      <Text as="span" variant="bodyMd" fontWeight="semibold">
+                        {selectedResources.length} {selectedResources.length === 1 ? "order" : "orders"} selected
+                      </Text>
+                    </InlineStack>
+                    <InlineStack gap="200" blockAlign="center">
+                      <Popover
+                        active={isUpdateStatusPopoverOpen}
+                        activator={
+                          <Button
+                            variant="primary"
+                            disclosure
+                            onClick={() => setIsUpdateStatusPopoverOpen((prev) => !prev)}
+                            disabled={isSubmitting || isBulkSubmitting}
+                          >
+                            Update Status
+                          </Button>
+                        }
+                        onClose={() => setIsUpdateStatusPopoverOpen(false)}
+                      >
+                        <ActionList
+                          actionRole="menuitem"
+                          items={[
+                            {
+                              content: "Move to Pending",
+                              onAction: () => {
+                                setIsUpdateStatusPopoverOpen(false);
+                                handleBulkUpdateStatus("pending");
+                              },
+                            },
+                            {
+                              content: "Move to Cancelled",
+                              onAction: () => {
+                                setIsUpdateStatusPopoverOpen(false);
+                                handleBulkUpdateStatus("cancelled");
+                              },
+                              destructive: true,
+                            },
+                          ]}
+                        />
+                      </Popover>
+                      <Button onClick={handlePrintLabels} disabled={isSubmitting || isBulkSubmitting}>
+                        Print Labels
+                      </Button>
+                      <Button onClick={handlePrintInvoices} disabled={isSubmitting || isBulkSubmitting}>
+                        Print Invoices
+                      </Button>
+                    </InlineStack>
+                  </div>
                 </Box>
               )}
 
