@@ -2890,9 +2890,14 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     }
   }
 
-  // Dynamic layout chunking: Strict 50-order boundary for "new" tab, 25 for other tabs
+  // Dynamic layout chunking: 50 for "new", "pending", and "old_orders", 25 for "all" and other active tabs
   const effectiveTab = tabParam || "new";
-  const pageSize = effectiveTab === "new" ? 50 : 25;
+  const pageSize =
+    effectiveTab === "new" ||
+    effectiveTab === "pending" ||
+    effectiveTab === "old_orders"
+      ? 50
+      : 25;
 
   // Seven-day threshold computation (UTC ISO format for Shopify Admin index queries)
   const sevenDaysAgoDate = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
