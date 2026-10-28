@@ -274,6 +274,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const planLower = String(currentPlan).trim().toLowerCase();
   const isProOrEnterprise =
     planLower.startsWith("pro") || planLower.startsWith("enterprise");
+  const canUseAutoRouting = ["pro", "advanced", "enterprise"].some((p) =>
+    planLower.startsWith(p)
+  );
 
   // Routing & Safety Settings
   const isAutoRoutingEnabled = Boolean(
@@ -409,6 +412,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     shopDomain,
     currentPlan,
     isProOrEnterprise,
+    canUseAutoRouting,
     courierConfig,
     routingConfig,
     aiConfig,
@@ -836,6 +840,18 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   // ==================== 4. SAVE ROUTING & FRAUD SAFETY SETTINGS ====================
   if (actionType === "saveRoutingSettings") {
+    const rawStoreConfig: any = await CourierConfig.findOne({ shopDomain }).lean();
+    const currentPlanCheck = String(rawStoreConfig?.currentPlan || "Free").trim().toLowerCase();
+    const isPlanEntitled = ["pro", "advanced", "enterprise"].some((p) =>
+      currentPlanCheck.startsWith(p)
+    );
+    if (!isPlanEntitled) {
+      return json({
+        success: false,
+        actionType: "saveRoutingSettings",
+        message: "Automatic Courier Selection & District Routing is an advanced feature available on Pro, Advanced, and Enterprise plans. Please upgrade your plan under Pricing.",
+      });
+    }
     const isAutoRoutingEnabled =
       String(formData.get("isAutoRoutingEnabled")) === "true" ||
       String(formData.get("autoRoutingEnabled")) === "true";
@@ -1051,6 +1067,7 @@ export default function CourierSettingsPage() {
   const {
     shopDomain,
     currentPlan,
+    canUseAutoRouting,
     courierConfig,
     routingConfig,
     aiConfig,
@@ -3437,18 +3454,30 @@ export default function CourierSettingsPage() {
               </Card>
             </Layout.Section>
 
-            {/* Card B: Auto-Routing Rules Manager */}
+                        {/* Card B: Auto-Routing Rules Manager */}
             <Layout.Section>
               <Card padding="500">
                 <BlockStack gap="400">
+                  {!canUseAutoRouting && (
+                    <Banner
+                      title="Automatic Courier Selection & District Routing Locked"
+                      tone="warning"
+                      action={{ content: "Upgrade Plan", url: "/app/pricing" }}
+                    >
+                      <p>
+                        Automatic Courier Selection &amp; Geo-District Routing is available on Pro, Advanced, and Enterprise plans. Upgrade your plan to unlock automated multi-courier order routing.
+                      </p>
+                    </Banner>
+                  )}
+
                   <InlineStack align="space-between" blockAlign="center" wrap>
                     <BlockStack gap="050">
                       <InlineStack gap="200" blockAlign="center">
                         <Text as="h3" variant="headingMd">
                           Automatic Courier Selection Rules
                         </Text>
-                        <Badge tone={isAutoRoutingEnabled ? "success" : "attention"}>
-                          {isAutoRoutingEnabled ? "Active" : "Manual Mode"}
+                        <Badge tone={!canUseAutoRouting ? "attention" : isAutoRoutingEnabled ? "success" : "attention"}>
+                          {!canUseAutoRouting ? "Locked (Upgrade Required)" : isAutoRoutingEnabled ? "Active" : "Manual Mode"}
                         </Badge>
                       </InlineStack>
                       <Text as="p" variant="bodySm" tone="subdued">
@@ -3459,6 +3488,7 @@ export default function CourierSettingsPage() {
                     <Button
                       variant="primary"
                       loading={isSavingRoutingSettings}
+                      disabled={!canUseAutoRouting}
                       onClick={handleSaveRoutingSettings}
                     >
                       Save Courier Selection Rules
@@ -3467,200 +3497,214 @@ export default function CourierSettingsPage() {
 
                   <Divider />
 
-                  {/* Master Automation Switch */}
-                  <Box
-                    padding="300"
-                    background="bg-surface-secondary"
-                    borderRadius="200"
-                  >
-                    <Checkbox
-                      label="Enable Automatic Courier Selection & Fraud Protection"
-                      helpText="নতুন অর্ডার আসার সাথে সাথে কাস্টমারের ঠিকানার উপর ভিত্তি করে স্বয়ংক্রিয়ভাবে নির্ধারিত কুরিয়ার সিলেক্ট হবে এবং ফ্রড (প্রতারণা) ফিল্টারিং চেক হবে।"
-                      checked={isAutoRoutingEnabled}
-                      onChange={(newChecked) => setIsAutoRoutingEnabled(newChecked)}
-                    />
-                  </Box>
-
-                  {/* Dynamic Rule Builder Rows */}
-                  <BlockStack gap="300">
-                    <InlineStack align="space-between" blockAlign="center">
-                      <BlockStack gap="050">
-                        <Text as="h4" variant="headingSm">
-                          Custom Division &amp; District Rules ({customRoutes.length})
-                        </Text>
-                        <Text as="p" variant="bodySm" tone="subdued">
-                          এই নিয়মগুলো উপর থেকে নিচে ক্রমানুসারে কাজ করবে। নির্দিষ্ট কোনো জেলার নিয়ম তার পুরো বিভাগের নিয়মের চেয়ে বেশি অগ্রাধিকার পাবে।
-                        </Text>
-                      </BlockStack>
-
-                      <Button variant="secondary" onClick={handleAddRuleRow}>
-                        + Create New Rule
-                      </Button>
-                    </InlineStack>
-
-                    {customRoutes.length === 0 ? (
+                  <div style={{ opacity: !canUseAutoRouting ? 0.65 : 1 }}>
+                    <BlockStack gap="400">
+                      {/* Master Automation Switch */}
                       <Box
-                        padding="400"
+                        padding="300"
                         background="bg-surface-secondary"
                         borderRadius="200"
                       >
-                        <Text as="p" variant="bodySm" tone="subdued">
-                          No custom district rules configured. All safe orders will route to your Default Courier below.
-                        </Text>
+                        <Checkbox
+                          label="Enable Automatic Courier Selection & Fraud Protection"
+                          helpText="নতুন অর্ডার আসার সাথে সাথে কাস্টমারের ঠিকানার উপর ভিত্তি করে স্বয়ংক্রিয়ভাবে নির্ধারিত কুরিয়ার সিলেক্ট হবে এবং ফ্রড (প্রতারণা) ফিল্টারিং চেক হবে।"
+                          checked={!canUseAutoRouting ? false : isAutoRoutingEnabled}
+                          disabled={!canUseAutoRouting}
+                          onChange={(newChecked) => setIsAutoRoutingEnabled(newChecked)}
+                        />
                       </Box>
-                    ) : (
-                      <BlockStack gap="250">
-                        {customRoutes.map((rule, index) => (
+
+                      {/* Dynamic Rule Builder Rows */}
+                      <BlockStack gap="300">
+                        <InlineStack align="space-between" blockAlign="center">
+                          <BlockStack gap="050">
+                            <Text as="h4" variant="headingSm">
+                              Custom Division &amp; District Rules ({customRoutes.length})
+                            </Text>
+                            <Text as="p" variant="bodySm" tone="subdued">
+                              এই নিয়মগুলো উপর থেকে নিচে ক্রমানুসারে কাজ করবে। নির্দিষ্ট কোনো জেলার নিয়ম তার পুরো বিভাগের নিয়মের চেয়ে বেশি অগ্রাধিকার পাবে।
+                            </Text>
+                          </BlockStack>
+
+                          <Button variant="secondary" disabled={!canUseAutoRouting} onClick={handleAddRuleRow}>
+                            + Create New Rule
+                          </Button>
+                        </InlineStack>
+
+                        {customRoutes.length === 0 ? (
                           <Box
-                            key={`rule-${index}`}
-                            padding="300"
+                            padding="400"
                             background="bg-surface-secondary"
                             borderRadius="200"
                           >
-                            <Grid>
-                              {/* Division Select */}
-                              <Grid.Cell
-                                columnSpan={{
-                                  xs: 6,
-                                  sm: 6,
-                                  md: 2,
-                                  lg: 4,
-                                  xl: 4,
-                                }}
+                            <Text as="p" variant="bodySm" tone="subdued">
+                              No custom district rules configured. All safe orders will route to your Default Courier below.
+                            </Text>
+                          </Box>
+                        ) : (
+                          <BlockStack gap="250">
+                            {customRoutes.map((rule, index) => (
+                              <Box
+                                key={`rule-${index}`}
+                                padding="300"
+                                background="bg-surface-secondary"
+                                borderRadius="200"
                               >
-                                <Select
-                                  label={`Rule #${index + 1}: Division`}
-                                  options={divisionSelectOptions}
-                                  value={rule.division}
-                                  onChange={(val) =>
-                                    handleDivisionChange(index, val)
-                                  }
-                                />
-                              </Grid.Cell>
-
-                              {/* District Select */}
-                              <Grid.Cell
-                                columnSpan={{
-                                  xs: 6,
-                                  sm: 6,
-                                  md: 2,
-                                  lg: 4,
-                                  xl: 4,
-                                }}
-                              >
-                                <Select
-                                  label="District"
-                                  options={getDistrictSelectOptions(rule.division)}
-                                  value={rule.district}
-                                  onChange={(val) =>
-                                    handleDistrictChange(index, val)
-                                  }
-                                />
-                              </Grid.Cell>
-
-                              {/* Assigned Courier + Remove */}
-                              <Grid.Cell
-                                columnSpan={{
-                                  xs: 6,
-                                  sm: 6,
-                                  md: 2,
-                                  lg: 4,
-                                  xl: 4,
-                                }}
-                              >
-                                <InlineStack
-                                  gap="200"
-                                  blockAlign="end"
-                                  wrap={false}
-                                >
-                                  <Box width="100%">
+                                <Grid>
+                                  {/* Division Select */}
+                                  <Grid.Cell
+                                    columnSpan={{
+                                      xs: 6,
+                                      sm: 6,
+                                      md: 2,
+                                      lg: 4,
+                                      xl: 4,
+                                    }}
+                                  >
                                     <Select
-                                      label="Assigned Courier"
-                                      options={COURIER_OPTIONS}
-                                      value={rule.courier}
+                                      label={`Rule #${index + 1}: Division`}
+                                      options={divisionSelectOptions}
+                                      value={rule.division}
+                                      disabled={!canUseAutoRouting}
                                       onChange={(val) =>
-                                        handleCourierChange(index, val)
+                                        handleDivisionChange(index, val)
                                       }
                                     />
-                                  </Box>
-                                  <Box>
-                                    <Button
-                                      tone="critical"
-                                      variant="secondary"
-                                      accessibilityLabel={`Remove rule ${index + 1}`}
-                                      icon={<Icon source={TrashRemoveIcon} />}
-                                      onClick={() => handleRemoveRuleRow(index)}
+                                  </Grid.Cell>
+
+                                  {/* District Select */}
+                                  <Grid.Cell
+                                    columnSpan={{
+                                      xs: 6,
+                                      sm: 6,
+                                      md: 2,
+                                      lg: 4,
+                                      xl: 4,
+                                    }}
+                                  >
+                                    <Select
+                                      label="District"
+                                      options={getDistrictSelectOptions(rule.division)}
+                                      value={rule.district}
+                                      disabled={!canUseAutoRouting}
+                                      onChange={(val) =>
+                                        handleDistrictChange(index, val)
+                                      }
                                     />
-                                  </Box>
-                                </InlineStack>
-                              </Grid.Cell>
-                            </Grid>
-                          </Box>
-                        ))}
+                                  </Grid.Cell>
+
+                                  {/* Assigned Courier + Remove */}
+                                  <Grid.Cell
+                                    columnSpan={{
+                                      xs: 6,
+                                      sm: 6,
+                                      md: 2,
+                                      lg: 4,
+                                      xl: 4,
+                                    }}
+                                  >
+                                    <InlineStack
+                                      gap="200"
+                                      blockAlign="end"
+                                      wrap={false}
+                                    >
+                                      <Box width="100%">
+                                        <Select
+                                          label="Assigned Courier"
+                                          options={COURIER_OPTIONS}
+                                          value={rule.courier}
+                                          disabled={!canUseAutoRouting}
+                                          onChange={(val) =>
+                                            handleCourierChange(index, val)
+                                          }
+                                        />
+                                      </Box>
+                                      <Box>
+                                        <Button
+                                          tone="critical"
+                                          variant="secondary"
+                                          accessibilityLabel={`Remove rule ${index + 1}`}
+                                          icon={<Icon source={TrashRemoveIcon} />}
+                                          disabled={!canUseAutoRouting}
+                                          onClick={() => handleRemoveRuleRow(index)}
+                                        />
+                                      </Box>
+                                    </InlineStack>
+                                  </Grid.Cell>
+                                </Grid>
+                              </Box>
+                            ))}
+                          </BlockStack>
+                        )}
                       </BlockStack>
-                    )}
-                  </BlockStack>
 
-                  <Divider />
+                      <Divider />
 
-                  {/* Fallback Couriers & Fraud Risk Safety Net */}
-                  <Grid>
-                    <Grid.Cell columnSpan={{ xs: 6, sm: 6, md: 2, lg: 4, xl: 4 }}>
-                      <Select
-                        label="Inside Dhaka Default Courier"
-                        options={COURIER_OPTIONS}
-                        value={insideDhakaCourier}
-                        onChange={(val) => setInsideDhakaCourier(val)}
-                        helpText="ঢাকা সিটির ভেতরের সমস্ত অর্ডারের জন্য প্রধান কুরিয়ার।"
-                      />
-                    </Grid.Cell>
+                      {/* Fallback Couriers & Fraud Risk Safety Net */}
+                      <Grid>
+                        <Grid.Cell columnSpan={{ xs: 6, sm: 6, md: 2, lg: 4, xl: 4 }}>
+                          <Select
+                            label="Inside Dhaka Default Courier"
+                            options={COURIER_OPTIONS}
+                            value={insideDhakaCourier}
+                            disabled={!canUseAutoRouting}
+                            onChange={(val) => setInsideDhakaCourier(val)}
+                            helpText="ঢাকা সিটির ভেতরের সমস্ত অর্ডারের জন্য প্রধান কুরিয়ার।"
+                          />
+                        </Grid.Cell>
 
-                    <Grid.Cell columnSpan={{ xs: 6, sm: 6, md: 2, lg: 4, xl: 4 }}>
-                      <Select
-                        label="Outside Dhaka Default Courier"
-                        options={COURIER_OPTIONS}
-                        value={outsideDhakaCourier}
-                        onChange={(val) => setOutsideDhakaCourier(val)}
-                        helpText="ঢাকা সিটির বাইরের সমস্ত অর্ডারের জন্য প্রধান কুরিয়ার।"
-                      />
-                    </Grid.Cell>
+                        <Grid.Cell columnSpan={{ xs: 6, sm: 6, md: 2, lg: 4, xl: 4 }}>
+                          <Select
+                            label="Outside Dhaka Default Courier"
+                            options={COURIER_OPTIONS}
+                            value={outsideDhakaCourier}
+                            disabled={!canUseAutoRouting}
+                            onChange={(val) => setOutsideDhakaCourier(val)}
+                            helpText="ঢাকা সিটির বাইরের সমস্ত অর্ডারের জন্য প্রধান কুরিয়ার।"
+                          />
+                        </Grid.Cell>
 
-                    <Grid.Cell columnSpan={{ xs: 6, sm: 6, md: 2, lg: 4, xl: 4 }}>
-                      <Select
-                        label="Catch-All Fallback Courier"
-                        options={COURIER_OPTIONS}
-                        value={defaultCourier}
-                        onChange={(val) => setDefaultCourier(val)}
-                        helpText="উপরে কোনো কাস্টম বা আঞ্চলিক নিয়ম ম্যাচ না করলে এই ব্যাকআপ কুরিয়ারটি ব্যবহার করা হবে।"
-                      />
-                    </Grid.Cell>
-                  </Grid>
+                        <Grid.Cell columnSpan={{ xs: 6, sm: 6, md: 2, lg: 4, xl: 4 }}>
+                          <Select
+                            label="Catch-All Fallback Courier"
+                            options={COURIER_OPTIONS}
+                            value={defaultCourier}
+                            disabled={!canUseAutoRouting}
+                            onChange={(val) => setDefaultCourier(val)}
+                            helpText="উপরে কোনো কাস্টম বা আঞ্চলিক নিয়ম ম্যাচ না করলে এই ব্যাকআপ কুরিয়ারটি ব্যবহার করা হবে।"
+                          />
+                        </Grid.Cell>
+                      </Grid>
 
-                  <Grid>
-                    <Grid.Cell columnSpan={{ xs: 6, sm: 6, md: 6, lg: 6, xl: 6 }}>
-                      <TextField
-                        label="Fraud Risk Safety Net: Minimum Delivery Success Rate"
-                        type="number"
-                        suffix="%"
-                        value={minSuccessRate}
-                        onChange={(val) => setMinSuccessRate(val)}
-                        autoComplete="off"
-                        helpText="যেসব কাস্টমারের আগের পার্সেল ডেলিভারির সফলতার হার (Success Rate) এই পার্সেন্টেজের চেয়ে কম, কুরিয়ারে লস এড়াতে তাদের অর্ডারগুলো স্বয়ংক্রিয়ভাবে লক হয়ে যাবে যাতে আপনি ম্যানুয়ালি চেক করতে পারেন।"
-                      />
-                    </Grid.Cell>
-                  </Grid>
+                      <Grid>
+                        <Grid.Cell columnSpan={{ xs: 6, sm: 6, md: 6, lg: 6, xl: 6 }}>
+                          <TextField
+                            label="Fraud Risk Safety Net: Minimum Delivery Success Rate"
+                            type="number"
+                            suffix="%"
+                            value={minSuccessRate}
+                            disabled={!canUseAutoRouting}
+                            onChange={(val) => setMinSuccessRate(val)}
+                            autoComplete="off"
+                            helpText="যেসব কাস্টমারের আগের পার্সেল ডেলিভারির সফলতার হার (Success Rate) এই পার্সেন্টেজের চেয়ে কম, কুরিয়ারে লস এড়াতে তাদের অর্ডারগুলো স্বয়ংক্রিয়ভাবে লক হয়ে যাবে যাতে আপনি ম্যানুয়ালি চেক করতে পারেন।"
+                          />
+                        </Grid.Cell>
+                      </Grid>
 
-                  <Divider />
+                      <Divider />
 
-                  <InlineStack align="end" blockAlign="center">
-                    <Button
-                      variant="primary"
-                      loading={isSavingRoutingSettings}
-                      onClick={handleSaveRoutingSettings}
-                    >
-                      Save Courier Selection Rules
-                    </Button>
-                  </InlineStack>
+                      <InlineStack align="end" blockAlign="center">
+                        <Button
+                          variant="primary"
+                          loading={isSavingRoutingSettings}
+                          disabled={!canUseAutoRouting}
+                          onClick={handleSaveRoutingSettings}
+                        >
+                          Save Courier Selection Rules
+                        </Button>
+                      </InlineStack>
+                    </BlockStack>
+                  </div>
                 </BlockStack>
               </Card>
             </Layout.Section>

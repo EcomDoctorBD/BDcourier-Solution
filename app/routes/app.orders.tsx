@@ -2807,6 +2807,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const planLower = String(currentPlan).trim().toLowerCase();
   const isProOrEnterprise =
     planLower.startsWith("pro") || planLower.startsWith("enterprise");
+  const canUseAutoRouting = ["pro", "advanced", "enterprise"].some((p) =>
+    planLower.startsWith(p)
+  );
 
   const monthlyOrderCount = Number(storeConfig?.monthlyOrderCount ?? 0);
   const rawLimit = getPlanLimit(currentPlan);
@@ -2817,7 +2820,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const isUnlimitedBulk = !Number.isFinite(rawBulkCap);
   const bulkBatchLimit = isUnlimitedBulk ? -1 : rawBulkCap;
 
-  const isAutoRoutingEnabled = Boolean(
+  const isAutoRoutingEnabled = canUseAutoRouting && Boolean(
     storeConfig?.isAutoRoutingEnabled ?? storeConfig?.autoRoutingEnabled ?? false
   );
   const customRoutes: CustomRouteRule[] =
@@ -3517,6 +3520,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     usageSummary: {
       currentPlan,
       isProOrEnterprise,
+      canUseAutoRouting,
       monthlyOrderCount,
       planLimit,
       isUnlimited,
@@ -4152,6 +4156,7 @@ export default function OrdersFulfillmentPage() {
   const isFreePlan = planNormalized === "free";
   const isEnterprisePlan = planNormalized === "enterprise";
   const isProOrEnterprise = usageSummary.isProOrEnterprise;
+  const canUseAutoRouting = usageSummary.canUseAutoRouting ?? (["pro", "advanced", "enterprise"].some((p) => planNormalized.startsWith(p)));
 
   const defaultTemplateByPlan = isEnterprisePlan
     ? "warehouse"
@@ -5449,7 +5454,7 @@ export default function OrdersFulfillmentPage() {
                 </Text>
               </InlineStack>
 
-              {!isFreePlan && (
+              {canUseAutoRouting && (
                 <div style={{ width: "fit-content", display: "inline-flex", alignSelf: "flex-start" }}>
                   <Badge tone="info" size="small">
                     {order.isInsideDhaka ? "Inside Dhaka" : "Outside Dhaka"}
