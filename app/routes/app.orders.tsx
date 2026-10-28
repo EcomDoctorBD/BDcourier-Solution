@@ -2709,7 +2709,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   );
 
   const url = new URL(request.url);
-  const tabParam = (url.searchParams.get("tab") || "").toLowerCase().trim();
+  const rawTabParam = (url.searchParams.get("tab") || "").toLowerCase().trim();
+  const tabParam = rawTabParam || "new";
   const rawSearchQ = (url.searchParams.get("q") || "").trim();
   const startDateParam = (url.searchParams.get("startDate") || "").trim();
   const endDateParam = (url.searchParams.get("endDate") || "").trim();
@@ -2889,8 +2890,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     }
   }
 
-  // Strict 25-order layout boundary across primary active tabs
-  const pageSize = 25;
+  // Dynamic layout chunking: Strict 50-order boundary for "new" tab, 25 for other tabs
+  const effectiveTab = tabParam || "new";
+  const pageSize = effectiveTab === "new" ? 50 : 25;
 
   // Seven-day threshold computation (UTC ISO format for Shopify Admin index queries)
   const sevenDaysAgoDate = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
@@ -2899,10 +2901,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   // Tier 2 Dynamic GraphQL Query Builder based on parsed search params
   const queryParts: string[] = [];
 
-  if (tabParam === "old_orders") {
+  if (effectiveTab === "old_orders") {
     // Dynamic archived & historical order query
     queryParts.push("(fulfillment_status:fulfilled OR status:closed OR status:cancelled)");
-  } else if (tabParam === "cancelled") {
+  } else if (effectiveTab === "cancelled") {
     if (hasCustomDateRange) {
       // Calendar override: custom range queries historical cancelled records dynamically
       queryParts.push("(status:cancelled OR financial_status:voided)");
@@ -2910,10 +2912,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       // Default: cancelled/voided within the last 7 days
       queryParts.push(`(status:cancelled OR financial_status:voided) created_at:>=${sevenDaysAgoDate}`);
     }
-  } else if (tabParam === "pending") {
+  } else if (effectiveTab === "pending") {
     // Unfulfilled rows matching manual locking criteria
     queryParts.push("fulfillment_status:unfulfilled");
-  } else if (tabParam === "all") {
+  } else if (effectiveTab === "all") {
     if (hasCustomDateRange) {
       queryParts.push("(status:open OR status:closed OR status:cancelled)");
     } else {
@@ -2921,7 +2923,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       queryParts.push(`(created_at:>=${sevenDaysAgoDate} OR fulfillment_status:unfulfilled)`);
     }
   } else {
-    // Default safe backward-compatible state (tab === "new" or parameter is omitted)
+    // "new" tab: UNRESTRICTED AGE - All unhandled orders perpetually live until action taken
     queryParts.push("fulfillment_status:unfulfilled");
   }
 
@@ -4272,10 +4274,11 @@ export default function OrdersFulfillmentPage() {
   });
 
   useEffect(() => {
-    if (urlTab && urlTab !== selectedTabId) {
-      setSelectedTabId(urlTab);
+    const target = urlTab || "new";
+    if (target !== selectedTabId) {
+      setSelectedTabId(target);
     }
-  }, [urlTab]);
+  }, [urlTab, selectedTabId]);
 
   const handleMonthChange = useCallback((month: number, year: number) => {
     setPickerMonthYear({ month, year });
@@ -9509,12 +9512,12 @@ export default function OrdersFulfillmentPage() {
                     <Text as="p" variant="bodyMd" tone="subdued" alignment="center">
                       No orders match the selected filter, status tab, or date range.
                     </Text>
-                    {(searchQuery || selectedTabId !== "all" || dateRange) && (
+                    {(searchQuery || selectedTabId !== "new" || dateRange) && (
                       <Button
                         variant="plain"
                         onClick={() => {
                           setSearchQuery("");
-                          setSelectedTabId("all");
+                          setSelectedTabId("new");
                           handleClearAllDates();
                           if (
                             searchParams.has("q") ||
