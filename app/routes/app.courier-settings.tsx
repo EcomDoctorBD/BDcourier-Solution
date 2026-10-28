@@ -4268,233 +4268,198 @@ export default function CourierSettingsPage() {
         )}
 
         {selectedSettingsTab === "invoice" && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
-            {/* LEFT PANEL: UPDATE SETTINGS FORM CONTROLS WITH TIER-CHECK LOGIC */}
-            <div>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "1fr 1.15fr",
+              gap: "20px",
+              alignItems: "start",
+            }}
+          >
+            {/* LEFT PANEL: TWO SEPARATE WHITE CARDS (16px GAP) */}
+            <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+              {/* Card 1: Title "Invoice Template (A4 Size)" */}
               <Card padding="500">
-                <BlockStack gap="500">
-                  <BlockStack gap="100">
-                    <InlineStack align="space-between" blockAlign="center">
-                      <Text as="h2" variant="headingMd" fontWeight="bold">
-                        Update Settings
-                      </Text>
-                      <Badge tone="info">A4 Format</Badge>
-                    </InlineStack>
-                    <Text as="p" variant="bodySm" tone="subdued">
-                      Configure your store's branded A4 invoice templates, company credentials, and visual accents.
+                <BlockStack gap="300">
+                  <Text as="h2" variant="headingSm" fontWeight="bold">
+                    Invoice Template (A4 Size)
+                  </Text>
+                  <ChoiceList
+                    title="Invoice Template (A4 Size)"
+                    titleHidden
+                    choices={[
+                      {
+                        label: "Classic",
+                        value: "classic",
+                        helpText: "Free & Starter plan",
+                      },
+                      {
+                        label: "Modern",
+                        value: "modern",
+                        helpText: "Growth & Pro plan",
+                      },
+                      {
+                        label: "New",
+                        value: "warehouse",
+                        helpText: "Advanced & Enterprise plan",
+                      },
+                    ]}
+                    selected={invoiceTemplate ? [invoiceTemplate] : []}
+                    onChange={(selected) => setInvoiceTemplate(selected[0] || "")}
+                  />
+                </BlockStack>
+              </Card>
+
+              {/* Card 2: Title "Brand Details" */}
+              <Card padding="500">
+                <BlockStack gap="400">
+                  <Text as="h2" variant="headingSm" fontWeight="bold">
+                    Brand Details
+                  </Text>
+
+                  {/* Brand Logo Dropzone */}
+                  <BlockStack gap="200">
+                    <Text as="span" variant="bodySm" fontWeight="medium">
+                      Brand Logo
                     </Text>
-                  </BlockStack>
-
-                  <Divider />
-
-                  {/* TOP COMPONENT: TEMPLATE SELECTOR WITH PLAN-TIER LOGIC */}
-                  <BlockStack gap="300">
-                    <Text as="h3" variant="headingSm" fontWeight="semibold">
-                      Invoice Template (A4 Size)
-                    </Text>
-                    <ChoiceList
-                      title="Invoice Template (A4 Size)"
-                      titleHidden
-                      choices={[
-                        {
-                          label: "Classic",
-                          value: "classic",
-                          helpText: (
-                            <span className="flex items-center gap-1.5 text-xs text-gray-500 mt-0.5">
-                              <span className="inline-block px-1.5 py-0.5 bg-gray-100 text-gray-700 font-semibold rounded text-[10px]">
-                                Free & Starter
-                              </span>
-                              <span>Available on Free & Starter Plans</span>
-                            </span>
-                          ),
-                        },
-                        {
-                          label: "Modern (Pro)",
-                          value: "modern",
-                          helpText: (
-                            <span className="flex items-center gap-1.5 text-xs text-gray-500 mt-0.5">
-                              <span className="inline-block px-1.5 py-0.5 bg-blue-100 text-blue-700 font-semibold rounded text-[10px]">
-                                Requires Pro/Growth
-                              </span>
-                              <span>Requires Pro/Growth Plan upgrade</span>
-                            </span>
-                          ),
-                        },
-                        {
-                          label: "Warehouse Fulfillment (Enterprise)",
-                          value: "warehouse",
-                          helpText: (
-                            <span className="flex items-center gap-1.5 text-xs text-gray-500 mt-0.5">
-                              <span className="inline-block px-1.5 py-0.5 bg-purple-100 text-purple-700 font-semibold rounded text-[10px]">
-                                Requires Enterprise
-                              </span>
-                              <span>Requires Advanced/Enterprise Plan upgrade</span>
-                            </span>
-                          ),
-                        },
-                      ]}
-                      selected={invoiceTemplate ? [invoiceTemplate] : []}
-                      onChange={(selected) => setInvoiceTemplate(selected[0] || "")}
-                    />
-                  </BlockStack>
-
-                  <Divider />
-
-                  {/* BRAND DETAILS FORM FIELDS */}
-                  <BlockStack gap="400">
-                    <Text as="h3" variant="headingSm" fontWeight="semibold">
-                      Brand Details & Information
-                    </Text>
-
-                    {/* Brand Logo Dropzone */}
-                    <BlockStack gap="200">
-                      <Text as="span" variant="bodySm" fontWeight="medium">
-                        Brand Logo
-                      </Text>
-                      {invoiceBrandLogo ? (
-                        <div className="flex items-center gap-4 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
-                          <img
-                            src={invoiceBrandLogo}
-                            alt="Brand Logo"
-                            className="w-16 h-16 object-contain rounded bg-white border border-gray-100 p-1"
-                          />
-                          <BlockStack gap="100">
-                            <Text as="p" variant="bodySm" fontWeight="semibold">
-                              Custom Logo Uploaded
-                            </Text>
-                            <Button
-                              size="micro"
-                              tone="critical"
-                              variant="plain"
-                              onClick={() => setInvoiceBrandLogo("")}
-                            >
-                              Remove Logo
-                            </Button>
-                          </BlockStack>
-                        </div>
-                      ) : (
-                        <DropZone
-                          allowMultiple={false}
-                          onDrop={handleInvoiceLogoDrop}
-                          variableHeight
-                          label="Upload store logo for invoice header"
-                        >
-                          <DropZone.FileUpload actionHint="Accepts .png, .jpg, .svg (Recommended 300x100px)" />
-                        </DropZone>
-                      )}
-                    </BlockStack>
-
-                    <TextField
-                      label="Brand Name"
-                      value={invoiceBrandName}
-                      onChange={setInvoiceBrandName}
-                      autoComplete="off"
-                      placeholder="e.g., SafeParcel Store"
-                      requiredIndicator
-                      helpText="Required. Displayed as the primary merchant identity on customer invoices."
-                    />
-
-                    <TextField
-                      label="Brand Phone"
-                      value={invoiceBrandPhone}
-                      onChange={setInvoiceBrandPhone}
-                      autoComplete="tel"
-                      placeholder="e.g., +880 1711-000000"
-                      helpText="Customer support telephone number printed on invoices."
-                    />
-
-                    <TextField
-                      label="Brand Address"
-                      value={invoiceBrandAddress}
-                      onChange={setInvoiceBrandAddress}
-                      autoComplete="street-address"
-                      placeholder="e.g., House 42, Road 11, Banani, Dhaka"
-                      multiline={2}
-                      helpText="Official store billing or dispatch address."
-                    />
-
-                    <TextField
-                      label="Brand Email"
-                      value={invoiceBrandEmail}
-                      onChange={setInvoiceBrandEmail}
-                      autoComplete="email"
-                      placeholder="e.g., support@safeparcelbd.com"
-                      helpText="Customer service email printed on invoices."
-                    />
-
-                    <TextField
-                      label="Brand Website"
-                      value={invoiceBrandWebsite}
-                      onChange={setInvoiceBrandWebsite}
-                      autoComplete="url"
-                      placeholder="e.g., www.safeparcelbd.com"
-                      helpText="Online store domain or web presence."
-                    />
-
-                    {/* Responsive Color Picker: Visible ONLY if Modern or Warehouse is active */}
-                    {(invoiceTemplate === "modern" || invoiceTemplate === "warehouse") && (
-                      <BlockStack gap="200">
-                        <InlineStack align="space-between" blockAlign="center">
-                          <Text as="span" variant="bodySm" fontWeight="medium">
-                            Accent Brand Color
+                    {invoiceBrandLogo ? (
+                      <div className="flex items-center gap-4 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+                        <img
+                          src={invoiceBrandLogo}
+                          alt="Brand Logo"
+                          className="w-16 h-16 object-contain rounded bg-white border border-gray-100 p-1"
+                        />
+                        <BlockStack gap="100">
+                          <Text as="p" variant="bodySm" fontWeight="semibold">
+                            Custom Logo Uploaded
                           </Text>
-                          <span
-                            className="w-5 h-5 rounded-full border border-gray-300 shadow-xs inline-block"
-                            style={{ backgroundColor: invoiceAccentColor }}
-                          />
-                        </InlineStack>
-                        <div className="flex items-center gap-3">
-                          <input
-                            type="color"
-                            value={invoiceAccentColor}
-                            onChange={(e) => setInvoiceAccentColor(e.target.value)}
-                            className="w-10 h-10 p-0.5 rounded cursor-pointer border border-gray-300 bg-white"
-                            title="Choose accent brand color"
-                          />
-                          <div className="flex-1">
-                            <TextField
-                              label="Hex Code"
-                              labelHidden
-                              value={invoiceAccentColor}
-                              onChange={setInvoiceAccentColor}
-                              autoComplete="off"
-                              placeholder="#2563eb"
-                            />
-                          </div>
-                        </div>
-                        {/* Quick Preset Swatches */}
-                        <div className="flex items-center gap-2 pt-1">
-                          {[
-                            { name: "Royal Blue", color: "#2563eb" },
-                            { name: "Indigo", color: "#4f46e5" },
-                            { name: "Emerald", color: "#059669" },
-                            { name: "Crimson", color: "#dc2626" },
-                            { name: "Amber", color: "#d97706" },
-                            { name: "Dark Slate", color: "#0f172a" },
-                          ].map((preset) => (
-                            <button
-                              key={preset.color}
-                              type="button"
-                              onClick={() => setInvoiceAccentColor(preset.color)}
-                              className="w-6 h-6 rounded-full border transition-transform hover:scale-110 cursor-pointer shadow-xs"
-                              style={{
-                                backgroundColor: preset.color,
-                                outline:
-                                  invoiceAccentColor.toLowerCase() === preset.color.toLowerCase()
-                                    ? "2px solid #2563eb"
-                                    : "none",
-                                outlineOffset: "2px",
-                              }}
-                              title={preset.name}
-                            />
-                          ))}
-                        </div>
-                        <Text as="p" variant="bodyXs" tone="subdued">
-                          Dynamically styles top accent bar, highlights, and totals.
-                        </Text>
-                      </BlockStack>
+                          <Button
+                            size="micro"
+                            tone="critical"
+                            variant="plain"
+                            onClick={() => setInvoiceBrandLogo("")}
+                          >
+                            Remove Logo
+                          </Button>
+                        </BlockStack>
+                      </div>
+                    ) : (
+                      <DropZone
+                        allowMultiple={false}
+                        onDrop={handleInvoiceLogoDrop}
+                        variableHeight
+                        label="Upload store logo for invoice header"
+                      >
+                        <DropZone.FileUpload actionHint="Accepts .png, .jpg, .svg (Recommended 300x100px)" />
+                      </DropZone>
                     )}
                   </BlockStack>
+
+                  <TextField
+                    label="Brand Name"
+                    value={invoiceBrandName}
+                    onChange={setInvoiceBrandName}
+                    autoComplete="off"
+                    placeholder="e.g., SafeParcel Store"
+                    requiredIndicator
+                  />
+
+                  <TextField
+                    label="Brand Phone"
+                    value={invoiceBrandPhone}
+                    onChange={setInvoiceBrandPhone}
+                    autoComplete="tel"
+                    placeholder="e.g., +880 1711-000000"
+                  />
+
+                  <TextField
+                    label="Brand Address"
+                    value={invoiceBrandAddress}
+                    onChange={setInvoiceBrandAddress}
+                    autoComplete="street-address"
+                    placeholder="e.g., House 42, Road 11, Banani, Dhaka"
+                    multiline={2}
+                  />
+
+                  <TextField
+                    label="Brand Email"
+                    value={invoiceBrandEmail}
+                    onChange={setInvoiceBrandEmail}
+                    autoComplete="email"
+                    placeholder="e.g., support@safeparcelbd.com"
+                  />
+
+                  <TextField
+                    label="Brand Website"
+                    value={invoiceBrandWebsite}
+                    onChange={setInvoiceBrandWebsite}
+                    autoComplete="url"
+                    placeholder="e.g., www.safeparcelbd.com"
+                  />
+
+                  {/* Responsive Color Picker: Visible ONLY if Modern or Warehouse is active */}
+                  {(invoiceTemplate === "modern" || invoiceTemplate === "warehouse") && (
+                    <BlockStack gap="200">
+                      <InlineStack align="space-between" blockAlign="center">
+                        <Text as="span" variant="bodySm" fontWeight="medium">
+                          Accent Brand Color
+                        </Text>
+                        <span
+                          className="w-5 h-5 rounded-full border border-gray-300 shadow-xs inline-block"
+                          style={{ backgroundColor: invoiceAccentColor }}
+                        />
+                      </InlineStack>
+                      <div className="flex items-center gap-3">
+                        <input
+                          type="color"
+                          value={invoiceAccentColor}
+                          onChange={(e) => setInvoiceAccentColor(e.target.value)}
+                          className="w-10 h-10 p-0.5 rounded cursor-pointer border border-gray-300 bg-white"
+                          title="Choose accent brand color"
+                        />
+                        <div className="flex-1">
+                          <TextField
+                            label="Hex Code"
+                            labelHidden
+                            value={invoiceAccentColor}
+                            onChange={setInvoiceAccentColor}
+                            autoComplete="off"
+                            placeholder="#2563eb"
+                          />
+                        </div>
+                      </div>
+                      {/* Quick Preset Swatches */}
+                      <div className="flex items-center gap-2 pt-1">
+                        {[
+                          { name: "Royal Blue", color: "#2563eb" },
+                          { name: "Indigo", color: "#4f46e5" },
+                          { name: "Emerald", color: "#059669" },
+                          { name: "Crimson", color: "#dc2626" },
+                          { name: "Amber", color: "#d97706" },
+                          { name: "Dark Slate", color: "#0f172a" },
+                        ].map((preset) => (
+                          <button
+                            key={preset.color}
+                            type="button"
+                            onClick={() => setInvoiceAccentColor(preset.color)}
+                            className="w-6 h-6 rounded-full border transition-transform hover:scale-110 cursor-pointer shadow-xs"
+                            style={{
+                              backgroundColor: preset.color,
+                              outline:
+                                invoiceAccentColor.toLowerCase() === preset.color.toLowerCase()
+                                  ? "2px solid #2563eb"
+                                  : "none",
+                              outlineOffset: "2px",
+                            }}
+                            title={preset.name}
+                          />
+                        ))}
+                      </div>
+                      <Text as="p" variant="bodyXs" tone="subdued">
+                        Dynamically styles top accent bar, highlights, and totals.
+                      </Text>
+                    </BlockStack>
+                  )}
 
                   <Divider />
 
@@ -4521,17 +4486,14 @@ export default function CourierSettingsPage() {
               </Card>
             </div>
 
-            {/* RIGHT PANEL: PREVIEW (DEMO DATA) LIVE DYNAMIC REACT ENGINE */}
+            {/* RIGHT PANEL: PREVIEW (DEMO DATA) */}
             <div>
               <Card padding="500">
                 <BlockStack gap="400">
                   <InlineStack align="space-between" blockAlign="center">
-                    <InlineStack gap="200" blockAlign="center">
-                      <Text as="h2" variant="headingMd" fontWeight="bold">
-                        Preview (Demo Data)
-                      </Text>
-                      <Badge tone="success">Live React Engine</Badge>
-                    </InlineStack>
+                    <Text as="h2" variant="headingMd" fontWeight="bold">
+                      Preview (Demo Data)
+                    </Text>
                     {invoiceTemplate && (
                       <Badge
                         tone={
@@ -4543,9 +4505,9 @@ export default function CourierSettingsPage() {
                         }
                       >
                         {invoiceTemplate === "warehouse"
-                          ? "Warehouse Enterprise"
+                          ? "New"
                           : invoiceTemplate === "modern"
-                          ? "Modern Pro"
+                          ? "Modern"
                           : "Classic"}
                       </Badge>
                     )}
@@ -4561,142 +4523,162 @@ export default function CourierSettingsPage() {
                         ℹ️ Please select an invoice template
                       </Text>
                       <Text as="p" variant="bodySm" tone="subdued">
-                        Select Classic, Modern (Pro), or Warehouse Fulfillment (Enterprise) from the left panel to load the interactive A4 sheet preview.
+                        Select Classic, Modern, or New from the left panel to load the interactive A4 sheet preview.
                       </Text>
                     </div>
                   ) : (
-                    /* A4 SHEET MOCKUP CONTAINER */
-                    <div className="bg-slate-100 dark:bg-slate-900 p-3 sm:p-4 rounded-xl border border-slate-200 dark:border-slate-800 overflow-x-auto">
+                    /* A4 SHEET CONTAINER */
+                    <div
+                      style={{
+                        background: "#f9fafb",
+                        padding: "16px",
+                        borderRadius: "8px",
+                        border: "1px solid #f3f4f6",
+                        overflowX: "auto",
+                      }}
+                    >
                       <div
-                        className="bg-white mx-auto shadow-lg rounded-sm text-gray-800 text-xs font-sans transition-all duration-200"
                         style={{
+                          background: "#ffffff",
+                          border: "1px solid #e5e7eb",
+                          borderRadius: "6px",
+                          padding: "28px",
+                          boxShadow: "0 2px 8px rgba(0,0,0,0.05)",
                           width: "100%",
                           maxWidth: "540px",
-                          minHeight: "750px",
+                          margin: "0 auto",
                           boxSizing: "border-box",
+                          color: "#1f2937",
+                          fontSize: "12px",
+                          fontFamily: "system-ui, -apple-system, sans-serif",
                         }}
                       >
                         {/* ==================== A. CLASSIC TIER VIEW ==================== */}
                         {invoiceTemplate === "classic" && (
-                          <div className="p-7 flex flex-col justify-between min-h-[750px]">
+                          <div style={{ display: "flex", flexDirection: "column", justifyContent: "space-between", minHeight: "680px" }}>
                             <div>
-                              {/* Classic Header: brandLogo/brandName left, bold INVOICE right */}
-                              <div className="flex justify-between items-start pb-5 border-b border-gray-200">
-                                <div className="space-y-1">
+                              {/* Top Row: Brand logo/name on top-left; large "INVOICE", Order ID: #1001, and Date on top-right */}
+                              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                                <div>
                                   {invoiceBrandLogo ? (
                                     <img
                                       src={invoiceBrandLogo}
-                                      alt={invoiceBrandName}
-                                      className="h-10 max-w-[150px] object-contain mb-1.5"
+                                      alt={invoiceBrandName || "Brand Logo"}
+                                      style={{ height: "40px", maxWidth: "150px", objectFit: "contain", marginBottom: "6px" }}
                                     />
                                   ) : (
-                                    <div className="text-xl font-bold tracking-tight text-gray-900">
+                                    <div style={{ fontSize: "20px", fontWeight: "700", color: "#111827", marginBottom: "4px" }}>
                                       {invoiceBrandName || "SafeParcel Store"}
                                     </div>
                                   )}
-                                  <div className="text-[11px] text-gray-600 leading-relaxed">
+                                  <div style={{ fontSize: "11px", color: "#4b5563", lineHeight: "1.5" }}>
                                     <div>{invoiceBrandAddress || "House 42, Road 11, Banani, Dhaka"}</div>
                                     <div>Phone: {invoiceBrandPhone || "+880 1711-000000"}</div>
                                     {invoiceBrandEmail && <div>Email: {invoiceBrandEmail}</div>}
                                     {invoiceBrandWebsite && <div>Web: {invoiceBrandWebsite}</div>}
                                   </div>
                                 </div>
-                                <div className="text-right">
-                                  <div className="text-2xl font-extrabold tracking-wider text-gray-900 uppercase">
+                                <div style={{ textAlign: "right" }}>
+                                  <div style={{ fontSize: "24px", fontWeight: "800", color: "#111827", textTransform: "uppercase", letterSpacing: "1px" }}>
                                     INVOICE
                                   </div>
-                                  <div className="mt-2 text-[11px] text-gray-600 space-y-0.5">
+                                  <div style={{ marginTop: "6px", fontSize: "11px", color: "#4b5563", lineHeight: "1.6" }}>
                                     <div>
-                                      <span className="font-semibold text-gray-800">Order ID:</span> #1001
+                                      <span style={{ fontWeight: "600", color: "#1f2937" }}>Order ID:</span> #1001
                                     </div>
                                     <div>
-                                      <span className="font-semibold text-gray-800">Date:</span> 27th Oct, 2026
+                                      <span style={{ fontWeight: "600", color: "#1f2937" }}>Date:</span> 27th Oct, 2026
                                     </div>
                                     <div>
-                                      <span className="font-semibold text-gray-800">Payment:</span> COD
+                                      <span style={{ fontWeight: "600", color: "#1f2937" }}>Payment:</span> COD
                                     </div>
                                   </div>
                                 </div>
                               </div>
 
-                              {/* Classic Billing Block Row ("Bill From" vs "Bill To: Nahid Rahman") */}
-                              <div className="grid grid-cols-2 gap-6 py-4 border-b border-gray-200 text-[11px]">
-                                <div>
-                                  <div className="font-bold text-gray-700 uppercase tracking-wider text-[10px] mb-1">
-                                    Bill From
+                              {/* Divider line */}
+                              <div style={{ borderBottom: "1px solid #e5e7eb", margin: "16px 0" }} />
+
+                              {/* Billing Row: BILL FROM on left, BILL TO on right */}
+                              <div style={{ display: "flex", justifyContent: "space-between", gap: "24px", fontSize: "11px" }}>
+                                <div style={{ flex: 1 }}>
+                                  <div style={{ fontWeight: "700", color: "#4b5563", textTransform: "uppercase", fontSize: "10px", letterSpacing: "0.5px", marginBottom: "4px" }}>
+                                    BILL FROM
                                   </div>
-                                  <div className="font-semibold text-gray-900 text-xs">
+                                  <div style={{ fontWeight: "600", color: "#111827", fontSize: "12px" }}>
                                     {invoiceBrandName || "SafeParcel Store"}
                                   </div>
-                                  <div className="text-gray-600 mt-0.5 leading-relaxed">
+                                  <div style={{ color: "#4b5563", marginTop: "2px", lineHeight: "1.5" }}>
                                     {invoiceBrandAddress || "House 42, Road 11, Banani, Dhaka"}<br />
                                     Phone: {invoiceBrandPhone || "+880 1711-000000"}
                                   </div>
                                 </div>
-                                <div>
-                                  <div className="font-bold text-gray-700 uppercase tracking-wider text-[10px] mb-1">
-                                    Bill To: Nahid Rahman
+                                <div style={{ flex: 1 }}>
+                                  <div style={{ fontWeight: "700", color: "#4b5563", textTransform: "uppercase", fontSize: "10px", letterSpacing: "0.5px", marginBottom: "4px" }}>
+                                    BILL TO
                                   </div>
-                                  <div className="font-semibold text-gray-900 text-xs">
+                                  <div style={{ fontWeight: "600", color: "#111827", fontSize: "12px" }}>
                                     Nahid Rahman
                                   </div>
-                                  <div className="text-gray-600 mt-0.5 leading-relaxed">
+                                  <div style={{ color: "#4b5563", marginTop: "2px", lineHeight: "1.5" }}>
                                     Plot 14, Sector 7, Uttara, Dhaka - 1230<br />
                                     Phone: +880 1812-345678
                                   </div>
                                 </div>
                               </div>
 
-                              {/* Classic Order Table: Solid dark row header without icons or images */}
-                              <div className="mt-4">
-                                <table className="w-full text-left border-collapse text-[11px]">
-                                  <thead>
-                                    <tr className="bg-gray-900 text-white font-semibold">
-                                      <th className="py-2.5 px-3">Item Name</th>
-                                      <th className="py-2.5 px-3 text-center">Qty</th>
-                                      <th className="py-2.5 px-3 text-right">Price</th>
-                                      <th className="py-2.5 px-3 text-right">Total</th>
-                                    </tr>
-                                  </thead>
-                                  <tbody className="divide-y divide-gray-200">
-                                    <tr>
-                                      <td className="py-3 px-3 font-medium text-gray-900">
+                              {/* Items Table */}
+                              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "11px", marginTop: "16px" }}>
+                                <thead>
+                                  <tr style={{ background: "#1f2937", color: "#ffffff" }}>
+                                    <th style={{ padding: "8px 10px", textAlign: "left", fontWeight: "600" }}>Item</th>
+                                    <th style={{ padding: "8px 10px", textAlign: "center", fontWeight: "600" }}>Qty</th>
+                                    <th style={{ padding: "8px 10px", textAlign: "right", fontWeight: "600" }}>Price</th>
+                                    <th style={{ padding: "8px 10px", textAlign: "right", fontWeight: "600" }}>Total</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  <tr style={{ borderBottom: "1px solid #e5e7eb" }}>
+                                    <td style={{ padding: "8px 10px" }}>
+                                      <div style={{ fontWeight: "600", color: "#111827" }}>
                                         Premium Cotton Drop-Shoulder T-Shirt - Black / L
-                                        <div className="text-[10px] text-gray-500">SKU: TSH-BLK-L-01</div>
-                                      </td>
-                                      <td className="py-3 px-3 text-center font-medium">2</td>
-                                      <td className="py-3 px-3 text-right text-gray-700">৳ 850</td>
-                                      <td className="py-3 px-3 text-right font-semibold text-gray-900">৳ 1,700</td>
-                                    </tr>
-                                    <tr>
-                                      <td className="py-3 px-3 font-medium text-gray-900">
+                                      </div>
+                                      <div style={{ fontSize: "10px", color: "#6b7280" }}>SKU: TSH-BLK-L-01</div>
+                                    </td>
+                                    <td style={{ padding: "8px 10px", textAlign: "center", color: "#111827", fontWeight: "500" }}>2</td>
+                                    <td style={{ padding: "8px 10px", textAlign: "right", color: "#4b5563" }}>৳ 850</td>
+                                    <td style={{ padding: "8px 10px", textAlign: "right", fontWeight: "600", color: "#111827" }}>৳ 1,700</td>
+                                  </tr>
+                                  <tr style={{ borderBottom: "1px solid #e5e7eb" }}>
+                                    <td style={{ padding: "8px 10px" }}>
+                                      <div style={{ fontWeight: "600", color: "#111827" }}>
                                         Slim Fit Stretch Denim Jeans - Indigo / 32
-                                        <div className="text-[10px] text-gray-500">SKU: JNS-IND-32-04</div>
-                                      </td>
-                                      <td className="py-3 px-3 text-center font-medium">1</td>
-                                      <td className="py-3 px-3 text-right text-gray-700">৳ 1,450</td>
-                                      <td className="py-3 px-3 text-right font-semibold text-gray-900">৳ 1,450</td>
-                                    </tr>
-                                  </tbody>
-                                </table>
-                              </div>
+                                      </div>
+                                      <div style={{ fontSize: "10px", color: "#6b7280" }}>SKU: JNS-IND-32-04</div>
+                                    </td>
+                                    <td style={{ padding: "8px 10px", textAlign: "center", color: "#111827", fontWeight: "500" }}>1</td>
+                                    <td style={{ padding: "8px 10px", textAlign: "right", color: "#4b5563" }}>৳ 1,450</td>
+                                    <td style={{ padding: "8px 10px", textAlign: "right", fontWeight: "600", color: "#111827" }}>৳ 1,450</td>
+                                  </tr>
+                                </tbody>
+                              </table>
 
-                              {/* Financial Breakdown */}
-                              <div className="flex justify-end mt-5">
-                                <div className="w-52 space-y-1.5 text-[11px]">
-                                  <div className="flex justify-between text-gray-600">
+                              {/* Summary Box */}
+                              <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "16px" }}>
+                                <div style={{ width: "220px", marginLeft: "auto", fontSize: "11px" }}>
+                                  <div style={{ display: "flex", justifyContent: "space-between", color: "#4b5563", padding: "3px 0" }}>
                                     <span>Subtotal:</span>
                                     <span>৳ 3,150</span>
                                   </div>
-                                  <div className="flex justify-between text-gray-600">
-                                    <span>Shipping Fee:</span>
+                                  <div style={{ display: "flex", justifyContent: "space-between", color: "#4b5563", padding: "3px 0" }}>
+                                    <span>Discount:</span>
+                                    <span style={{ color: "#059669", fontWeight: "500" }}>- ৳ 150</span>
+                                  </div>
+                                  <div style={{ display: "flex", justifyContent: "space-between", color: "#4b5563", padding: "3px 0" }}>
+                                    <span>Shipping:</span>
                                     <span>৳ 60</span>
                                   </div>
-                                  <div className="flex justify-between text-emerald-600 font-medium">
-                                    <span>Discount:</span>
-                                    <span>- ৳ 150</span>
-                                  </div>
-                                  <div className="border-t-2 border-gray-900 pt-1.5 flex justify-between font-bold text-sm text-gray-900">
+                                  <div style={{ borderTop: "2px solid #111827", marginTop: "6px", paddingTop: "6px", display: "flex", justifyContent: "space-between", fontWeight: "700", fontSize: "13px", color: "#111827" }}>
                                     <span>Total Payable:</span>
                                     <span>৳ 3,060</span>
                                   </div>
@@ -4704,9 +4686,9 @@ export default function CourierSettingsPage() {
                               </div>
                             </div>
 
-                            {/* Classic Footer */}
-                            <div className="pt-6 border-t border-gray-200 text-center text-[10px] text-gray-500">
-                              <p className="font-semibold text-gray-800 mb-0.5">
+                            {/* Footer */}
+                            <div style={{ marginTop: "24px", paddingTop: "16px", borderTop: "1px solid #e5e7eb", textAlign: "center", fontSize: "10px", color: "#6b7280" }}>
+                              <p style={{ fontWeight: "600", color: "#1f2937", marginBottom: "2px" }}>
                                 Thank you for your business!
                               </p>
                               <p>
@@ -4718,386 +4700,361 @@ export default function CourierSettingsPage() {
 
                         {/* ==================== B. MODERN (PRO) TIER VIEW ==================== */}
                         {invoiceTemplate === "modern" && (
-                          <div className="flex flex-col justify-between min-h-[750px]">
-                            {/* Dynamic Colored Top Bar */}
-                            <div
-                              className="w-full h-2 transition-colors duration-200"
-                              style={{ backgroundColor: invoiceAccentColor }}
-                            />
-                            <div className="p-7 flex-1 flex flex-col justify-between">
-                              <div>
-                                {/* Modern Top Header: Bold left-aligned INVOICE with right-aligned brand */}
-                                <div className="flex justify-between items-start pb-5">
-                                  <div>
-                                    <div
-                                      className="text-3xl font-black tracking-tight"
-                                      style={{ color: invoiceAccentColor }}
-                                    >
-                                      INVOICE
-                                    </div>
-                                    <div className="mt-1.5 text-xs text-gray-600 space-y-0.5">
-                                      <div>
-                                        <span className="font-semibold text-gray-800">Order ID:</span> #1001
-                                      </div>
-                                      <div>
-                                        <span className="font-semibold text-gray-800">Date:</span> 27th Oct, 2026
-                                      </div>
-                                      <div className="mt-1">
-                                        <span
-                                          className="inline-block px-2 py-0.5 rounded text-[10px] font-bold text-white uppercase tracking-wider"
-                                          style={{ backgroundColor: invoiceAccentColor }}
-                                        >
-                                          COD · Due on Delivery
-                                        </span>
-                                      </div>
-                                    </div>
+                          <div style={{ display: "flex", flexDirection: "column", justifyContent: "space-between", minHeight: "680px" }}>
+                            <div>
+                              {/* Top Accent bar */}
+                              <div
+                                style={{
+                                  height: "4px",
+                                  backgroundColor: invoiceAccentColor,
+                                  borderRadius: "2px",
+                                  marginBottom: "16px",
+                                  transition: "background-color 0.2s ease",
+                                }}
+                              />
+                              {/* Top Header */}
+                              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", paddingBottom: "16px" }}>
+                                <div>
+                                  <div
+                                    style={{
+                                      fontSize: "24px",
+                                      fontWeight: "900",
+                                      letterSpacing: "-0.5px",
+                                      color: invoiceAccentColor,
+                                    }}
+                                  >
+                                    INVOICE
                                   </div>
-
-                                  <div className="text-right">
-                                    {invoiceBrandLogo ? (
-                                      <img
-                                        src={invoiceBrandLogo}
-                                        alt={invoiceBrandName}
-                                        className="h-10 max-w-[150px] object-contain ml-auto mb-1.5"
-                                      />
-                                    ) : (
-                                      <div className="text-xl font-bold tracking-tight text-gray-900 mb-0.5">
-                                        {invoiceBrandName || "SafeParcel Store"}
-                                      </div>
-                                    )}
-                                    <div className="text-[11px] text-gray-600 leading-relaxed">
-                                      <div>{invoiceBrandAddress || "House 42, Road 11, Banani, Dhaka"}</div>
-                                      <div>Phone: {invoiceBrandPhone || "+880 1711-000000"}</div>
-                                      {invoiceBrandEmail && <div>{invoiceBrandEmail}</div>}
-                                      {invoiceBrandWebsite && (
-                                        <div className="font-semibold" style={{ color: invoiceAccentColor }}>
-                                          {invoiceBrandWebsite}
-                                        </div>
-                                      )}
+                                  <div style={{ marginTop: "6px", fontSize: "11px", color: "#4b5563", lineHeight: "1.5" }}>
+                                    <div>
+                                      <span style={{ fontWeight: "600", color: "#1f2937" }}>Order ID:</span> #1001
                                     </div>
-                                  </div>
-                                </div>
-
-                                {/* Modern Middle Body: Dual-Box Container Layout */}
-                                <div className="grid grid-cols-2 gap-3.5 py-3 text-[11px]">
-                                  {/* Box 1: Bill From */}
-                                  <div className="p-3 rounded-xl border border-gray-200 bg-gray-50/70 shadow-2xs">
-                                    <div className="flex items-center gap-1.5 font-bold uppercase tracking-wider text-[10px] mb-1 text-gray-700">
+                                    <div>
+                                      <span style={{ fontWeight: "600", color: "#1f2937" }}>Date:</span> 27th Oct, 2026
+                                    </div>
+                                    <div style={{ marginTop: "4px" }}>
                                       <span
-                                        className="w-2 h-2 rounded-full inline-block"
-                                        style={{ backgroundColor: invoiceAccentColor }}
-                                      />
-                                      Bill From
-                                    </div>
-                                    <div className="font-bold text-gray-900 text-xs">
-                                      {invoiceBrandName || "SafeParcel Store"}
-                                    </div>
-                                    <div className="text-gray-600 mt-0.5 space-y-0.5 leading-relaxed">
-                                      <div>{invoiceBrandAddress || "House 42, Road 11, Banani, Dhaka"}</div>
-                                      <div>Tel: {invoiceBrandPhone || "+880 1711-000000"}</div>
-                                    </div>
-                                  </div>
-
-                                  {/* Box 2: Bill To */}
-                                  <div className="p-3 rounded-xl border border-gray-200 bg-gray-50/70 shadow-2xs">
-                                    <div className="flex items-center justify-between font-bold uppercase tracking-wider text-[10px] mb-1 text-gray-700">
-                                      <div className="flex items-center gap-1.5">
-                                        <span className="w-2 h-2 rounded-full inline-block bg-emerald-500" />
-                                        Bill To
-                                      </div>
-                                      <span className="text-[9px] font-semibold text-emerald-700 bg-emerald-100 px-1 py-0.2 rounded">
-                                        Verified Buyer
+                                        style={{
+                                          display: "inline-block",
+                                          padding: "2px 8px",
+                                          borderRadius: "4px",
+                                          fontSize: "10px",
+                                          fontWeight: "700",
+                                          color: "#ffffff",
+                                          textTransform: "uppercase",
+                                          backgroundColor: invoiceAccentColor,
+                                        }}
+                                      >
+                                        COD · Due on Delivery
                                       </span>
                                     </div>
-                                    <div className="font-bold text-gray-900 text-xs">
-                                      Nahid Rahman
-                                    </div>
-                                    <div className="text-gray-600 mt-0.5 space-y-0.5 leading-relaxed">
-                                      <div>Plot 14, Sector 7, Uttara, Dhaka - 1230</div>
-                                      <div>Phone: +880 1812-345678</div>
-                                    </div>
                                   </div>
                                 </div>
 
-                                {/* Modern Order Table: Dynamic Product Images Matrix */}
-                                <div className="mt-3">
-                                  <table className="w-full text-left border-collapse text-[11px]">
-                                    <thead>
-                                      <tr className="border-b-2 border-gray-200 text-gray-700 font-bold uppercase text-[10px] tracking-wider">
-                                        <th className="py-2.5 px-3">Product Description</th>
-                                        <th className="py-2.5 px-2 text-center">Qty</th>
-                                        <th className="py-2.5 px-2 text-right">Price</th>
-                                        <th className="py-2.5 px-3 text-right">Total</th>
-                                      </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-gray-100">
-                                      {/* Item 1 with Product Image */}
-                                      <tr>
-                                        <td className="py-2.5 px-3">
-                                          <div className="flex items-center gap-2.5">
-                                            {/* Product Thumbnail Block */}
-                                            <div className="w-8 h-8 rounded-md bg-gray-100 border border-gray-200 flex items-center justify-center flex-shrink-0 text-gray-500 shadow-2xs">
-                                              <svg className="w-4 h-4 text-gray-500" viewBox="0 0 24 24" fill="currentColor">
-                                                <path d="M21.707 5.293l-3-3A.997.997 0 0018 2H6a.997.997 0 00-.707.293l-3 3A.996.996 0 002 6v14a2 2 0 002 2h16a2 2 0 002-2V6a.996.996 0 00-.293-.707zM12 4c.646 0 1.258.261 1.707.707.447.447.707 1.059.707 1.707s-.26 1.26-.707 1.707C13.258 8.568 12.646 8.828 12 8.828s-1.258-.26-1.707-.707C9.846 7.674 9.586 7.062 9.586 6.414s.26-1.26.707-1.707C10.742 4.261 11.354 4 12 4z"/>
-                                              </svg>
-                                            </div>
-                                            <div>
-                                              <div className="font-semibold text-gray-900">
-                                                Premium Cotton Drop-Shoulder T-Shirt
-                                              </div>
-                                              <div className="text-[10px] text-gray-500">
-                                                Black / L · SKU: TSH-BLK-L-01
-                                              </div>
-                                            </div>
-                                          </div>
-                                        </td>
-                                        <td className="py-2.5 px-2 text-center font-semibold text-gray-900">2</td>
-                                        <td className="py-2.5 px-2 text-right text-gray-700">৳ 850</td>
-                                        <td className="py-2.5 px-3 text-right font-bold text-gray-900">৳ 1,700</td>
-                                      </tr>
-                                      {/* Item 2 with Product Image */}
-                                      <tr>
-                                        <td className="py-2.5 px-3">
-                                          <div className="flex items-center gap-2.5">
-                                            {/* Product Thumbnail Block */}
-                                            <div className="w-8 h-8 rounded-md bg-gray-100 border border-gray-200 flex items-center justify-center flex-shrink-0 text-gray-500 shadow-2xs">
-                                              <svg className="w-4 h-4 text-gray-500" viewBox="0 0 24 24" fill="currentColor">
-                                                <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14h-4v-4h4v4zm0-6h-4V7h4v4z"/>
-                                              </svg>
-                                            </div>
-                                            <div>
-                                              <div className="font-semibold text-gray-900">
-                                                Slim Fit Stretch Denim Jeans
-                                              </div>
-                                              <div className="text-[10px] text-gray-500">
-                                                Indigo / 32 · SKU: JNS-IND-32-04
-                                              </div>
-                                            </div>
-                                          </div>
-                                        </td>
-                                        <td className="py-2.5 px-2 text-center font-semibold text-gray-900">1</td>
-                                        <td className="py-2.5 px-2 text-right text-gray-700">৳ 1,450</td>
-                                        <td className="py-2.5 px-3 text-right font-bold text-gray-900">৳ 1,450</td>
-                                      </tr>
-                                    </tbody>
-                                  </table>
-                                </div>
-
-                                {/* Financial Summary */}
-                                <div className="flex justify-end mt-4">
-                                  <div className="w-56 bg-gray-50/70 p-3 rounded-xl border border-gray-200 space-y-1.5 text-[11px]">
-                                    <div className="flex justify-between text-gray-600">
-                                      <span>Subtotal</span>
-                                      <span>৳ 3,150</span>
+                                <div style={{ textAlign: "right" }}>
+                                  {invoiceBrandLogo ? (
+                                    <img
+                                      src={invoiceBrandLogo}
+                                      alt={invoiceBrandName || "Brand Logo"}
+                                      style={{ height: "40px", maxWidth: "150px", objectFit: "contain", marginLeft: "auto", marginBottom: "6px" }}
+                                    />
+                                  ) : (
+                                    <div style={{ fontSize: "20px", fontWeight: "700", color: "#111827", marginBottom: "4px" }}>
+                                      {invoiceBrandName || "SafeParcel Store"}
                                     </div>
-                                    <div className="flex justify-between text-gray-600">
-                                      <span>Shipping Fee</span>
-                                      <span>৳ 60</span>
-                                    </div>
-                                    <div className="flex justify-between text-emerald-600 font-medium">
-                                      <span>Discount</span>
-                                      <span>- ৳ 150</span>
-                                    </div>
-                                    <div
-                                      className="pt-1.5 border-t border-gray-200 flex justify-between font-extrabold text-sm"
-                                      style={{ color: invoiceAccentColor }}
-                                    >
-                                      <span>Total Payable:</span>
-                                      <span>৳ 3,060</span>
-                                    </div>
+                                  )}
+                                  <div style={{ fontSize: "11px", color: "#4b5563", lineHeight: "1.5" }}>
+                                    <div>{invoiceBrandAddress || "House 42, Road 11, Banani, Dhaka"}</div>
+                                    <div>Phone: {invoiceBrandPhone || "+880 1711-000000"}</div>
+                                    {invoiceBrandEmail && <div>Email: {invoiceBrandEmail}</div>}
+                                    {invoiceBrandWebsite && (
+                                      <div style={{ fontWeight: "600", color: invoiceAccentColor }}>
+                                        {invoiceBrandWebsite}
+                                      </div>
+                                    )}
                                   </div>
                                 </div>
                               </div>
 
-                              {/* Modern Footer */}
-                              <div className="pt-6 border-t border-gray-100 flex justify-between items-center text-[10px] text-gray-500">
-                                <div>
-                                  <span className="font-bold text-gray-700">{invoiceBrandName || "SafeParcel Store"}</span>
-                                  {" · Official Store Invoice"}
+                              {/* Middle Dual-Box */}
+                              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", padding: "12px 0", fontSize: "11px" }}>
+                                <div style={{ padding: "10px 12px", borderRadius: "8px", border: "1px solid #e5e7eb", background: "#f9fafb" }}>
+                                  <div style={{ display: "flex", alignItems: "center", gap: "6px", fontWeight: "700", textTransform: "uppercase", fontSize: "10px", color: "#4b5563", marginBottom: "4px" }}>
+                                    <span style={{ width: "8px", height: "8px", borderRadius: "50%", display: "inline-block", backgroundColor: invoiceAccentColor }} />
+                                    BILL FROM
+                                  </div>
+                                  <div style={{ fontWeight: "700", color: "#111827", fontSize: "12px" }}>
+                                    {invoiceBrandName || "SafeParcel Store"}
+                                  </div>
+                                  <div style={{ color: "#4b5563", marginTop: "2px", lineHeight: "1.4" }}>
+                                    <div>{invoiceBrandAddress || "House 42, Road 11, Banani, Dhaka"}</div>
+                                    <div>Tel: {invoiceBrandPhone || "+880 1711-000000"}</div>
+                                  </div>
                                 </div>
-                                <div className="font-medium" style={{ color: invoiceAccentColor }}>
-                                  Verified E-Commerce Invoice
+
+                                <div style={{ padding: "10px 12px", borderRadius: "8px", border: "1px solid #e5e7eb", background: "#f9fafb" }}>
+                                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", fontWeight: "700", textTransform: "uppercase", fontSize: "10px", color: "#4b5563", marginBottom: "4px" }}>
+                                    <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                                      <span style={{ width: "8px", height: "8px", borderRadius: "50%", display: "inline-block", background: "#10b981" }} />
+                                      BILL TO
+                                    </div>
+                                    <span style={{ fontSize: "9px", fontWeight: "600", color: "#047857", background: "#d1fae5", padding: "1px 6px", borderRadius: "4px" }}>
+                                      Verified Buyer
+                                    </span>
+                                  </div>
+                                  <div style={{ fontWeight: "700", color: "#111827", fontSize: "12px" }}>
+                                    Nahid Rahman
+                                  </div>
+                                  <div style={{ color: "#4b5563", marginTop: "2px", lineHeight: "1.4" }}>
+                                    <div>Plot 14, Sector 7, Uttara, Dhaka - 1230</div>
+                                    <div>Phone: +880 1812-345678</div>
+                                  </div>
                                 </div>
+                              </div>
+
+                              {/* Modern Order Table */}
+                              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "11px", marginTop: "12px" }}>
+                                <thead>
+                                  <tr style={{ borderBottom: "2px solid #e5e7eb", color: "#4b5563", fontWeight: "700", textTransform: "uppercase", fontSize: "10px" }}>
+                                    <th style={{ padding: "8px 10px", textAlign: "left" }}>Product Description</th>
+                                    <th style={{ padding: "8px 8px", textAlign: "center" }}>Qty</th>
+                                    <th style={{ padding: "8px 8px", textAlign: "right" }}>Price</th>
+                                    <th style={{ padding: "8px 10px", textAlign: "right" }}>Total</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  <tr style={{ borderBottom: "1px solid #f3f4f6" }}>
+                                    <td style={{ padding: "10px" }}>
+                                      <div style={{ fontWeight: "600", color: "#111827" }}>Premium Cotton Drop-Shoulder T-Shirt</div>
+                                      <div style={{ fontSize: "10px", color: "#6b7280" }}>Black / L · SKU: TSH-BLK-L-01</div>
+                                    </td>
+                                    <td style={{ padding: "10px 8px", textAlign: "center", fontWeight: "600", color: "#111827" }}>2</td>
+                                    <td style={{ padding: "10px 8px", textAlign: "right", color: "#4b5563" }}>৳ 850</td>
+                                    <td style={{ padding: "10px", textAlign: "right", fontWeight: "700", color: "#111827" }}>৳ 1,700</td>
+                                  </tr>
+                                  <tr style={{ borderBottom: "1px solid #f3f4f6" }}>
+                                    <td style={{ padding: "10px" }}>
+                                      <div style={{ fontWeight: "600", color: "#111827" }}>Slim Fit Stretch Denim Jeans</div>
+                                      <div style={{ fontSize: "10px", color: "#6b7280" }}>Indigo / 32 · SKU: JNS-IND-32-04</div>
+                                    </td>
+                                    <td style={{ padding: "10px 8px", textAlign: "center", fontWeight: "600", color: "#111827" }}>1</td>
+                                    <td style={{ padding: "10px 8px", textAlign: "right", color: "#4b5563" }}>৳ 1,450</td>
+                                    <td style={{ padding: "10px", textAlign: "right", fontWeight: "700", color: "#111827" }}>৳ 1,450</td>
+                                  </tr>
+                                </tbody>
+                              </table>
+
+                              {/* Modern Financial Summary */}
+                              <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "16px" }}>
+                                <div style={{ width: "220px", background: "#f9fafb", padding: "12px", borderRadius: "8px", border: "1px solid #e5e7eb", fontSize: "11px" }}>
+                                  <div style={{ display: "flex", justifyContent: "space-between", color: "#4b5563", padding: "3px 0" }}>
+                                    <span>Subtotal:</span>
+                                    <span>৳ 3,150</span>
+                                  </div>
+                                  <div style={{ display: "flex", justifyContent: "space-between", color: "#4b5563", padding: "3px 0" }}>
+                                    <span>Discount:</span>
+                                    <span style={{ color: "#059669", fontWeight: "500" }}>- ৳ 150</span>
+                                  </div>
+                                  <div style={{ display: "flex", justifyContent: "space-between", color: "#4b5563", padding: "3px 0" }}>
+                                    <span>Shipping:</span>
+                                    <span>৳ 60</span>
+                                  </div>
+                                  <div
+                                    style={{
+                                      paddingTop: "6px",
+                                      marginTop: "6px",
+                                      borderTop: "1px solid #e5e7eb",
+                                      display: "flex",
+                                      justifyContent: "space-between",
+                                      fontWeight: "800",
+                                      fontSize: "13px",
+                                      color: invoiceAccentColor,
+                                    }}
+                                  >
+                                    <span>Total Payable:</span>
+                                    <span>৳ 3,060</span>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Modern Footer */}
+                            <div style={{ marginTop: "24px", paddingTop: "16px", borderTop: "1px solid #f3f4f6", display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "10px", color: "#6b7280" }}>
+                              <div>
+                                <span style={{ fontWeight: "700", color: "#374151" }}>{invoiceBrandName || "SafeParcel Store"}</span>
+                                {" · Official Store Invoice"}
+                              </div>
+                              <div style={{ fontWeight: "600", color: invoiceAccentColor }}>
+                                Verified E-Commerce Invoice
                               </div>
                             </div>
                           </div>
                         )}
 
-                        {/* ==================== C. WAREHOUSE FULFILLMENT (ENTERPRISE) TIER VIEW ==================== */}
+                        {/* ==================== C. WAREHOUSE FULFILLMENT (ENTERPRISE / NEW) TIER VIEW ==================== */}
                         {invoiceTemplate === "warehouse" && (
-                          <div className="p-7 flex flex-col justify-between min-h-[750px]">
+                          <div style={{ display: "flex", flexDirection: "column", justifyContent: "space-between", minHeight: "680px" }}>
                             <div>
                               {/* Warehouse Dual-Identity Banner Header: INVOICE / PACKING SLIP */}
-                              <div className="border-2 border-gray-900 p-2.5 rounded bg-gray-50 flex justify-between items-center mb-5">
+                              <div style={{ border: "2px solid #111827", padding: "10px", borderRadius: "4px", background: "#f9fafb", display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
                                 <div>
-                                  <div className="text-lg font-black tracking-widest text-gray-900 uppercase">
+                                  <div style={{ fontSize: "15px", fontWeight: "900", letterSpacing: "1px", color: "#111827", textTransform: "uppercase" }}>
                                     INVOICE / PACKING SLIP
                                   </div>
-                                  <div className="text-[10px] font-semibold text-gray-600 tracking-wider">
+                                  <div style={{ fontSize: "10px", fontWeight: "600", color: "#4b5563", letterSpacing: "0.5px" }}>
                                     ENTERPRISE WAREHOUSE DISPATCH · HUB: DAC-NORTH
                                   </div>
                                 </div>
-                                <div className="text-right">
-                                  <div className="text-sm font-extrabold text-gray-900">
+                                <div style={{ textAlign: "right" }}>
+                                  <div style={{ fontSize: "13px", fontWeight: "800", color: "#111827" }}>
                                     ORDER #1001
                                   </div>
-                                  <div className="text-[10px] text-gray-500">
+                                  <div style={{ fontSize: "10px", color: "#6b7280" }}>
                                     27th Oct, 2026 · 14:32:00
                                   </div>
                                 </div>
                               </div>
 
                               {/* Brand & Warehouse Info Row */}
-                              <div className="flex justify-between items-start pb-4 border-b border-gray-300 text-[11px]">
+                              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", paddingBottom: "12px", borderBottom: "1px solid #d1d5db", fontSize: "11px" }}>
                                 <div>
                                   {invoiceBrandLogo ? (
                                     <img
                                       src={invoiceBrandLogo}
-                                      alt={invoiceBrandName}
-                                      className="h-9 max-w-[140px] object-contain mb-1"
+                                      alt={invoiceBrandName || "Brand Logo"}
+                                      style={{ height: "36px", maxWidth: "140px", objectFit: "contain", marginBottom: "4px" }}
                                     />
                                   ) : (
-                                    <div className="text-base font-bold text-gray-900 mb-0.5">
+                                    <div style={{ fontSize: "15px", fontWeight: "700", color: "#111827", marginBottom: "2px" }}>
                                       {invoiceBrandName || "SafeParcel Store"}
                                     </div>
                                   )}
-                                  <div className="text-gray-600 text-[10px] space-y-0.5">
+                                  <div style={{ color: "#4b5563", fontSize: "10px", lineHeight: "1.4" }}>
                                     <div>{invoiceBrandAddress || "House 42, Road 11, Banani, Dhaka"}</div>
                                     <div>Dispatch Hotline: {invoiceBrandPhone || "+880 1711-000000"}</div>
                                   </div>
                                 </div>
-                                <div className="text-right text-[10px] text-gray-600 space-y-0.5">
-                                  <div><span className="font-bold text-gray-800">Fulfillment:</span> Auto-Routing</div>
-                                  <div><span className="font-bold text-gray-800">Courier Partner:</span> Steadfast Express</div>
-                                  <div><span className="font-bold text-gray-800">Tracking Ref:</span> SF-84920412-BD</div>
+                                <div style={{ textAlign: "right", fontSize: "10px", color: "#4b5563", lineHeight: "1.4" }}>
+                                  <div><span style={{ fontWeight: "700", color: "#1f2937" }}>Fulfillment:</span> Auto-Routing</div>
+                                  <div><span style={{ fontWeight: "700", color: "#1f2937" }}>Courier Partner:</span> Steadfast Express</div>
+                                  <div><span style={{ fontWeight: "700", color: "#1f2937" }}>Tracking Ref:</span> SF-84920412-BD</div>
                                 </div>
                               </div>
 
                               {/* Consignee Recipient Block */}
-                              <div className="my-3.5 p-2.5 bg-gray-100 rounded border border-gray-300 text-[11px] grid grid-cols-2 gap-3">
+                              <div style={{ margin: "14px 0", padding: "10px", background: "#f3f4f6", borderRadius: "4px", border: "1px solid #d1d5db", fontSize: "11px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
                                 <div>
-                                  <div className="text-[10px] font-bold text-gray-700 uppercase">
+                                  <div style={{ fontSize: "10px", fontWeight: "700", color: "#374151", textTransform: "uppercase" }}>
                                     Ship To (Consignee)
                                   </div>
-                                  <div className="font-bold text-gray-900 text-xs mt-0.5">
+                                  <div style={{ fontWeight: "700", color: "#111827", fontSize: "12px", marginTop: "2px" }}>
                                     Nahid Rahman
                                   </div>
-                                  <div className="text-gray-700 text-[10px] mt-0.5 leading-relaxed">
+                                  <div style={{ color: "#374151", fontSize: "10px", marginTop: "2px", lineHeight: "1.4" }}>
                                     Plot 14, Sector 7, Uttara, Dhaka - 1230<br />
                                     Phone: +880 1812-345678
                                   </div>
                                 </div>
-                                <div className="border-l border-gray-300 pl-3">
-                                  <div className="text-[10px] font-bold text-gray-700 uppercase">
+                                <div style={{ borderLeft: "1px solid #d1d5db", paddingLeft: "12px" }}>
+                                  <div style={{ fontSize: "10px", fontWeight: "700", color: "#374151", textTransform: "uppercase" }}>
                                     Payment Instructions
                                   </div>
-                                  <div className="text-xs font-bold text-red-600 mt-0.5">
+                                  <div style={{ fontSize: "12px", fontWeight: "700", color: "#dc2626", marginTop: "2px" }}>
                                     COLLECT CASH: ৳ 3,060
                                   </div>
-                                  <div className="text-[10px] text-gray-600 mt-0.5">
+                                  <div style={{ fontSize: "10px", color: "#4b5563", marginTop: "2px" }}>
                                     Weight: 0.85 kg | Fragile/Apparel
                                   </div>
                                 </div>
                               </div>
 
-                              {/* Order Table with Specialized Product Barcoding Metadata */}
-                              <div className="mt-3">
-                                <table className="w-full text-left border-collapse text-[11px]">
-                                  <thead>
-                                    <tr className="bg-gray-800 text-white font-bold text-[10px] uppercase">
-                                      <th className="py-2 px-2.5">Item Details & Barcode</th>
-                                      <th className="py-2 px-2 text-center">Bin</th>
-                                      <th className="py-2 px-2 text-center">Pick</th>
-                                      <th className="py-2 px-2.5 text-right">Price</th>
-                                      <th className="py-2 px-2.5 text-right">Total</th>
-                                    </tr>
-                                  </thead>
-                                  <tbody className="divide-y divide-gray-200">
-                                    {/* Product 1 with SKU & Thin Barcode Lines */}
-                                    <tr>
-                                      <td className="py-2 px-2.5">
-                                        <div className="font-semibold text-gray-900">
-                                          Premium Cotton Drop-Shoulder T-Shirt - Black / L
+                              {/* Order Table with Barcode Metadata */}
+                              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "11px", marginTop: "12px" }}>
+                                <thead>
+                                  <tr style={{ background: "#1f2937", color: "#ffffff", fontWeight: "700", fontSize: "10px", textTransform: "uppercase" }}>
+                                    <th style={{ padding: "8px 10px", textAlign: "left" }}>Item Details & Barcode</th>
+                                    <th style={{ padding: "8px 6px", textAlign: "center" }}>Bin</th>
+                                    <th style={{ padding: "8px 6px", textAlign: "center" }}>Pick</th>
+                                    <th style={{ padding: "8px 10px", textAlign: "right" }}>Price</th>
+                                    <th style={{ padding: "8px 10px", textAlign: "right" }}>Total</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  <tr style={{ borderBottom: "1px solid #e5e7eb" }}>
+                                    <td style={{ padding: "8px 10px" }}>
+                                      <div style={{ fontWeight: "600", color: "#111827" }}>
+                                        Premium Cotton Drop-Shoulder T-Shirt - Black / L
+                                      </div>
+                                      <div style={{ marginTop: "4px", display: "flex", alignItems: "center", gap: "6px" }}>
+                                        <span style={{ fontFamily: "monospace", fontSize: "9px", background: "#f3f4f6", padding: "1px 4px", borderRadius: "3px", border: "1px solid #e5e7eb", color: "#374151", fontWeight: "700" }}>
+                                          SKU: TSH-BLK-L-01
+                                        </span>
+                                        <div style={{ display: "flex", alignItems: "center", gap: "1px", height: "14px", padding: "0 4px", background: "#ffffff", border: "1px solid #e5e7eb" }}>
+                                          {[2,1,3,1,2,1,1,3,2,1,2,3,1,1,2,1,3,2,1,2].map((w, i) => (
+                                            <span
+                                              key={i}
+                                              style={{ background: "#000000", display: "inline-block", height: "100%", width: `${w}px` }}
+                                            />
+                                          ))}
                                         </div>
-                                        {/* Barcode & SKU Row */}
-                                        <div className="mt-1 flex items-center gap-2">
-                                          <span className="font-mono text-[9px] bg-gray-100 px-1 py-0.5 rounded border border-gray-200 text-gray-700 font-bold">
-                                            SKU: TSH-BLK-L-01
-                                          </span>
-                                          {/* Custom Thin Layout Barcode Lines */}
-                                          <div className="flex items-center gap-0.5 h-3.5 px-1 bg-white border border-gray-200">
-                                            {[2,1,3,1,2,1,1,3,2,1,2,3,1,1,2,1,3,2,1,2].map((w, i) => (
-                                              <span
-                                                key={i}
-                                                className="bg-black inline-block h-full"
-                                                style={{ width: `${w}px` }}
-                                              />
-                                            ))}
-                                          </div>
+                                      </div>
+                                    </td>
+                                    <td style={{ padding: "8px 6px", textAlign: "center", fontFamily: "monospace", fontSize: "10px", color: "#374151" }}>
+                                      A-04-12
+                                    </td>
+                                    <td style={{ padding: "8px 6px", textAlign: "center", fontWeight: "700", color: "#111827" }}>
+                                      2
+                                    </td>
+                                    <td style={{ padding: "8px 10px", textAlign: "right", color: "#374151" }}>৳ 850</td>
+                                    <td style={{ padding: "8px 10px", textAlign: "right", fontWeight: "700", color: "#111827" }}>৳ 1,700</td>
+                                  </tr>
+                                  <tr style={{ borderBottom: "1px solid #e5e7eb" }}>
+                                    <td style={{ padding: "8px 10px" }}>
+                                      <div style={{ fontWeight: "600", color: "#111827" }}>
+                                        Slim Fit Stretch Denim Jeans - Indigo / 32
+                                      </div>
+                                      <div style={{ marginTop: "4px", display: "flex", alignItems: "center", gap: "6px" }}>
+                                        <span style={{ fontFamily: "monospace", fontSize: "9px", background: "#f3f4f6", padding: "1px 4px", borderRadius: "3px", border: "1px solid #e5e7eb", color: "#374151", fontWeight: "700" }}>
+                                          SKU: JNS-IND-32-04
+                                        </span>
+                                        <div style={{ display: "flex", alignItems: "center", gap: "1px", height: "14px", padding: "0 4px", background: "#ffffff", border: "1px solid #e5e7eb" }}>
+                                          {[1,3,1,2,1,3,2,1,1,2,3,1,2,1,1,3,1,2,2,1].map((w, i) => (
+                                            <span
+                                              key={i}
+                                              style={{ background: "#000000", display: "inline-block", height: "100%", width: `${w}px` }}
+                                            />
+                                          ))}
                                         </div>
-                                      </td>
-                                      <td className="py-2 px-2 text-center font-mono text-[10px] text-gray-700">
-                                        A-04-12
-                                      </td>
-                                      <td className="py-2 px-2 text-center font-bold text-gray-900">
-                                        2
-                                      </td>
-                                      <td className="py-2 px-2.5 text-right text-gray-700">৳ 850</td>
-                                      <td className="py-2 px-2.5 text-right font-bold text-gray-900">৳ 1,700</td>
-                                    </tr>
-
-                                    {/* Product 2 with SKU & Thin Barcode Lines */}
-                                    <tr>
-                                      <td className="py-2 px-2.5">
-                                        <div className="font-semibold text-gray-900">
-                                          Slim Fit Stretch Denim Jeans - Indigo / 32
-                                        </div>
-                                        {/* Barcode & SKU Row */}
-                                        <div className="mt-1 flex items-center gap-2">
-                                          <span className="font-mono text-[9px] bg-gray-100 px-1 py-0.5 rounded border border-gray-200 text-gray-700 font-bold">
-                                            SKU: JNS-IND-32-04
-                                          </span>
-                                          {/* Custom Thin Layout Barcode Lines */}
-                                          <div className="flex items-center gap-0.5 h-3.5 px-1 bg-white border border-gray-200">
-                                            {[1,3,1,2,1,3,2,1,1,2,3,1,2,1,1,3,1,2,2,1].map((w, i) => (
-                                              <span
-                                                key={i}
-                                                className="bg-black inline-block h-full"
-                                                style={{ width: `${w}px` }}
-                                              />
-                                            ))}
-                                          </div>
-                                        </div>
-                                      </td>
-                                      <td className="py-2 px-2 text-center font-mono text-[10px] text-gray-700">
-                                        B-02-08
-                                      </td>
-                                      <td className="py-2 px-2 text-center font-bold text-gray-900">
-                                        1
-                                      </td>
-                                      <td className="py-2 px-2.5 text-right text-gray-700">৳ 1,450</td>
-                                      <td className="py-2 px-2.5 text-right font-bold text-gray-900">৳ 1,450</td>
-                                    </tr>
-                                  </tbody>
-                                </table>
-                              </div>
+                                      </div>
+                                    </td>
+                                    <td style={{ padding: "8px 6px", textAlign: "center", fontFamily: "monospace", fontSize: "10px", color: "#374151" }}>
+                                      B-02-08
+                                    </td>
+                                    <td style={{ padding: "8px 6px", textAlign: "center", fontWeight: "700", color: "#111827" }}>
+                                      1
+                                    </td>
+                                    <td style={{ padding: "8px 10px", textAlign: "right", color: "#374151" }}>৳ 1,450</td>
+                                    <td style={{ padding: "8px 10px", textAlign: "right", fontWeight: "700", color: "#111827" }}>৳ 1,450</td>
+                                  </tr>
+                                </tbody>
+                              </table>
 
                               {/* Warehouse Totals */}
-                              <div className="flex justify-end mt-3.5">
-                                <div className="w-52 space-y-1 text-[11px] text-right">
-                                  <div className="flex justify-between text-gray-600">
+                              <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "14px" }}>
+                                <div style={{ width: "220px", fontSize: "11px" }}>
+                                  <div style={{ display: "flex", justifyContent: "space-between", color: "#4b5563", padding: "2px 0" }}>
                                     <span>Items Subtotal:</span>
                                     <span>৳ 3,150</span>
                                   </div>
-                                  <div className="flex justify-between text-gray-600">
+                                  <div style={{ display: "flex", justifyContent: "space-between", color: "#4b5563", padding: "2px 0" }}>
+                                    <span>Discount:</span>
+                                    <span style={{ color: "#059669", fontWeight: "500" }}>- ৳ 150</span>
+                                  </div>
+                                  <div style={{ display: "flex", justifyContent: "space-between", color: "#4b5563", padding: "2px 0" }}>
                                     <span>Shipping Fee:</span>
                                     <span>৳ 60</span>
                                   </div>
-                                  <div className="flex justify-between text-emerald-600">
-                                    <span>Discount:</span>
-                                    <span>- ৳ 150</span>
-                                  </div>
-                                  <div className="border-t-2 border-gray-900 pt-1 flex justify-between font-black text-sm text-gray-900">
+                                  <div style={{ borderTop: "2px solid #111827", paddingTop: "4px", marginTop: "4px", display: "flex", justifyContent: "space-between", fontWeight: "900", fontSize: "13px", color: "#111827" }}>
                                     <span>Total COD to Collect:</span>
                                     <span>৳ 3,060</span>
                                   </div>
@@ -5105,30 +5062,25 @@ export default function CourierSettingsPage() {
                               </div>
                             </div>
 
-                            {/* BOTTOM FULL-VALUE COMPONENT: Order Status QR Code Vector Box */}
-                            <div className="mt-6 pt-3.5 border-t-2 border-dashed border-gray-300">
-                              <div className="flex items-center gap-3.5 p-2.5 bg-gray-50 rounded-lg border border-gray-200">
-                                {/* Vector QR Code Representation */}
-                                <div className="p-1 bg-white rounded border border-gray-300 flex-shrink-0 shadow-2xs">
+                            {/* Order Status QR Code Vector Box */}
+                            <div style={{ marginTop: "20px", paddingTop: "12px", borderTop: "2px dashed #d1d5db" }}>
+                              <div style={{ display: "flex", alignItems: "center", gap: "12px", padding: "10px", background: "#f9fafb", borderRadius: "6px", border: "1px solid #e5e7eb" }}>
+                                <div style={{ padding: "4px", background: "#ffffff", borderRadius: "4px", border: "1px solid #d1d5db", flexShrink: 0 }}>
                                   <svg
-                                    className="w-12 h-12"
+                                    style={{ width: "44px", height: "44px" }}
                                     viewBox="0 0 100 100"
                                     fill="none"
                                     xmlns="http://www.w3.org/2000/svg"
                                   >
-                                    {/* Corner 1 */}
                                     <rect x="5" y="5" width="26" height="26" fill="black" />
                                     <rect x="9" y="9" width="18" height="18" fill="white" />
                                     <rect x="13" y="13" width="10" height="10" fill="black" />
-                                    {/* Corner 2 */}
                                     <rect x="69" y="5" width="26" height="26" fill="black" />
                                     <rect x="73" y="9" width="18" height="18" fill="white" />
                                     <rect x="77" y="13" width="10" height="10" fill="black" />
-                                    {/* Corner 3 */}
                                     <rect x="5" y="69" width="26" height="26" fill="black" />
                                     <rect x="9" y="73" width="18" height="18" fill="white" />
                                     <rect x="13" y="77" width="10" height="10" fill="black" />
-                                    {/* Inner Matrix Patterns */}
                                     <rect x="36" y="8" width="8" height="8" fill="black" />
                                     <rect x="48" y="14" width="8" height="8" fill="black" />
                                     <rect x="36" y="24" width="6" height="6" fill="black" />
@@ -5149,20 +5101,19 @@ export default function CourierSettingsPage() {
                                     <rect x="84" y="82" width="6" height="6" fill="black" />
                                   </svg>
                                 </div>
-
-                                <div className="flex-1">
-                                  <div className="flex items-center gap-1.5 mb-0.5">
-                                    <span className="font-bold text-xs text-gray-900 uppercase tracking-wide">
+                                <div style={{ flex: 1 }}>
+                                  <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "2px" }}>
+                                    <span style={{ fontWeight: "700", fontSize: "11px", color: "#111827", textTransform: "uppercase" }}>
                                       Order Status QR Code
                                     </span>
-                                    <span className="text-[9px] bg-purple-100 text-purple-800 font-bold px-1.5 py-0.2 rounded">
+                                    <span style={{ fontSize: "9px", background: "#f3e8ff", color: "#6b21a8", fontWeight: "700", padding: "1px 6px", borderRadius: "3px" }}>
                                       Enterprise
                                     </span>
                                   </div>
-                                  <div className="text-[10px] text-gray-500 leading-normal">
+                                  <div style={{ fontSize: "10px", color: "#6b7280", lineHeight: "1.4" }}>
                                     Scan with your camera to track live parcel delivery updates instantly via SafeParcel BD.
                                   </div>
-                                  <div className="font-mono text-[9px] text-gray-400 mt-0.5">
+                                  <div style={{ fontFamily: "monospace", fontSize: "9px", color: "#9ca3af", marginTop: "2px" }}>
                                     AUTH-HASH: 9a8f2c31e4b7 · PARCEL: #1001-SF
                                   </div>
                                 </div>
