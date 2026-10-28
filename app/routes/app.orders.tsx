@@ -19,6 +19,7 @@ import {
   Layout,
   Card,
   IndexTable,
+  Pagination,
   Tabs,
   Button,
   Select,
@@ -2712,6 +2713,20 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const rawSearchQ = (url.searchParams.get("q") || "").trim();
   const startDateParam = (url.searchParams.get("startDate") || "").trim();
   const endDateParam = (url.searchParams.get("endDate") || "").trim();
+  const afterCursor = (
+    url.searchParams.get("after") ||
+    (url.searchParams.get("direction") === "next"
+      ? url.searchParams.get("cursor")
+      : "") ||
+    ""
+  ).trim();
+  const beforeCursor = (
+    url.searchParams.get("before") ||
+    (url.searchParams.get("direction") === "prev"
+      ? url.searchParams.get("cursor")
+      : "") ||
+    ""
+  ).trim();
 
   if (isMissingCoreScopes && !url.searchParams.has("reauth_attempted")) {
     console.warn(
@@ -2874,21 +2889,37 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     }
   }
 
+  // Strict 25-order layout boundary across primary active tabs
+  const pageSize = 25;
+
+  // Seven-day threshold computation (UTC ISO format for Shopify Admin index queries)
+  const sevenDaysAgoDate = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+  const hasCustomDateRange = Boolean(startDateParam || endDateParam);
+
   // Tier 2 Dynamic GraphQL Query Builder based on parsed search params
   const queryParts: string[] = [];
-  let pageSize = 25;
 
   if (tabParam === "old_orders") {
     // Dynamic archived & historical order query
     queryParts.push("(fulfillment_status:fulfilled OR status:closed OR status:cancelled)");
-    pageSize = 50;
   } else if (tabParam === "cancelled") {
-    queryParts.push("(status:cancelled OR financial_status:voided)");
+    if (hasCustomDateRange) {
+      // Calendar override: custom range queries historical cancelled records dynamically
+      queryParts.push("(status:cancelled OR financial_status:voided)");
+    } else {
+      // Default: cancelled/voided within the last 7 days
+      queryParts.push(`(status:cancelled OR financial_status:voided) created_at:>=${sevenDaysAgoDate}`);
+    }
   } else if (tabParam === "pending") {
     // Unfulfilled rows matching manual locking criteria
     queryParts.push("fulfillment_status:unfulfilled");
   } else if (tabParam === "all") {
-    queryParts.push("(status:open OR status:closed OR status:cancelled)");
+    if (hasCustomDateRange) {
+      queryParts.push("(status:open OR status:closed OR status:cancelled)");
+    } else {
+      // Default: Last 7 days + The Unprocessed Safeguard (unfulfilled orders regardless of age)
+      queryParts.push(`(created_at:>=${sevenDaysAgoDate} OR fulfillment_status:unfulfilled)`);
+    }
   } else {
     // Default safe backward-compatible state (tab === "new" or parameter is omitted)
     queryParts.push("fulfillment_status:unfulfilled");
@@ -2920,9 +2951,29 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   let graphqlWarning: string | null = null;
 
   const FULL_ORDERS_QUERY = `#graphql
-    query GetOrdersWithItems($first: Int!, $query: String) {
-      orders(first: $first, query: $query, reverse: true) {
+    query GetOrdersWithItems(
+      $first: Int
+      $after: String
+      $last: Int
+      $before: String
+      $query: String
+    ) {
+      orders(
+        first: $first
+        after: $after
+        last: $last
+        before: $before
+        query: $query
+        reverse: true
+      ) {
+        pageInfo {
+          hasNextPage
+          hasPreviousPage
+          startCursor
+          endCursor
+        }
         edges {
+          cursor
           node {
             id
             name
@@ -2996,9 +3047,29 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   `;
 
   const BASIC_ORDERS_QUERY = `#graphql
-    query GetBasicOrdersWithItems($first: Int!, $query: String) {
-      orders(first: $first, query: $query, reverse: true) {
+    query GetBasicOrdersWithItems(
+      $first: Int
+      $after: String
+      $last: Int
+      $before: String
+      $query: String
+    ) {
+      orders(
+        first: $first
+        after: $after
+        last: $last
+        before: $before
+        query: $query
+        reverse: true
+      ) {
+        pageInfo {
+          hasNextPage
+          hasPreviousPage
+          startCursor
+          endCursor
+        }
         edges {
+          cursor
           node {
             id
             name
@@ -3046,14 +3117,40 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     }
   `;
 
+  const graphqlVariables: Record<string, any> = {
+    query: shopifyQueryString,
+  };
+  if (beforeCursor) {
+    graphqlVariables.last = pageSize;
+    graphqlVariables.before = beforeCursor;
+  } else {
+    graphqlVariables.first = pageSize;
+    if (afterCursor) {
+      graphqlVariables.after = afterCursor;
+    }
+  }
+
+  let pageInfo = {
+    hasNextPage: false,
+    hasPreviousPage: false,
+    startCursor: null as string | null,
+    endCursor: null as string | null,
+  };
+
   try {
     const response = await admin.graphql(FULL_ORDERS_QUERY, {
-      variables: {
-        first: pageSize,
-        query: shopifyQueryString,
-      },
+      variables: graphqlVariables,
     });
     const result: any = await response.json();
+
+    if (result?.data?.orders?.pageInfo) {
+      pageInfo = {
+        hasNextPage: Boolean(result.data.orders.pageInfo.hasNextPage),
+        hasPreviousPage: Boolean(result.data.orders.pageInfo.hasPreviousPage),
+        startCursor: result.data.orders.pageInfo.startCursor || null,
+        endCursor: result.data.orders.pageInfo.endCursor || null,
+      };
+    }
 
     // Check for GraphQL errors
     if (result.errors && result.errors.length > 0) {
@@ -3169,12 +3266,18 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
     try {
       const fallbackResponse = await admin.graphql(BASIC_ORDERS_QUERY, {
-        variables: {
-          first: pageSize,
-          query: shopifyQueryString,
-        },
+        variables: graphqlVariables,
       });
       const fallbackResult: any = await fallbackResponse.json();
+
+      if (fallbackResult?.data?.orders?.pageInfo) {
+        pageInfo = {
+          hasNextPage: Boolean(fallbackResult.data.orders.pageInfo.hasNextPage),
+          hasPreviousPage: Boolean(fallbackResult.data.orders.pageInfo.hasPreviousPage),
+          startCursor: fallbackResult.data.orders.pageInfo.startCursor || null,
+          endCursor: fallbackResult.data.orders.pageInfo.endCursor || null,
+        };
+      }
 
       if (fallbackResult.errors && fallbackResult.errors.length > 0) {
         console.warn("GraphQL field notices in BASIC_ORDERS_QUERY:", JSON.stringify(fallbackResult.errors));
@@ -3395,6 +3498,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   return {
     shopDomain,
     orders,
+    pageInfo,
     activeCouriers,
     routingConfig,
     graphqlWarning,
@@ -3413,6 +3517,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       q: rawSearchQ,
       startDate: startDateParam,
       endDate: endDateParam,
+      cursor: afterCursor || beforeCursor || "",
+      direction: beforeCursor ? "prev" : afterCursor ? "next" : "",
     },
     shippingLabelConfig,
     invoiceConfig,
@@ -3924,6 +4030,7 @@ export default function OrdersFulfillmentPage() {
   const {
     shopDomain,
     orders,
+    pageInfo,
     activeCouriers,
     routingConfig,
     graphqlWarning,
@@ -3940,6 +4047,28 @@ export default function OrdersFulfillmentPage() {
   const urlTab = searchParams.get("tab") || "";
   const initialTabId = urlTab || activeFilters?.tab || "new";
 
+  const isPaginating = navigation.state === "loading";
+
+  const handleNextPage = useCallback(() => {
+    if (isPaginating || !pageInfo?.hasNextPage || !pageInfo?.endCursor) return;
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.set("cursor", pageInfo.endCursor);
+    nextParams.set("direction", "next");
+    nextParams.set("after", pageInfo.endCursor);
+    nextParams.delete("before");
+    setSearchParams(nextParams);
+  }, [isPaginating, pageInfo, searchParams, setSearchParams]);
+
+  const handlePreviousPage = useCallback(() => {
+    if (isPaginating || !pageInfo?.hasPreviousPage || !pageInfo?.startCursor) return;
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.set("cursor", pageInfo.startCursor);
+    nextParams.set("direction", "prev");
+    nextParams.set("before", pageInfo.startCursor);
+    nextParams.delete("after");
+    setSearchParams(nextParams);
+  }, [isPaginating, pageInfo, searchParams, setSearchParams]);
+
   const [manuallyUnlockedOrders, setManuallyUnlockedOrders] = useState<
     Record<string, boolean>
   >({});
@@ -3948,6 +4077,10 @@ export default function OrdersFulfillmentPage() {
   >({});
 
   const [selectedResources, setSelectedResources] = useState<string[]>([]);
+
+  useEffect(() => {
+    setSelectedResources([]);
+  }, [searchParams]);
   const [selectedCouriersByOrder, setSelectedCouriersByOrder] = useState<
     Record<string, string>
   >({});
@@ -4259,23 +4392,22 @@ export default function OrdersFulfillmentPage() {
     setDateRangeLabel(label);
     setIsDatePopoverActive(false);
 
-    if (
-      searchParams.get("tab") === "old_orders" ||
-      searchParams.has("startDate")
-    ) {
-      const nextParams = new URLSearchParams(searchParams);
-      if (finalRange?.start) {
-        nextParams.set("startDate", formatDateToYMD(finalRange.start));
-      } else {
-        nextParams.delete("startDate");
-      }
-      if (finalRange?.end) {
-        nextParams.set("endDate", formatDateToYMD(finalRange.end));
-      } else {
-        nextParams.delete("endDate");
-      }
-      setSearchParams(nextParams, { replace: true });
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete("cursor");
+    nextParams.delete("direction");
+    nextParams.delete("after");
+    nextParams.delete("before");
+    if (finalRange?.start) {
+      nextParams.set("startDate", formatDateToYMD(finalRange.start));
+    } else {
+      nextParams.delete("startDate");
     }
+    if (finalRange?.end) {
+      nextParams.set("endDate", formatDateToYMD(finalRange.end));
+    } else {
+      nextParams.delete("endDate");
+    }
+    setSearchParams(nextParams, { replace: true });
   }, [tempRange, selectedPresetId, searchParams, setSearchParams]);
 
   const handleClearAllDates = useCallback(() => {
@@ -4285,7 +4417,24 @@ export default function OrdersFulfillmentPage() {
     setStartDateInput("");
     setEndDateInput("");
     setDateRangeLabel("📅 All time");
-  }, []);
+
+    if (
+      searchParams.has("startDate") ||
+      searchParams.has("endDate") ||
+      searchParams.has("cursor") ||
+      searchParams.has("after") ||
+      searchParams.has("before")
+    ) {
+      const nextParams = new URLSearchParams(searchParams);
+      nextParams.delete("startDate");
+      nextParams.delete("endDate");
+      nextParams.delete("cursor");
+      nextParams.delete("direction");
+      nextParams.delete("after");
+      nextParams.delete("before");
+      setSearchParams(nextParams, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
 
   const checkIsLocked = useCallback(
     (order: NormalizedOrder) => {
@@ -4323,9 +4472,36 @@ export default function OrdersFulfillmentPage() {
         Boolean(order.isClosed) ||
         order.fulfillmentStatus?.toUpperCase() === "CLOSED";
 
+      const hasCustomDate = Boolean(
+        (dateRange?.start || dateRange?.end) ||
+        searchParams.get("startDate") ||
+        searchParams.get("endDate") ||
+        activeFilters?.startDate ||
+        activeFilters?.endDate
+      );
+
+      const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+
       switch (tabId) {
-        case "all":
-          return true;
+        case "all": {
+          if (hasCustomDate) {
+            return true;
+          }
+          const orderTime = new Date(order.createdAt).getTime();
+          if (orderTime >= sevenDaysAgo) {
+            return true;
+          }
+          // The Unprocessed Safeguard:
+          // Raw unhandled order older than 7 days stays visible in All and New
+          const isRawUnprocessed =
+            !dispatched &&
+            !isCancelledOrder &&
+            !isClosedOrder &&
+            !["accepted", "processing", "in_review", "pending", "hold"].includes(courierStatus) &&
+            (order.fulfillmentStatus?.toUpperCase() === "UNFULFILLED" || !order.fulfillmentStatus);
+
+          return isRawUnprocessed;
+        }
         case "new":
           return (
             !dispatched &&
@@ -4365,8 +4541,12 @@ export default function OrdersFulfillmentPage() {
               order.fulfillmentStatus?.toUpperCase() === "FULFILLED" ||
               Boolean(order.reconciliation?.autoSyncedPaidFulfilled))
           );
-        case "cancelled":
-          return isCancelledOrder;
+        case "cancelled": {
+          if (!isCancelledOrder) return false;
+          if (hasCustomDate) return true;
+          const orderTime = new Date(order.cancelledAt || order.createdAt).getTime();
+          return orderTime >= sevenDaysAgo;
+        }
         case "returned":
           if (isCancelledOrder) return false;
           return courierStatus === "returned";
@@ -4384,18 +4564,30 @@ export default function OrdersFulfillmentPage() {
               Boolean(order.reconciliation?.courierCashCollected) &&
               order.reconciliation?.courierCashCollected !== "0.00")
           );
-        case "old_orders":
+        case "old_orders": {
+          const orderTime = new Date(order.createdAt).getTime();
+          const isOlderThan7Days = orderTime < sevenDaysAgo;
+          const isProcessedTerminal =
+            Boolean(dispatched) ||
+            isCancelledOrder ||
+            isClosedOrder ||
+            order.fulfillmentStatus?.toUpperCase() === "FULFILLED" ||
+            Boolean(order.reconciliation?.autoSyncedPaidFulfilled) ||
+            ["delivered", "returned", "cancelled", "paid_returned"].includes(courierStatus);
+
           return (
             Boolean(order.isClosed) ||
             isClosedOrder ||
             order.fulfillmentStatus?.toUpperCase() === "FULFILLED" ||
-            Boolean(order.reconciliation?.autoSyncedPaidFulfilled)
+            Boolean(order.reconciliation?.autoSyncedPaidFulfilled) ||
+            (isOlderThan7Days && isProcessedTerminal)
           );
+        }
         default:
           return true;
       }
     },
-    [dispatchedOrders, checkIsLocked]
+    [dispatchedOrders, checkIsLocked, dateRange, searchParams, activeFilters]
   );
 
   // Exact 11 Functional Tabs
@@ -4444,21 +4636,18 @@ export default function OrdersFulfillmentPage() {
       const targetTab = tabDefinitions[index]?.id || "new";
       setSelectedTabId(targetTab);
 
-      // Sync URL parameters when switching between active and historical orders
-      const currentParamTab = searchParams.get("tab") || "new";
-      if (
-        targetTab === "old_orders" ||
-        currentParamTab === "old_orders" ||
-        searchParams.has("tab")
-      ) {
-        const nextParams = new URLSearchParams(searchParams);
-        if (targetTab === "new") {
-          nextParams.delete("tab");
-        } else {
-          nextParams.set("tab", targetTab);
-        }
-        setSearchParams(nextParams, { replace: true });
+      // Sync URL parameters and reset pagination cursors
+      const nextParams = new URLSearchParams(searchParams);
+      nextParams.delete("cursor");
+      nextParams.delete("direction");
+      nextParams.delete("after");
+      nextParams.delete("before");
+      if (targetTab === "new") {
+        nextParams.delete("tab");
+      } else {
+        nextParams.set("tab", targetTab);
       }
+      setSearchParams(nextParams, { replace: true });
     },
     [tabDefinitions, searchParams, setSearchParams]
   );
@@ -9064,15 +9253,23 @@ export default function OrdersFulfillmentPage() {
                       clearButton
                       onClearButtonClick={() => {
                         setSearchQuery("");
-                        if (searchParams.has("q")) {
+                        if (searchParams.has("q") || searchParams.has("cursor")) {
                           const nextParams = new URLSearchParams(searchParams);
                           nextParams.delete("q");
+                          nextParams.delete("cursor");
+                          nextParams.delete("direction");
+                          nextParams.delete("after");
+                          nextParams.delete("before");
                           setSearchParams(nextParams, { replace: true });
                         }
                       }}
                       onKeyDown={(e) => {
                         if (e.key === "Enter") {
                           const nextParams = new URLSearchParams(searchParams);
+                          nextParams.delete("cursor");
+                          nextParams.delete("direction");
+                          nextParams.delete("after");
+                          nextParams.delete("before");
                           if (searchQuery.trim()) {
                             nextParams.set("q", searchQuery.trim());
                           } else {
@@ -9336,23 +9533,35 @@ export default function OrdersFulfillmentPage() {
                   </BlockStack>
                 </Box>
               ) : (
-                <IndexTable
-                  resourceName={{ singular: "order", plural: "orders" }}
-                  itemCount={displayedOrders.length}
-                  selectedItemsCount={
-                    selectedResources.length === displayedOrders.length
-                      ? "All"
-                      : selectedResources.length
-                  }
-                  onSelectionChange={handleSelectionChange}
-                  selectable={true}
-                  loading={isBulkSubmitting}
-                  headings={tableHeadings as any}
-                  promotedBulkActions={promotedBulkActions}
-                  bulkActions={bulkActions}
-                >
-                  {rowMarkup}
-                </IndexTable>
+                <>
+                  <IndexTable
+                    resourceName={{ singular: "order", plural: "orders" }}
+                    itemCount={displayedOrders.length}
+                    selectedItemsCount={
+                      selectedResources.length === displayedOrders.length
+                        ? "All"
+                        : selectedResources.length
+                    }
+                    onSelectionChange={handleSelectionChange}
+                    selectable={true}
+                    loading={isBulkSubmitting || navigation.state === "loading"}
+                    headings={tableHeadings as any}
+                    promotedBulkActions={promotedBulkActions}
+                    bulkActions={bulkActions}
+                  >
+                    {rowMarkup}
+                  </IndexTable>
+                  <Box padding="300" borderBlockStartWidth="025" borderColor="border-subdued">
+                    <InlineStack align="center" blockAlign="center">
+                      <Pagination
+                        hasNext={Boolean(pageInfo?.hasNextPage) && navigation.state !== "loading"}
+                        hasPrevious={Boolean(pageInfo?.hasPreviousPage) && navigation.state !== "loading"}
+                        onNext={handleNextPage}
+                        onPrevious={handlePreviousPage}
+                      />
+                    </InlineStack>
+                  </Box>
+                </>
               )}
             </Card>
           </Layout.Section>
