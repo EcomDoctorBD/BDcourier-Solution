@@ -2688,26 +2688,7 @@ async function assertResilientAdminSession(
 }
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { admin, session } = await authenticate.admin(request);
-  const shopDomain = session.shop;
-
-  // Stale scope check: ensure the session has the core scopes
-  const REQUIRED_SCOPES = [
-    "read_orders",
-    "write_orders",
-    "read_fulfillments",
-    "write_fulfillments",
-    "read_shipping",
-    "write_shipping",
-    "read_products",
-  ];
-  const grantedScopes = (session.scope || "").split(",").map((s) => s.trim());
-  const isMissingCoreScopes = REQUIRED_SCOPES.some(
-    (req) =>
-      !grantedScopes.includes(req) &&
-      !(req.startsWith("read_") && grantedScopes.includes(req.replace("read_", "write_")))
-  );
-
+  // Initialize URL and filter parameters securely at the very top of the loader block
   const url = new URL(request.url);
   const rawTabParam = (url.searchParams.get("tab") || "").toLowerCase().trim();
   const tabParam = rawTabParam || "new";
@@ -2729,12 +2710,38 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     ""
   ).trim();
 
-  if (isMissingCoreScopes && !url.searchParams.has("reauth_attempted")) {
+  // Enforce uniform dynamic pagination chunk sizes: 50 for "new" and "pending", 25 for all others
+  const pageSize =
+    tabParam === "new" || tabParam === "pending"
+      ? 50
+      : 25;
+
+  const { admin, session } = await authenticate.admin(request);
+  const shopDomain = session?.shop || "";
+
+  // Stale scope check: ensure the session has the core scopes
+  const REQUIRED_SCOPES = [
+    "read_orders",
+    "write_orders",
+    "read_fulfillments",
+    "write_fulfillments",
+    "read_shipping",
+    "write_shipping",
+    "read_products",
+  ];
+  const grantedScopes = (session?.scope || "").split(",").map((s) => s.trim());
+  const isMissingCoreScopes = REQUIRED_SCOPES.some(
+    (req) =>
+      !grantedScopes.includes(req) &&
+      !(req.startsWith("read_") && grantedScopes.includes(req.replace("read_", "write_")))
+  );
+
+  if (isMissingCoreScopes && shopDomain && !url.searchParams.has("reauth_attempted")) {
     console.warn(
-      `Session for ${shopDomain} is missing required scopes. Stored: [${session.scope}]. Triggering re-auth...`
+      `Session for ${shopDomain} is missing required scopes. Stored: [${session?.scope}]. Triggering re-auth...`
     );
     try {
-      if ((sessionStorage as any)?.deleteSession && session.id) {
+      if ((sessionStorage as any)?.deleteSession && session?.id) {
         await (sessionStorage as any).deleteSession(session.id);
       }
     } catch (e) {
@@ -2890,14 +2897,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     }
   }
 
-  // Dynamic layout chunking: 50 for "new", "pending", and "old_orders", 25 for "all" and other active tabs
-  const effectiveTab = tabParam || "new";
-  const pageSize =
-    effectiveTab === "new" ||
-    effectiveTab === "pending" ||
-    effectiveTab === "old_orders"
-      ? 50
-      : 25;
+  // Dynamic layout chunking: effectiveTab aligned with tabParam, pageSize scoped at loader top
+  const effectiveTab = tabParam;
 
   // Seven-day threshold computation (UTC ISO format for Shopify Admin index queries)
   const sevenDaysAgoDate = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
@@ -3189,8 +3190,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     }
 
     rawOrders = edges.map(({ node }: any) => {
-      const addr = node.shippingAddress;
-      const cust = node.customer;
+      const addr = node?.shippingAddress;
+      const cust = node?.customer;
       const customerName =
         addr?.name ||
         [cust?.firstName, cust?.lastName].filter(Boolean).join(" ") ||
@@ -3201,69 +3202,69 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       const city = addr?.city || "";
       const province = addr?.province || city;
       const shippingAddress = addr
-        ? [addr.address1, addr.address2, addr.city, addr.province, addr.zip]
+        ? [addr?.address1, addr?.address2, addr?.city, addr?.province, addr?.zip]
             .filter(Boolean)
             .join(", ")
         : "";
 
-      const displayFinancialStatus = String(node.displayFinancialStatus || "UNPAID");
+      const displayFinancialStatus = String(node?.displayFinancialStatus || "UNPAID");
       const totalOutstanding =
-        node.totalOutstandingSet?.shopMoney?.amount ||
+        node?.totalOutstandingSet?.shopMoney?.amount ||
         (displayFinancialStatus.toUpperCase() === "PAID"
           ? "0.00"
-          : node.totalPriceSet?.shopMoney?.amount || "0.00");
+          : node?.totalPriceSet?.shopMoney?.amount || "0.00");
       const codAmount = calculateCodAmount({
         displayFinancialStatus,
-        totalOutstandingSet: node.totalOutstandingSet,
+        totalOutstandingSet: node?.totalOutstandingSet,
         totalOutstanding,
-        totalPrice: node.totalPriceSet?.shopMoney?.amount,
+        totalPrice: node?.totalPriceSet?.shopMoney?.amount,
       });
 
-      const itemEdges = node.lineItems?.edges || [];
+      const itemEdges = node?.lineItems?.edges || [];
       const lineItems: OrderLineItem[] = itemEdges.map(({ node: item }: any) => {
         const imageUrl =
-          item.variant?.image?.url ||
-          item.product?.featuredImage?.url ||
+          item?.variant?.image?.url ||
+          item?.product?.featuredImage?.url ||
           "";
         return {
-          title: item.title || "",
-          variantTitle: item.variantTitle || "",
-          sku: item.sku || "",
-          quantity: Number(item.quantity || 1),
+          title: item?.title || "",
+          variantTitle: item?.variantTitle || "",
+          sku: item?.sku || "",
+          quantity: Number(item?.quantity || 1),
           unitPrice:
-            item.originalUnitPriceSet?.shopMoney?.amount ||
-            node.totalPriceSet?.shopMoney?.amount ||
+            item?.originalUnitPriceSet?.shopMoney?.amount ||
+            node?.totalPriceSet?.shopMoney?.amount ||
             "0.00",
           imageUrl,
-          weight: item.variant?.weight !== undefined ? Number(item.variant?.weight) : 0,
-          weightUnit: item.variant?.weightUnit ? String(item.variant?.weightUnit) : "kg",
+          weight: item?.variant?.weight !== undefined ? Number(item?.variant?.weight) : 0,
+          weightUnit: item?.variant?.weightUnit ? String(item?.variant?.weightUnit) : "kg",
         };
       });
 
       return {
-        id: node.id,
-        name: node.name,
-        createdAt: node.createdAt,
-        cancelledAt: node.cancelledAt || null,
-        cancelReason: node.cancelReason || null,
-        closedAt: node.closedAt || null,
-        isCancelled: Boolean(node.cancelledAt),
-        isClosed: Boolean(node.closedAt),
+        id: node?.id || "",
+        name: node?.name || "",
+        createdAt: node?.createdAt || new Date().toISOString(),
+        cancelledAt: node?.cancelledAt || null,
+        cancelReason: node?.cancelReason || null,
+        closedAt: node?.closedAt || null,
+        isCancelled: Boolean(node?.cancelledAt),
+        isClosed: Boolean(node?.closedAt),
         customerName,
         customerPhone,
         shippingAddress,
         city,
         province,
-        totalPrice: node.totalPriceSet?.shopMoney?.amount || "0.00",
-        currencyCode: node.totalPriceSet?.shopMoney?.currencyCode || "BDT",
-        fulfillmentStatus: node.displayFulfillmentStatus || "UNFULFILLED",
+        totalPrice: node?.totalPriceSet?.shopMoney?.amount || "0.00",
+        currencyCode: node?.totalPriceSet?.shopMoney?.currencyCode || "BDT",
+        fulfillmentStatus: node?.displayFulfillmentStatus || "UNFULFILLED",
         displayFinancialStatus,
         financialStatus: displayFinancialStatus,
         totalOutstanding,
         codAmount,
-        warehouseNote: node.note || "",
+        warehouseNote: node?.note || "",
         lineItems,
-        totalWeight: node.totalWeight !== undefined ? Number(node.totalWeight) : undefined,
+        totalWeight: node?.totalWeight !== undefined ? Number(node?.totalWeight) : undefined,
       };
     });
   } catch (err: any) {
@@ -3298,64 +3299,64 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       }
 
       rawOrders = edges.map(({ node }: any) => {
-        const displayFinancialStatus = String(node.displayFinancialStatus || "UNPAID");
+        const displayFinancialStatus = String(node?.displayFinancialStatus || "UNPAID");
         const totalOutstanding =
-          node.totalOutstandingSet?.shopMoney?.amount ||
+          node?.totalOutstandingSet?.shopMoney?.amount ||
           (displayFinancialStatus.toUpperCase() === "PAID"
             ? "0.00"
-            : node.totalPriceSet?.shopMoney?.amount || "0.00");
+            : node?.totalPriceSet?.shopMoney?.amount || "0.00");
         const codAmount = calculateCodAmount({
           displayFinancialStatus,
-          totalOutstandingSet: node.totalOutstandingSet,
+          totalOutstandingSet: node?.totalOutstandingSet,
           totalOutstanding,
-          totalPrice: node.totalPriceSet?.shopMoney?.amount,
+          totalPrice: node?.totalPriceSet?.shopMoney?.amount,
         });
 
-        const itemEdges = node.lineItems?.edges || [];
+        const itemEdges = node?.lineItems?.edges || [];
         const lineItems: OrderLineItem[] = itemEdges.map(({ node: item }: any) => {
           const imageUrl =
-            item.variant?.image?.url ||
-            item.product?.featuredImage?.url ||
+            item?.variant?.image?.url ||
+            item?.product?.featuredImage?.url ||
             "";
           return {
-            title: item.title || "",
-            variantTitle: item.variantTitle || "",
-            sku: item.sku || "",
-            quantity: Number(item.quantity || 1),
+            title: item?.title || "",
+            variantTitle: item?.variantTitle || "",
+            sku: item?.sku || "",
+            quantity: Number(item?.quantity || 1),
             unitPrice:
-              item.originalUnitPriceSet?.shopMoney?.amount ||
-              node.totalPriceSet?.shopMoney?.amount ||
+              item?.originalUnitPriceSet?.shopMoney?.amount ||
+              node?.totalPriceSet?.shopMoney?.amount ||
               "0.00",
             imageUrl,
-            weight: item.variant?.weight !== undefined ? Number(item.variant?.weight) : 0,
-            weightUnit: item.variant?.weightUnit ? String(item.variant?.weightUnit) : "kg",
+            weight: item?.variant?.weight !== undefined ? Number(item?.variant?.weight) : 0,
+            weightUnit: item?.variant?.weightUnit ? String(item?.variant?.weightUnit) : "kg",
           };
         });
 
         return {
-          id: node.id,
-          name: node.name,
-          createdAt: node.createdAt,
-          cancelledAt: node.cancelledAt || null,
-          cancelReason: node.cancelReason || null,
-          closedAt: node.closedAt || null,
-          isCancelled: Boolean(node.cancelledAt),
-          isClosed: Boolean(node.closedAt),
+          id: node?.id || "",
+          name: node?.name || "",
+          createdAt: node?.createdAt || new Date().toISOString(),
+          cancelledAt: node?.cancelledAt || null,
+          cancelReason: node?.cancelReason || null,
+          closedAt: node?.closedAt || null,
+          isCancelled: Boolean(node?.cancelledAt),
+          isClosed: Boolean(node?.closedAt),
           customerName: "",
           customerPhone: "",
           shippingAddress: "",
           city: "",
           province: "",
-          totalPrice: node.totalPriceSet?.shopMoney?.amount || "0.00",
-          currencyCode: node.totalPriceSet?.shopMoney?.currencyCode || "BDT",
-          fulfillmentStatus: node.displayFulfillmentStatus || "UNFULFILLED",
+          totalPrice: node?.totalPriceSet?.shopMoney?.amount || "0.00",
+          currencyCode: node?.totalPriceSet?.shopMoney?.currencyCode || "BDT",
+          fulfillmentStatus: node?.displayFulfillmentStatus || "UNFULFILLED",
           displayFinancialStatus,
           financialStatus: displayFinancialStatus,
           totalOutstanding,
           codAmount,
-          warehouseNote: node.note || "",
+          warehouseNote: node?.note || "",
           lineItems,
-          totalWeight: node.totalWeight !== undefined ? Number(node.totalWeight) : undefined,
+          totalWeight: node?.totalWeight !== undefined ? Number(node?.totalWeight) : undefined,
         };
       });
 
@@ -4058,6 +4059,26 @@ export default function OrdersFulfillmentPage() {
 
   const isPaginating = navigation.state === "loading";
 
+  // Core state declarations securely hoisted and initialized before handler bindings
+  const [selectedResources, setSelectedResources] = useState<string[]>([]);
+  const [dispatchedOrders, setDispatchedOrders] = useState<
+    Record<string, DispatchedSlipRecord>
+  >(initialDispatchedOrders || {});
+  const [manuallyUnlockedOrders, setManuallyUnlockedOrders] = useState<
+    Record<string, boolean>
+  >({});
+  const [manualStatusOverrides, setManualStatusOverrides] = useState<
+    Record<string, "pending" | "cancelled">
+  >({});
+  const [lockedRiskOrders, setLockedRiskOrders] = useState<
+    Record<string, boolean>
+  >({});
+  const [isUpdateStatusPopoverOpen, setIsUpdateStatusPopoverOpen] = useState(false);
+
+  useEffect(() => {
+    setSelectedResources([]);
+  }, [searchParams]);
+
   const handleNextPage = useCallback(() => {
     if (isPaginating || !pageInfo?.hasNextPage || !pageInfo?.endCursor) return;
     const nextParams = new URLSearchParams(searchParams);
@@ -4077,14 +4098,6 @@ export default function OrdersFulfillmentPage() {
     nextParams.delete("after");
     setSearchParams(nextParams);
   }, [isPaginating, pageInfo, searchParams, setSearchParams]);
-
-  const [manuallyUnlockedOrders, setManuallyUnlockedOrders] = useState<
-    Record<string, boolean>
-  >({});
-  const [manualStatusOverrides, setManualStatusOverrides] = useState<
-    Record<string, "pending" | "cancelled">
-  >({});
-  const [isUpdateStatusPopoverOpen, setIsUpdateStatusPopoverOpen] = useState(false);
 
   const handleBulkUpdateStatus = useCallback(
     (targetStatus: "pending" | "cancelled") => {
@@ -4115,15 +4128,6 @@ export default function OrdersFulfillmentPage() {
     },
     [selectedResources]
   );
-  const [lockedRiskOrders, setLockedRiskOrders] = useState<
-    Record<string, boolean>
-  >({});
-
-  const [selectedResources, setSelectedResources] = useState<string[]>([]);
-
-  useEffect(() => {
-    setSelectedResources([]);
-  }, [searchParams]);
   const [selectedCouriersByOrder, setSelectedCouriersByOrder] = useState<
     Record<string, string>
   >({});
@@ -4138,10 +4142,6 @@ export default function OrdersFulfillmentPage() {
   const [showLocationOverride, setShowLocationOverride] = useState<
     Record<string, boolean>
   >({});
-
-  const [dispatchedOrders, setDispatchedOrders] = useState<
-    Record<string, DispatchedSlipRecord>
-  >(initialDispatchedOrders || {});
   const [batchPrintSlips, setBatchPrintSlips] = useState<DispatchedSlipRecord[]>([]);
   const [showPackingSlipView, setShowPackingSlipView] = useState(false);
   const [customCodAmountsByOrder, setCustomCodAmountsByOrder] = useState<Record<string, string>>({});
