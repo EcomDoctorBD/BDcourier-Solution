@@ -5043,8 +5043,10 @@ export default function OrdersFulfillmentPage() {
     submit(formData, { method: "post" });
   };
 
-  const handleBulkSendToCourier = () => {
+  const handleBulkSendToCourier = (overrideCourierKey?: string) => {
     setClientBatchError(null);
+    setShowLabelConfigError(false);
+    setShowInvoiceConfigError(false);
     if (selectedResources.length === 0) return;
 
     // Advanced Audit Point 3: Synchronous double-click guard for bulk dispatch
@@ -5056,6 +5058,17 @@ export default function OrdersFulfillmentPage() {
       return;
     }
     isSubmittingRef.current = true;
+
+    // Synchronously update the selected couriers state in table rows
+    if (overrideCourierKey) {
+      setSelectedCouriersByOrder((prev) => {
+        const updated = { ...prev };
+        for (const id of selectedResources) {
+          updated[id] = overrideCourierKey;
+        }
+        return updated;
+      });
+    }
 
     if (
       !usageSummary.isUnlimitedBulk &&
@@ -5072,7 +5085,9 @@ export default function OrdersFulfillmentPage() {
       .filter((order) => selectedResources.includes(order.id))
       .map((order) => {
         const rawCourier =
-          selectedCouriersByOrder[order.id] || order.assignedCourier;
+          overrideCourierKey ||
+          selectedCouriersByOrder[order.id] ||
+          order.assignedCourier;
         const isChosenActive = courierSelectOptions.some(
           (opt) => opt.value === rawCourier && !opt.disabled
         );
@@ -5346,8 +5361,53 @@ export default function OrdersFulfillmentPage() {
     { title: "Action" },
   ];
 
-  // Official Polaris Native Bulk Actions Pipeline
+  // Configured active couriers for 1-Click Bulk Dispatch
+  const COURIER_META = [
+    { key: "pathao", name: "Pathao", active: Boolean(activeCouriers.pathao) },
+    { key: "steadfast", name: "Steadfast", active: Boolean(activeCouriers.steadfast) },
+    { key: "redx", name: "RedX", active: Boolean(activeCouriers.redx) },
+    { key: "carrybee", name: "CarryBee", active: Boolean(activeCouriers.carrybee) },
+    { key: "bahok", name: "Bahok", active: Boolean(activeCouriers.bahok) },
+  ];
+
+  const activeCourierList = COURIER_META.filter((c) => c.active);
+  const preferredCourierKey = String(routingConfig?.defaultCourier || "").toLowerCase();
+  const configuredCouriers = [...activeCourierList].sort((a, b) => {
+    if (a.key === preferredCourierKey) return -1;
+    if (b.key === preferredCourierKey) return 1;
+    return 0;
+  });
+
+  // Official Polaris Native Bulk Actions Pipeline (1-Click Courier Dispatch & Left-Aligned)
   const promotedBulkActions: any[] = [
+    ...(configuredCouriers.length === 1
+      ? [
+          {
+            content: `Assign ${configuredCouriers[0].name}`,
+            onAction: () => handleBulkSendToCourier(configuredCouriers[0].key),
+            disabled: isSubmitting || isBulkSubmitting,
+            loading: isBulkSubmitting,
+          },
+        ]
+      : []),
+    ...(configuredCouriers.length >= 2
+      ? [
+          {
+            content: `Assign ${configuredCouriers[0].name}`,
+            onAction: () => handleBulkSendToCourier(configuredCouriers[0].key),
+            disabled: isSubmitting || isBulkSubmitting,
+            loading: isBulkSubmitting,
+          },
+          {
+            title: "Assign Courier",
+            actions: configuredCouriers.slice(1).map((c) => ({
+              content: `Assign ${c.name}`,
+              onAction: () => handleBulkSendToCourier(c.key),
+            })),
+            disabled: isSubmitting || isBulkSubmitting,
+          },
+        ]
+      : []),
     {
       title: "Update Status",
       actions: [
@@ -5362,56 +5422,6 @@ export default function OrdersFulfillmentPage() {
         },
       ],
     },
-    ...(activeCouriers.pathao
-      ? [
-          {
-            content: "Assign Pathao",
-            onAction: () => handleBulkAssignCourier("pathao"),
-            disabled: isSubmitting || isBulkSubmitting,
-            loading: isBulkSubmitting,
-          },
-        ]
-      : []),
-    ...(activeCouriers.steadfast
-      ? [
-          {
-            content: "Assign Steadfast",
-            onAction: () => handleBulkAssignCourier("steadfast"),
-            disabled: isSubmitting || isBulkSubmitting,
-            loading: isBulkSubmitting,
-          },
-        ]
-      : []),
-    ...(activeCouriers.redx
-      ? [
-          {
-            content: "Assign RedX",
-            onAction: () => handleBulkAssignCourier("redx"),
-            disabled: isSubmitting || isBulkSubmitting,
-            loading: isBulkSubmitting,
-          },
-        ]
-      : []),
-    ...(activeCouriers.carrybee
-      ? [
-          {
-            content: "Assign CarryBee",
-            onAction: () => handleBulkAssignCourier("carrybee"),
-            disabled: isSubmitting || isBulkSubmitting,
-            loading: isBulkSubmitting,
-          },
-        ]
-      : []),
-    ...(activeCouriers.bahok
-      ? [
-          {
-            content: "Assign Bahok",
-            onAction: () => handleBulkAssignCourier("bahok"),
-            disabled: isSubmitting || isBulkSubmitting,
-            loading: isBulkSubmitting,
-          },
-        ]
-      : []),
     {
       content: "Print Labels",
       onAction: handlePrintLabels,
@@ -5425,8 +5435,6 @@ export default function OrdersFulfillmentPage() {
       loading: isBulkSubmitting,
     },
   ];
-
-  const bulkActions = promotedBulkActions;
 
   const rowMarkup = displayedOrders.map((order, index) => {
     const isRowPrepaid =
@@ -6579,6 +6587,38 @@ export default function OrdersFulfillmentPage() {
         }
         .Polaris-Page__Content > .Polaris-Layout > .Polaris-Layout__Section:first-child {
           margin-top: 0 !important;
+        }
+        /* Polaris Bulk Actions Bar: Left-Aligned Directly Beside Selection Counter (No Right-Align, No '...' Overflow) */
+        [class*="Polaris-BulkActions__BulkActionsPromotedActionsWrapper"] {
+          flex: 0 1 auto !important;
+          margin-left: 0 !important;
+          justify-content: flex-start !important;
+        }
+        [class*="Polaris-BulkActions__BulkActionsLayout"] {
+          display: flex !important;
+          flex-wrap: nowrap !important;
+          align-items: center !important;
+          justify-content: flex-start !important;
+          gap: 8px !important;
+        }
+        [class*="Polaris-BulkActions__BulkActionsOuterLayout"] {
+          display: flex !important;
+          align-items: center !important;
+          justify-content: flex-start !important;
+          width: auto !important;
+        }
+        [class*="Polaris-BulkActions__BulkActionsSelectAllWrapper"] {
+          flex: 0 0 auto !important;
+          margin-right: 0 !important;
+        }
+        [class*="Polaris-IndexTable__BulkActionsWrapper"] [class*="Polaris-InlineStack"] {
+          column-gap: 12px !important;
+          align-items: center !important;
+          justify-content: flex-start !important;
+        }
+        /* Hide any trailing '...' overflow popover activator button if rendered */
+        [class*="Polaris-BulkActions__BulkActionsPromotedActionsWrapper"] > [class*="Polaris-InlineStack"] > div:not([class*="BulkActionsOuterLayout"]) {
+          display: none !important;
         }
       `}</style>
 
@@ -9789,7 +9829,6 @@ export default function OrdersFulfillmentPage() {
                     loading={isBulkSubmitting || navigation.state === "loading"}
                     headings={tableHeadings as any}
                     promotedBulkActions={promotedBulkActions}
-                    bulkActions={bulkActions}
                   >
                     {rowMarkup}
                   </IndexTable>
