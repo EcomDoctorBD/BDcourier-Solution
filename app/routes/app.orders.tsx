@@ -11,6 +11,7 @@ import {
   useSubmit,
   useNavigation,
   useSearchParams,
+  useFetcher,
 } from "@remix-run/react";
 import { TitleBar } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-remix/server";
@@ -72,6 +73,9 @@ import {
   resolvePathaoLocation,
   resolveRedxLocation,
 } from "../services/location-resolver.server";
+import {
+  resolveCustomerFraudProfile,
+} from "../services/fraud.server";
 
 /**
  * 1. HIERARCHICAL BANGLADESH LOCATION DATA (8 Divisions -> 64 Districts)
@@ -275,7 +279,8 @@ export interface FraudStatsProfile {
   totalReturned: number;
   totalOrders: number;
   successRate: number;
-  fromCache: boolean;
+  fromCache?: boolean;
+  isTransientError?: boolean;
 }
 
 export interface AutoRoutingConfig {
@@ -483,6 +488,7 @@ interface RawShopifyOrder {
 
 interface NormalizedOrder extends RawShopifyOrder {
   fraudStats: FraudStatsProfile | null;
+  fraudSyncPending?: boolean;
   status: string;
   isRiskyLocked: boolean;
   isInsideDhaka: boolean;
@@ -1408,7 +1414,8 @@ function applyRoutingAndSafetyLogic(
   reconciliation: CourierReconciliationInfo | null,
   isAiCleaned: boolean,
   trackingNumber?: string | null,
-  cachedDistrict?: string | null
+  cachedDistrict?: string | null,
+  fraudSyncPending?: boolean
 ): NormalizedOrder {
   const locationString =
     `${order.city} ${order.province} ${order.shippingAddress}`.toLowerCase();
@@ -1455,6 +1462,7 @@ function applyRoutingAndSafetyLogic(
         fulfillmentStatus,
         customerPhone: order.customerPhone,
         fraudStats,
+        fraudSyncPending: Boolean(fraudSyncPending),
         reconciliation,
         trackingNumber: trackingNumber || null,
         status: "Risky - Locked for Manual Review",
@@ -1507,6 +1515,7 @@ function applyRoutingAndSafetyLogic(
       fulfillmentStatus,
       customerPhone: order.customerPhone,
       fraudStats,
+      fraudSyncPending: Boolean(fraudSyncPending),
       reconciliation,
       trackingNumber: trackingNumber || null,
       status: reconciliation?.autoSyncedPaidFulfilled
@@ -1528,6 +1537,7 @@ function applyRoutingAndSafetyLogic(
     fulfillmentStatus,
     customerPhone: order.customerPhone,
     fraudStats,
+    fraudSyncPending: Boolean(fraudSyncPending),
     reconciliation,
     trackingNumber: trackingNumber || null,
     status: isBelowThreshold
@@ -1545,199 +1555,7 @@ function applyRoutingAndSafetyLogic(
   };
 }
 
-async function resolveCustomerFraudProfile(
-  rawPhone: string,
-  storeConfig: any,
-  cachedPathaoTokenRef: { token: string | null; attempted: boolean }
-): Promise<FraudStatsProfile | null> {
-  const cleanPhone = sanitizeBangladeshPhone(rawPhone);
-  if (!isValidBangladeshMobile(cleanPhone)) {
-    return null;
-  }
-  const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
-
-  // Purge any previously poisoned sandbox mock records for this phone
-  try {
-    await GlobalFraudNetwork.deleteMany({
-      phone: cleanPhone,
-      dataSource: "multi_courier_sandbox_sync",
-    });
-  } catch {}
-
-  const existingProfile: any = await GlobalFraudNetwork.findOne({
-    phone: cleanPhone,
-    dataSource: { $ne: "multi_courier_sandbox_sync" },
-  }).lean();
-
-  const isCacheFresh =
-    existingProfile &&
-    existingProfile.lastCheckedAt &&
-    Date.now() - new Date(existingProfile.lastCheckedAt).getTime() <
-      CACHE_TTL_MS;
-
-  if (existingProfile && isCacheFresh) {
-    return {
-      phone: cleanPhone,
-      totalDelivered: existingProfile.totalDelivered ?? 0,
-      totalReturned: existingProfile.totalReturned ?? 0,
-      totalOrders: existingProfile.totalOrders ?? 0,
-      successRate: existingProfile.successRate ?? 100,
-      fromCache: true,
-    };
-  }
-
-  const requestSteadfastHistory = async () => {
-    const apiKey = storeConfig?.steadfastApiKey?.trim();
-    const secretKey = storeConfig?.steadfastSecretKey?.trim();
-    if (!apiKey || !secretKey) return null;
-
-    const response = await fetch(
-      "https://portal.steadfast.com.bd/api/v1/check_delivery_history",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "application/json",
-          "Api-Key": apiKey,
-          "Secret-Key": secretKey,
-        },
-        body: JSON.stringify({ phone: cleanPhone }),
-        signal: AbortSignal.timeout(3500),
-      }
-    );
-
-    if (!response.ok) return null;
-    const data: any = await response.json();
-    const delivered = Number(
-      data?.total_delivered ??
-        data?.delivered ??
-        data?.data?.total_delivered ??
-        NaN
-    );
-    const returned = Number(
-      data?.total_cancelled ??
-        data?.returned ??
-        data?.total_returned ??
-        data?.data?.total_cancelled ??
-        NaN
-    );
-    if (Number.isNaN(delivered) && Number.isNaN(returned)) return null;
-    return {
-      delivered: Number.isNaN(delivered) ? 0 : delivered,
-      returned: Number.isNaN(returned) ? 0 : returned,
-    };
-  };
-
-  const requestPathaoHistory = async () => {
-    const clientId = storeConfig?.pathaoClientId?.trim();
-    const clientSecret = storeConfig?.pathaoSecret?.trim();
-    if (!clientId || !clientSecret) return null;
-
-    if (!cachedPathaoTokenRef.attempted) {
-      cachedPathaoTokenRef.attempted = true;
-      try {
-        const tokenRes = await getValidPathaoToken(storeConfig.shopDomain || "");
-        cachedPathaoTokenRef.token = tokenRes.token;
-      } catch {
-        cachedPathaoTokenRef.token = null;
-      }
-    }
-
-    if (!cachedPathaoTokenRef.token) return null;
-
-    const baseUrl = getPathaoBaseUrl(storeConfig?.pathaoEnvironment);
-    const historyUrl = new URL(`${baseUrl}/aladdin/api/v1/user-history`);
-    historyUrl.searchParams.set("phone", cleanPhone);
-
-    const response = await fetch(historyUrl.toString(), {
-      method: "GET",
-      headers: {
-        Accept: "application/json",
-        Authorization: `Bearer ${cachedPathaoTokenRef.token}`,
-      },
-      signal: AbortSignal.timeout(3500),
-    });
-
-    if (!response.ok) return null;
-    const data: any = await response.json();
-    const delivered = Number(
-      data?.total_delivered ??
-        data?.success_count ??
-        data?.data?.total_delivered ??
-        NaN
-    );
-    const returned = Number(
-      data?.total_returned ??
-        data?.return_count ??
-        data?.data?.total_returned ??
-        NaN
-    );
-    if (Number.isNaN(delivered) && Number.isNaN(returned)) return null;
-    return {
-      delivered: Number.isNaN(delivered) ? 0 : delivered,
-      returned: Number.isNaN(returned) ? 0 : returned,
-    };
-  };
-
-  const [steadfastOutcome, pathaoOutcome] = await Promise.allSettled([
-    requestSteadfastHistory(),
-    requestPathaoHistory(),
-  ]);
-
-  const liveSteadfast =
-    steadfastOutcome.status === "fulfilled" ? steadfastOutcome.value : null;
-  const livePathao =
-    pathaoOutcome.status === "fulfilled" ? pathaoOutcome.value : null;
-
-  // Real data only: if neither courier returned real delivery history, return null
-  if (!liveSteadfast && !livePathao) {
-    return null;
-  }
-
-  const steadfastDelivered = liveSteadfast?.delivered ?? 0;
-  const steadfastReturned = liveSteadfast?.returned ?? 0;
-  const pathaoDelivered = livePathao?.delivered ?? 0;
-  const pathaoReturned = livePathao?.returned ?? 0;
-
-  const totalDelivered = steadfastDelivered + pathaoDelivered;
-  const totalReturned = steadfastReturned + pathaoReturned;
-  const totalOrders = totalDelivered + totalReturned;
-
-  if (totalOrders === 0) {
-    return null;
-  }
-
-  const successRate = Math.round((totalDelivered / totalOrders) * 100);
-
-  const savedProfile: any = await GlobalFraudNetwork.findOneAndUpdate(
-    { phone: cleanPhone },
-    {
-      $set: {
-        phone: cleanPhone,
-        totalDelivered,
-        totalReturned,
-        totalOrders,
-        successRate,
-        steadfastDelivered,
-        steadfastReturned,
-        pathaoDelivered,
-        pathaoReturned,
-        dataSource: "live_courier_api",
-        lastCheckedAt: new Date(),
-      },
-    },
-    { upsert: true, new: true, setDefaultsOnInsert: true }
-  ).lean();
-
-  return {
-    phone: cleanPhone,
-    totalDelivered: savedProfile.totalDelivered,
-    totalReturned: savedProfile.totalReturned,
-    totalOrders: savedProfile.totalOrders,
-    successRate: savedProfile.successRate,
-    fromCache: false,
-  };
-}
+// resolveCustomerFraudProfile is imported above from ../services/fraud.server
 
 async function dispatchSingleOrderToCourier(params: {
   shopDomain: string;
@@ -3490,44 +3308,94 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     attempted: false,
   };
 
-  // Enrich orders with Task 1 Fraud + Task 2 Routing + Task 4 Status Sync & Discrepancy Check
+  // High-Speed Stage 1: 1-Query Batch DB lookup for Fraud Profiles across all unique phone numbers on page
+  const uniquePagePhones = Array.from(
+    new Set(
+      rawOrders
+        .map((o) => sanitizeBangladeshPhone(o.customerPhone))
+        .filter((p) => isValidBangladeshMobile(p))
+    )
+  );
+
+  const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+  const cachedFraudDocs = await GlobalFraudNetwork.find({
+    phone: { $in: uniquePagePhones },
+    dataSource: { $ne: "multi_courier_sandbox_sync" },
+  }).lean();
+
+  const fraudProfilesByPhone = new Map<string, FraudStatsProfile>();
+  const uncachedPagePhones: string[] = [];
+
+  for (const phone of uniquePagePhones) {
+    const doc = cachedFraudDocs.find((d: any) => d.phone === phone);
+    const isFresh =
+      doc &&
+      doc.lastCheckedAt &&
+      Date.now() - new Date(doc.lastCheckedAt).getTime() < CACHE_TTL_MS;
+
+    if (doc && isFresh) {
+      fraudProfilesByPhone.set(phone, {
+        phone,
+        totalDelivered: doc.totalDelivered ?? 0,
+        totalReturned: doc.totalReturned ?? 0,
+        totalOrders: doc.totalOrders ?? 0,
+        successRate: doc.successRate ?? 100,
+        fromCache: true,
+      });
+    } else {
+      uncachedPagePhones.push(phone);
+    }
+  }
+
+  // If up to 3 uncached phones exist, resolve inline with a strict 2-second cap
+  // If >3 uncached phones, defer them to non-blocking background fetcher!
+  if (uncachedPagePhones.length > 0 && uncachedPagePhones.length <= 3) {
+    await Promise.allSettled(
+      uncachedPagePhones.map(async (phone) => {
+        try {
+          const res = await resolveCustomerFraudProfile(
+            phone,
+            storeConfig,
+            cachedPathaoTokenRef
+          );
+          if (res && !res.isTransientError) {
+            fraudProfilesByPhone.set(phone, res);
+          }
+        } catch {}
+      })
+    );
+  }
+
+  // Enrich orders with Instant Fraud DB Cache + Non-Blocking Pending Sync Flag
   const orders: NormalizedOrder[] = await Promise.all(
     rawOrders.map(async (order) => {
       const bookingDoc = bookingsByOrderId[order.id] || null;
       const trackingNumber: string | null = bookingDoc?.trackingNumber || null;
 
-      let fraudStats: FraudStatsProfile | null = null;
+      const cleanPhone = sanitizeBangladeshPhone(order.customerPhone);
+      const isValidPhone = isValidBangladeshMobile(cleanPhone);
+      const cachedFraud = isValidPhone ? fraudProfilesByPhone.get(cleanPhone) || null : null;
+      const fraudSyncPending = isValidPhone && !cachedFraud;
+
+      let fraudStats: FraudStatsProfile | null = cachedFraud;
       let reconciliation: CourierReconciliationInfo | null = null;
 
       try {
-        const [resolvedFraud, resolvedRecon] = await Promise.all([
-          order.customerPhone
-            ? resolveCustomerFraudProfile(
-                order.customerPhone,
-                storeConfig,
-                cachedPathaoTokenRef
-              )
-            : Promise.resolve(null),
-          bookingDoc
-            ? evaluateOrderStatusAndCashDiscrepancy({
-                admin,
-                order,
-                bookingDoc,
-                storeConfig,
-                isProOrEnterprise,
-                cachedPathaoTokenRef,
-              })
-            : Promise.resolve(null),
-        ]);
-        fraudStats = resolvedFraud;
-        reconciliation = resolvedRecon;
+        if (bookingDoc) {
+          reconciliation = await evaluateOrderStatusAndCashDiscrepancy({
+            admin,
+            order,
+            bookingDoc,
+            storeConfig,
+            isProOrEnterprise,
+            cachedPathaoTokenRef,
+          });
+        }
       } catch (enrichErr: any) {
         console.warn(
-          `Data enrichment warning for order ${order.name || order.id}:`,
+          `Reconciliation warning for order ${order.name || order.id}:`,
           enrichErr?.message || enrichErr
         );
-        fraudStats = null;
-        reconciliation = null;
       }
 
       const rawAddressKey = (order.shippingAddress || "").trim().toLowerCase();
@@ -3543,7 +3411,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         reconciliation,
         isAiCleaned,
         trackingNumber,
-        cachedDistrict
+        cachedDistrict,
+        fraudSyncPending
       );
     })
   );
@@ -3656,6 +3525,55 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const currentMonthlyCount = Number(storeConfig?.monthlyOrderCount ?? 0);
   const tierLimit = getPlanLimit(activePlan);
   const bulkCap = getBulkBatchLimit(activePlan);
+
+  // Stage 2: Controlled Non-Blocking Background Batch Fraud Sync
+  if (actionType === "syncBatchFraudProfiles" || actionType === "syncFraudProfiles") {
+    const rawPhonesJson = String(formData.get("phones") || "[]");
+    let phonesList: string[] = [];
+    try {
+      phonesList = JSON.parse(rawPhonesJson);
+    } catch {
+      phonesList = [];
+    }
+
+    const validPhones = Array.from(
+      new Set(
+        phonesList
+          .map((p) => sanitizeBangladeshPhone(p))
+          .filter((p) => isValidBangladeshMobile(p))
+      )
+    ).slice(0, 50);
+
+    const resultMap: Record<string, FraudStatsProfile> = {};
+    const CONCURRENCY = 6;
+    const sharedTokenRef = { token: null as string | null, attempted: false };
+
+    for (let i = 0; i < validPhones.length; i += CONCURRENCY) {
+      const chunk = validPhones.slice(i, i + CONCURRENCY);
+      await Promise.allSettled(
+        chunk.map(async (phone) => {
+          try {
+            const profile = await resolveCustomerFraudProfile(
+              phone,
+              storeConfig,
+              sharedTokenRef
+            );
+            if (profile && !profile.isTransientError) {
+              resultMap[phone] = profile;
+            }
+          } catch (err: any) {
+            console.warn(`[syncBatchFraudProfiles] Error resolving ${phone}:`, err?.message);
+          }
+        })
+      );
+    }
+
+    return {
+      success: true,
+      actionType: "syncBatchFraudProfiles",
+      fraudProfiles: resultMap,
+    };
+  }
 
   if (actionType === "bulkBookCouriers") {
     const rawOrdersJson = String(formData.get("ordersPayload") || "[]");
@@ -4231,6 +4149,46 @@ export default function OrdersFulfillmentPage() {
     Record<string, boolean>
   >({});
   const [isUpdateStatusPopoverOpen, setIsUpdateStatusPopoverOpen] = useState(false);
+
+  // High-Speed Stage 2: Non-blocking Background Fraud Sync Fetcher
+  const fraudFetcher = useFetcher<any>();
+  const [liveFraudProfiles, setLiveFraudProfiles] = useState<Record<string, FraudStatsProfile>>({});
+  const fraudFetchTriggeredRef = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (
+      fraudFetcher.data?.actionType === "syncBatchFraudProfiles" &&
+      fraudFetcher.data?.fraudProfiles
+    ) {
+      setLiveFraudProfiles((prev) => ({
+        ...prev,
+        ...fraudFetcher.data.fraudProfiles,
+      }));
+    }
+  }, [fraudFetcher.data]);
+
+  useEffect(() => {
+    const pendingPhones = displayedOrders
+      .filter((o) => {
+        const cleanP = sanitizeBangladeshPhone(o.customerPhone);
+        return (
+          o.fraudSyncPending &&
+          isValidBangladeshMobile(cleanP) &&
+          !liveFraudProfiles[cleanP] &&
+          !fraudFetchTriggeredRef.current.has(cleanP)
+        );
+      })
+      .map((o) => sanitizeBangladeshPhone(o.customerPhone));
+
+    const uniquePending = Array.from(new Set(pendingPhones)).slice(0, 50);
+    if (uniquePending.length > 0 && fraudFetcher.state === "idle") {
+      uniquePending.forEach((p) => fraudFetchTriggeredRef.current.add(p));
+      const fd = new FormData();
+      fd.append("actionType", "syncBatchFraudProfiles");
+      fd.append("phones", JSON.stringify(uniquePending));
+      fraudFetcher.submit(fd, { method: "post" });
+    }
+  }, [displayedOrders, liveFraudProfiles, fraudFetcher.state]);
 
   useEffect(() => {
     setSelectedResources([]);
@@ -5553,16 +5511,19 @@ export default function OrdersFulfillmentPage() {
         : `✅ Sent: ${partnerName}${dispatchedInfo.trackingNumber ? ` [${dispatchedInfo.trackingNumber}]` : ""}`
       : "";
 
-    const rateBadgeTone = order.fraudStats
-      ? getSuccessRateBadgeTone(order.fraudStats.successRate)
-      : "success";
+    const orderPhoneKey = sanitizeBangladeshPhone(order.customerPhone);
+    const activeFraudStats = liveFraudProfiles[orderPhoneKey] || order.fraudStats;
+    const isFraudPending = Boolean(order.fraudSyncPending && !activeFraudStats);
+
+    const isBelowRiskThreshold = Boolean(
+      activeFraudStats &&
+      activeFraudStats.totalOrders > 0 &&
+      activeFraudStats.successRate < (routingConfig.minSuccessRate || 70)
+    );
+
     const isLockedBySafetyNet =
-      Boolean(
-        order.fraudStats &&
-        order.fraudStats.totalOrders > 0 &&
-        order.fraudStats.successRate < (routingConfig.minSuccessRate || 70)
-      ) &&
-      (order.isRiskyLocked || Boolean(lockedRiskOrders[order.id])) &&
+      isBelowRiskThreshold &&
+      (order.isRiskyLocked || Boolean(lockedRiskOrders[order.id]) || isBelowRiskThreshold) &&
       !manuallyUnlockedOrders[order.id];
     const currentNote = warehouseNotesByOrder[order.id] ?? order.warehouseNote;
 
@@ -5994,7 +5955,7 @@ export default function OrdersFulfillmentPage() {
           >
             <Box minWidth="130px" maxWidth="170px">
             <BlockStack gap="100" inlineAlign="start">
-              {order.fraudStats && order.fraudStats.totalOrders > 0 ? (
+              {activeFraudStats && activeFraudStats.totalOrders > 0 ? (
                 <BlockStack gap="050" inlineAlign="start">
                   {/* SVG Circular Progress Ring */}
                   <div
@@ -6029,9 +5990,9 @@ export default function OrdersFulfillmentPage() {
                         r="16"
                         fill="none"
                         stroke={
-                          order.fraudStats.successRate >= 80
+                          activeFraudStats.successRate >= 80
                             ? "#16A344"
-                            : order.fraudStats.successRate >= 60
+                            : activeFraudStats.successRate >= 60
                             ? "#D97706"
                             : "#DC2626"
                         }
@@ -6040,7 +6001,7 @@ export default function OrdersFulfillmentPage() {
                         strokeDasharray="100.53"
                         strokeDashoffset={
                           100.53 -
-                          (100.53 * order.fraudStats.successRate) / 100
+                          (100.53 * activeFraudStats.successRate) / 100
                         }
                         transform="rotate(-90 21 21)"
                       />
@@ -6055,9 +6016,9 @@ export default function OrdersFulfillmentPage() {
                         fontSize: "10px",
                         fontWeight: 700,
                         color:
-                          order.fraudStats.successRate >= 80
+                          activeFraudStats.successRate >= 80
                             ? "#16A344"
-                            : order.fraudStats.successRate >= 60
+                            : activeFraudStats.successRate >= 60
                             ? "#D97706"
                             : "#DC2626",
                         letterSpacing: "-0.5px",
@@ -6065,7 +6026,7 @@ export default function OrdersFulfillmentPage() {
                         pointerEvents: "none",
                       }}
                     >
-                      {`${order.fraudStats.successRate}%`}
+                      {`${activeFraudStats.successRate}%`}
                     </span>
                   </div>
 
@@ -6078,7 +6039,7 @@ export default function OrdersFulfillmentPage() {
                         fontWeight: 600,
                       }}
                     >
-                      ✓ {order.fraudStats.totalDelivered}
+                      ✓ {activeFraudStats.totalDelivered}
                     </span>
                     <span style={{ fontSize: "10px", color: "#9CA3AF" }}>/</span>
                     <span
@@ -6088,10 +6049,17 @@ export default function OrdersFulfillmentPage() {
                         fontWeight: 600,
                       }}
                     >
-                      ✕ {order.fraudStats.totalReturned}
+                      ✕ {activeFraudStats.totalReturned}
                     </span>
                   </InlineStack>
                 </BlockStack>
+              ) : isFraudPending ? (
+                <InlineStack gap="100" blockAlign="center">
+                  <Spinner size="small" />
+                  <Text as="span" variant="bodyXs" tone="subdued">
+                    Checking...
+                  </Text>
+                </InlineStack>
               ) : (
                 <Badge tone="subdued" size="small">
                   New Customer

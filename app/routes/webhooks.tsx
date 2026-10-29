@@ -1,6 +1,8 @@
 import type { ActionFunctionArgs } from "@remix-run/node";
 import { authenticate } from "../shopify.server";
-import { connectDB, ShipmentBooking } from "../db.server";
+import { connectDB, ShipmentBooking, CourierConfig } from "../db.server";
+import { sanitizeBangladeshPhone, isValidBangladeshMobile } from "../utils/phone";
+import { resolveCustomerFraudProfile } from "../services/fraud.server";
 
 export const action = async ({ request }: ActionFunctionArgs) => {
   const { shop, topic, payload } = await authenticate.webhook(request);
@@ -35,6 +37,32 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       : { shopDomain: shop, orderId: gid || numericId };
 
     switch (normalizedTopic) {
+      case "ORDERS_CREATE": {
+        console.log(`[Webhook: ORDERS_CREATE] Received new order ${orderName || numericId} on ${shop}`);
+        const rawCustomerPhone =
+          payload.shipping_address?.phone ||
+          payload.customer?.phone ||
+          payload.phone ||
+          "";
+        const cleanPhone = sanitizeBangladeshPhone(rawCustomerPhone);
+        if (isValidBangladeshMobile(cleanPhone)) {
+          // Non-blocking background pre-warming of GlobalFraudNetwork
+          (async () => {
+            try {
+              const storeConfig = await CourierConfig.findOne({ shopDomain: shop }).lean();
+              if (storeConfig) {
+                const tokenRef = { token: null as string | null, attempted: false };
+                await resolveCustomerFraudProfile(cleanPhone, storeConfig, tokenRef);
+                console.log(`[Webhook: ORDERS_CREATE] Pre-warmed fraud cache for ${cleanPhone}`);
+              }
+            } catch (err: any) {
+              console.warn(`[Webhook: ORDERS_CREATE] Pre-warm notice for ${cleanPhone}:`, err?.message);
+            }
+          })();
+        }
+        break;
+      }
+
       case "ORDERS_CANCELLED": {
         console.log(`[Webhook: ORDERS_CANCELLED] Processing cancellation for order ${orderName || numericId} on ${shop}`);
         await ShipmentBooking.updateMany(orderFilter, {
