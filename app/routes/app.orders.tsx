@@ -517,6 +517,42 @@ function getSuccessRateBadgeTone(
 }
 
 /**
+ * Ensures Pathao recipient address strictly complies with Pathao API constraints:
+ * - Minimum 10 characters (progressively appends non-duplicate city/district/country if too short)
+ * - Maximum 220 characters (safely truncated)
+ */
+export function ensurePathaoAddressLength(
+  rawAddress: string,
+  city?: string,
+  districtName?: string
+): string {
+  let addr = (rawAddress || "").replace(/\s+/g, " ").trim();
+
+  if (addr.length < 10) {
+    const candidates = [city, districtName, "Bangladesh"]
+      .map((c) => (c || "").trim())
+      .filter(Boolean);
+
+    for (const candidate of candidates) {
+      if (addr.length >= 10) break;
+      if (!addr.toLowerCase().includes(candidate.toLowerCase())) {
+        addr = addr ? `${addr}, ${candidate}` : candidate;
+      }
+    }
+
+    if (addr.length < 10) {
+      addr = addr ? `${addr}, Bangladesh` : "Dhaka, Bangladesh";
+    }
+  }
+
+  if (addr.length > 220) {
+    addr = addr.slice(0, 220).trim();
+  }
+
+  return addr;
+}
+
+/**
  * Master Audit Point 8: Domestic Bangladeshi Taka Currency Formatter
  * Formats numerical values cleanly into standard comma-separated currency values (e.g., 12500 -> "৳12,500.00" or "Tk. 12,500.00")
  * Safely handles zero-value tax columns, partial discounts, and prevents floating-point inaccuracies.
@@ -2089,6 +2125,11 @@ async function dispatchSingleOrderToCourier(params: {
       }
 
       const baseUrl = getPathaoBaseUrl(storeConfig?.pathaoEnvironment);
+      const pathaoAddress = ensurePathaoAddressLength(
+        cleanAddress,
+        addressResolution.thana || addressResolution.district || resolvedDistrict,
+        resolvedDistrict
+      );
       const pathaoPayload = {
         store_id: Number(storeId) || storeId,
         merchant_order_id: isRedispatch
@@ -2096,7 +2137,7 @@ async function dispatchSingleOrderToCourier(params: {
           : orderName.replace("#", "").trim(),
         recipient_name: customerName,
         recipient_phone: cleanPhone,
-        recipient_address: cleanAddress,
+        recipient_address: pathaoAddress,
         recipient_city: recipientCity,
         recipient_zone: recipientZone,
         delivery_type: 48,
@@ -2279,6 +2320,15 @@ async function dispatchSingleOrderToCourier(params: {
         deliveryArea = resolvedRedx.delivery_area || resolvedDistrict || "Dhaka";
       }
 
+      const parsedTotalPrice = Math.round(
+        Number(String(totalPrice || "0").replace(/[^0-9.]/g, "")) || 0
+      );
+      const declaredParcelValue = Math.max(
+        parsedTotalPrice,
+        Math.round(Number(amountToCollect) || 0),
+        100
+      );
+
       const payload: Record<string, any> = {
         customer_name: customerName,
         customer_phone: cleanPhone,
@@ -2291,7 +2341,7 @@ async function dispatchSingleOrderToCourier(params: {
         cash_collection_amount: String(amountToCollect),
         parcel_weight: Math.max(100, Math.round(parcelWeightKg * 1000)),
         instruction: courierInstructionPayload,
-        value: amountToCollect || 100,
+        value: declaredParcelValue,
       };
 
       if (pickupStoreId && !Number.isNaN(pickupStoreId)) {
