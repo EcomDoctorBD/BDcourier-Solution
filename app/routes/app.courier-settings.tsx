@@ -38,6 +38,7 @@ import {
   DropZone,
   Thumbnail,
   ChoiceList,
+  Popover,
 } from "@shopify/polaris";
 
 import { authenticate } from "../shopify.server";
@@ -60,12 +61,14 @@ import {
 export interface CustomRouteRule {
   division: string;
   district: string;
+  districts?: string[];
   courier: string;
 }
 
 export interface AutoRoutingConfig {
   autoRoutingEnabled: boolean;
   isAutoRoutingEnabled: boolean;
+  baseCity?: string;
   insideDhakaCourier: string;
   outsideDhakaCourier: string;
   defaultCourier: string;
@@ -201,6 +204,108 @@ export const BANGLADESH_LOCATIONS: Record<string, string[]> = {
   Mymensingh: ["Mymensingh", "Jamalpur", "Netrokona", "Sherpur"],
 };
 
+export const ALL_64_DISTRICT_OPTIONS = Array.from(
+  new Set(Object.values(BANGLADESH_LOCATIONS).flat())
+)
+  .sort((a, b) => a.localeCompare(b))
+  .map((d) => ({ label: d, value: d }));
+
+export function DistrictMultiSelectPopover({
+  division,
+  selectedDistricts,
+  disabled,
+  onChange,
+}: {
+  division: string;
+  selectedDistricts: string[];
+  disabled?: boolean;
+  onChange: (districts: string[]) => void;
+}) {
+  const [popoverActive, setPopoverActive] = useState(false);
+  const divisionDistricts = BANGLADESH_LOCATIONS[division] || [];
+
+  const isAllSelected =
+    selectedDistricts.length === 0 ||
+    (divisionDistricts.length > 0 &&
+      divisionDistricts.every((d) => selectedDistricts.includes(d)));
+
+  let buttonLabel = `All Districts in ${division}`;
+  if (!isAllSelected && selectedDistricts.length === 1) {
+    buttonLabel = selectedDistricts[0];
+  } else if (!isAllSelected && selectedDistricts.length > 1) {
+    buttonLabel = `${selectedDistricts.length} Districts (${selectedDistricts.slice(0, 2).join(", ")}${selectedDistricts.length > 2 ? "..." : ""})`;
+  }
+
+  const handleToggleAll = (checked: boolean) => {
+    onChange([]);
+  };
+
+  const handleToggleDistrict = (district: string, checked: boolean) => {
+    let current = isAllSelected ? [...divisionDistricts] : [...selectedDistricts];
+    if (checked) {
+      if (!current.includes(district)) current.push(district);
+    } else {
+      current = current.filter((d) => d !== district);
+    }
+    if (
+      current.length === 0 ||
+      (divisionDistricts.length > 0 && divisionDistricts.every((d) => current.includes(d)))
+    ) {
+      onChange([]);
+    } else {
+      onChange(current);
+    }
+  };
+
+  return (
+    <BlockStack gap="100">
+      <Text as="span" variant="bodySm" fontWeight="medium">
+        District
+      </Text>
+      <Popover
+        active={popoverActive}
+        activator={
+          <Button
+            disclosure
+            fullWidth
+            textAlign="left"
+            disabled={disabled}
+            onClick={() => setPopoverActive((prev) => !prev)}
+          >
+            {buttonLabel}
+          </Button>
+        }
+        onClose={() => setPopoverActive(false)}
+        preferredAlignment="left"
+      >
+        <div style={{ width: "260px", padding: "12px", maxHeight: "260px", overflowY: "auto" }}>
+          <BlockStack gap="200">
+            <Checkbox
+              label={`All Districts in ${division}`}
+              checked={isAllSelected}
+              onChange={handleToggleAll}
+            />
+            <Divider />
+            <BlockStack gap="150">
+              {divisionDistricts.map((d) => {
+                const isChecked = isAllSelected || selectedDistricts.includes(d);
+                return (
+                  <Checkbox
+                    key={d}
+                    label={d}
+                    checked={isChecked}
+                    onChange={(newChecked) => handleToggleDistrict(d, newChecked)}
+                  />
+                );
+              })}
+            </BlockStack>
+          </BlockStack>
+        </div>
+      </Popover>
+    </BlockStack>
+  );
+}
+
 export const COURIER_OPTIONS = [
   { label: "Pathao Courier", value: "pathao" },
   { label: "Steadfast Courier", value: "steadfast" },
@@ -325,19 +430,26 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     storeConfig?.isAutoRoutingEnabled ?? storeConfig?.autoRoutingEnabled ?? false
   );
 
+  const baseCity = String(storeConfig?.baseCity || "Dhaka").trim();
   const rawCustomRoutes: CustomRouteRule[] =
     Array.isArray(storeConfig?.customRoutes) &&
     storeConfig.customRoutes.length > 0
       ? storeConfig.customRoutes.map((r: any) => ({
           division: String(r.division || "Dhaka"),
           district: String(r.district || "All Districts in Division"),
+          districts: Array.isArray(r.districts)
+            ? r.districts.map(String)
+            : r.district && r.district !== "All Districts in Division"
+            ? String(r.district).split(",").map((s) => s.trim())
+            : [],
           courier: String(r.courier || "pathao"),
         }))
       : [
-          { division: "Dhaka", district: "Dhaka", courier: "pathao" },
+          { division: "Dhaka", district: "Dhaka", districts: ["Dhaka"], courier: "pathao" },
           {
             division: "Chattogram",
             district: "All Districts in Division",
+            districts: [],
             courier: "steadfast",
           },
         ];
@@ -349,6 +461,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const routingConfig: AutoRoutingConfig = {
     autoRoutingEnabled: isAutoRoutingEnabled,
     isAutoRoutingEnabled,
+    baseCity: baseCity || "Dhaka",
     insideDhakaCourier: storeConfig?.insideDhakaCourier || "pathao",
     outsideDhakaCourier: storeConfig?.outsideDhakaCourier || "steadfast",
     defaultCourier: storeConfig?.defaultCourier || "steadfast",
@@ -904,13 +1017,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       String(formData.get("isAutoRoutingEnabled")) === "true" ||
       String(formData.get("autoRoutingEnabled")) === "true";
 
-    const defaultCourierRaw = String(
-      formData.get("defaultCourier") || "steadfast"
-    ).trim();
+    const allDistricts = Array.from(new Set(Object.values(BANGLADESH_LOCATIONS).flat()));
+    const baseCityRaw = String(formData.get("baseCity") || "Dhaka").trim();
+    const baseCity = allDistricts.includes(baseCityRaw) ? baseCityRaw : "Dhaka";
+
     const validCouriers = ["pathao", "steadfast", "redx", "carrybee", "bahok"];
-    const defaultCourier = validCouriers.includes(defaultCourierRaw)
-      ? defaultCourierRaw
-      : "steadfast";
 
     const insideDhakaCourierRaw = String(
       formData.get("insideDhakaCourier") || "pathao"
@@ -925,6 +1036,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const outsideDhakaCourier = validCouriers.includes(outsideDhakaCourierRaw)
       ? outsideDhakaCourierRaw
       : "steadfast";
+
+    // Set fallback/default couriers to outsideDhakaCourier for seamless backward compatibility
+    const defaultCourier = outsideDhakaCourier;
+    const catchAllCourier = outsideDhakaCourier;
 
     const minSuccessRateRaw = Number(
       formData.get("minSuccessRate") ?? formData.get("minSafetySuccessRate") ?? 70
@@ -952,21 +1067,34 @@ export const action = async ({ request }: ActionFunctionArgs) => {
                 : "Dhaka";
 
             const divisionDistricts = BANGLADESH_LOCATIONS[division] || [];
-            const requestedDistrict = String(
-              item.district || "All Districts in Division"
+
+            const rawDistricts: string[] = Array.isArray(item.districts)
+              ? item.districts.map(String)
+              : item.district && item.district !== "All Districts in Division"
+              ? String(item.district).split(",").map((s) => s.trim())
+              : [];
+
+            const validDistricts = rawDistricts.filter((d) =>
+              divisionDistricts.includes(d)
             );
 
             const district =
-              requestedDistrict === "All Districts in Division" ||
-              divisionDistricts.includes(requestedDistrict)
-                ? requestedDistrict
+              validDistricts.length === 1
+                ? validDistricts[0]
+                : validDistricts.length > 1
+                ? validDistricts.join(", ")
                 : "All Districts in Division";
 
             const courier = validCouriers.includes(String(item.courier))
               ? String(item.courier)
               : "pathao";
 
-            return { division, district, courier };
+            return {
+              division,
+              district,
+              districts: validDistricts,
+              courier,
+            };
           });
       }
     } catch {
@@ -975,10 +1103,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
     if (parsedRoutes.length === 0 && (!customRoutesJson || customRoutesJson === "[]")) {
       parsedRoutes = [
-        { division: "Dhaka", district: "Dhaka", courier: "pathao" },
+        { division: "Dhaka", district: "Dhaka", districts: ["Dhaka"], courier: "pathao" },
         {
           division: "Chattogram",
           district: "All Districts in Division",
+          districts: [],
           courier: "steadfast",
         },
       ];
@@ -991,8 +1120,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           shopDomain,
           autoRoutingEnabled: isAutoRoutingEnabled,
           isAutoRoutingEnabled,
+          baseCity,
           customRoutes: parsedRoutes,
           defaultCourier,
+          catchAllCourier,
           insideDhakaCourier,
           outsideDhakaCourier,
           minSafetySuccessRate: minSuccessRate,
@@ -1005,7 +1136,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return json({
       success: true,
       actionType: "saveRoutingSettings",
-      message: `Saved ${parsedRoutes.length} dynamic geo-routing rule(s), default courier (${defaultCourier.toUpperCase()}), and ${minSuccessRate}% fraud safety threshold.`,
+      message: `Saved ${parsedRoutes.length} dynamic geo-routing rule(s), store base city (${baseCity}), and ${minSuccessRate}% fraud safety threshold.`,
     });
   }
 
@@ -1559,6 +1690,9 @@ export default function CourierSettingsPage() {
   const [isAutoRoutingEnabled, setIsAutoRoutingEnabled] = useState<boolean>(
     routingConfig.isAutoRoutingEnabled ?? routingConfig.autoRoutingEnabled ?? false
   );
+  const [baseCity, setBaseCity] = useState<string>(
+    routingConfig.baseCity || "Dhaka"
+  );
   const [customRoutes, setCustomRoutes] = useState<CustomRouteRule[]>(
     routingConfig.customRoutes || []
   );
@@ -1583,6 +1717,7 @@ export default function CourierSettingsPage() {
       routingConfig.minSuccessRate ?? routingConfig.minSafetySuccessRate ?? 70
     );
     setIsAutoRoutingEnabled(isEnabled);
+    setBaseCity(routingConfig.baseCity || "Dhaka");
     setCustomRoutes(routingConfig.customRoutes || []);
     setDefaultCourier(routingConfig.defaultCourier || "steadfast");
     setInsideDhakaCourier(routingConfig.insideDhakaCourier || "pathao");
@@ -1619,16 +1754,28 @@ export default function CourierSettingsPage() {
               ...row,
               division: newDivision,
               district: "All Districts in Division",
+              districts: [],
             }
           : row
       )
     );
   };
 
-  const handleDistrictChange = (index: number, newDistrict: string) => {
+  const handleDistrictsChange = (index: number, newDistricts: string[]) => {
     setCustomRoutes((prevRoutes) =>
       prevRoutes.map((row, idx) =>
-        idx === index ? { ...row, district: newDistrict } : row
+        idx === index
+          ? {
+              ...row,
+              districts: newDistricts,
+              district:
+                newDistricts.length === 0
+                  ? "All Districts in Division"
+                  : newDistricts.length === 1
+                  ? newDistricts[0]
+                  : newDistricts.join(", "),
+            }
+          : row
       )
     );
   };
@@ -1647,6 +1794,7 @@ export default function CourierSettingsPage() {
       {
         division: "Dhaka",
         district: "All Districts in Division",
+        districts: [],
         courier: "pathao",
       },
     ]);
@@ -1924,7 +2072,9 @@ export default function CourierSettingsPage() {
     formData.append("actionType", "saveRoutingSettings");
     formData.append("isAutoRoutingEnabled", String(isAutoRoutingEnabled));
     formData.append("autoRoutingEnabled", String(isAutoRoutingEnabled));
-    formData.append("defaultCourier", defaultCourier);
+    formData.append("baseCity", baseCity);
+    formData.append("defaultCourier", outsideDhakaCourier);
+    formData.append("catchAllCourier", outsideDhakaCourier);
     formData.append("insideDhakaCourier", insideDhakaCourier);
     formData.append("outsideDhakaCourier", outsideDhakaCourier);
     formData.append("minSuccessRate", minSuccessRate || "70");
@@ -3589,15 +3739,48 @@ export default function CourierSettingsPage() {
               <Card padding="500">
                 <BlockStack gap="400">
                   {!canUseAutoRouting && (
-                    <Banner
-                      title="Automatic Courier Selection & District Routing Locked"
-                      tone="warning"
-                      action={{ content: "Upgrade Plan", url: "/app/pricing" }}
+                    <div
+                      style={{
+                        background: "#f8fafc",
+                        border: "1px solid #cbd5e1",
+                        borderRadius: "10px",
+                        padding: "14px 16px",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        flexWrap: "wrap",
+                        gap: "12px",
+                      }}
                     >
-                      <p>
-                        Automatic Courier Selection &amp; Geo-District Routing is available on Pro, Advanced, and Enterprise plans. Upgrade your plan to unlock automated multi-courier order routing.
-                      </p>
-                    </Banner>
+                      <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                        <div
+                          style={{
+                            width: "36px",
+                            height: "36px",
+                            borderRadius: "8px",
+                            background: "#e2e8f0",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            color: "#475569",
+                            fontSize: "18px",
+                          }}
+                        >
+                          🔒
+                        </div>
+                        <div>
+                          <div style={{ fontWeight: 600, fontSize: "14px", color: "#0f172a" }}>
+                            Automatic Courier Selection is available on Pro, Advanced &amp; Enterprise plans
+                          </div>
+                          <div style={{ fontSize: "12px", color: "#475569", marginTop: "2px" }}>
+                            Upgrade your plan to automatically route parcels to your preferred couriers based on customer location.
+                          </div>
+                        </div>
+                      </div>
+                      <Button url="/app/pricing" variant="primary">
+                        Upgrade Plan
+                      </Button>
+                    </div>
                   )}
 
                   <InlineStack align="space-between" blockAlign="center" wrap>
@@ -3611,23 +3794,14 @@ export default function CourierSettingsPage() {
                         </Badge>
                       </InlineStack>
                       <Text as="p" variant="bodySm" tone="subdued">
-                        বাংলাদেশের ৮টি বিভাগ এবং ৬৪টি জেলার জন্য আপনার পছন্দের কুরিয়ার সেটআপ করুন।
+                        কোন এলাকার অর্ডারের জন্য কোন কুরিয়ার আগে থেকে সিলেক্ট হয়ে থাকবে তা এখানে সেট করুন 
                       </Text>
                     </BlockStack>
-
-                    <Button
-                      variant="primary"
-                      loading={isSavingRoutingSettings}
-                      disabled={!canUseAutoRouting}
-                      onClick={handleSaveRoutingSettings}
-                    >
-                      Save Courier Selection Rules
-                    </Button>
                   </InlineStack>
 
                   <Divider />
 
-                  <div style={{ opacity: !canUseAutoRouting ? 0.65 : 1 }}>
+                  <div>
                     <BlockStack gap="400">
                       {/* Master Automation Switch */}
                       <Box
@@ -3637,7 +3811,7 @@ export default function CourierSettingsPage() {
                       >
                         <Checkbox
                           label="Enable Automatic Courier Selection & Fraud Protection"
-                          helpText="নতুন অর্ডার আসার সাথে সাথে কাস্টমারের ঠিকানার উপর ভিত্তি করে স্বয়ংক্রিয়ভাবে নির্ধারিত কুরিয়ার সিলেক্ট হবে এবং ফ্রড (প্রতারণা) ফিল্টারিং চেক হবে।"
+                          helpText="চালু থাকলে অর্ডার পেজের ড্রপডাউনে কাস্টমারের জেলা অনুযায়ী আপনার পছন্দের কুরিয়ারটি অটোমেটিক সিলেক্ট হয়ে থাকবে।"
                           checked={!canUseAutoRouting ? false : isAutoRoutingEnabled}
                           disabled={!canUseAutoRouting}
                           onChange={(newChecked) => setIsAutoRoutingEnabled(newChecked)}
@@ -3652,7 +3826,7 @@ export default function CourierSettingsPage() {
                               Custom Division &amp; District Rules ({customRoutes.length})
                             </Text>
                             <Text as="p" variant="bodySm" tone="subdued">
-                              এই নিয়মগুলো উপর থেকে নিচে ক্রমানুসারে কাজ করবে। নির্দিষ্ট কোনো জেলার নিয়ম তার পুরো বিভাগের নিয়মের চেয়ে বেশি অগ্রাধিকার পাবে।
+                              নির্দিষ্ট কোনো বিভাগ বা একসাথে একাধিক জেলার জন্য আলাদা কুরিয়ার সেট করতে চাইলে এখানে রুল তৈরি করুন।
                             </Text>
                           </BlockStack>
 
@@ -3702,7 +3876,7 @@ export default function CourierSettingsPage() {
                                     />
                                   </Grid.Cell>
 
-                                  {/* District Select */}
+                                  {/* District Multi-Select Popover */}
                                   <Grid.Cell
                                     columnSpan={{
                                       xs: 6,
@@ -3712,13 +3886,18 @@ export default function CourierSettingsPage() {
                                       xl: 4,
                                     }}
                                   >
-                                    <Select
-                                      label="District"
-                                      options={getDistrictSelectOptions(rule.division)}
-                                      value={rule.district}
+                                    <DistrictMultiSelectPopover
+                                      division={rule.division}
+                                      selectedDistricts={
+                                        rule.districts && rule.districts.length > 0
+                                          ? rule.districts
+                                          : rule.district && rule.district !== "All Districts in Division"
+                                          ? rule.district.split(",").map((s) => s.trim())
+                                          : []
+                                      }
                                       disabled={!canUseAutoRouting}
-                                      onChange={(val) =>
-                                        handleDistrictChange(index, val)
+                                      onChange={(newDistricts) =>
+                                        handleDistrictsChange(index, newDistricts)
                                       }
                                     />
                                   </Grid.Cell>
@@ -3770,38 +3949,41 @@ export default function CourierSettingsPage() {
 
                       <Divider />
 
-                      {/* Fallback Couriers & Fraud Risk Safety Net */}
+                      {/* Dynamic Store City -> Inside & Outside Default Couriers */}
                       <Grid>
+                        {/* Column 1: Your Store City (District) */}
                         <Grid.Cell columnSpan={{ xs: 6, sm: 6, md: 2, lg: 4, xl: 4 }}>
                           <Select
-                            label="Inside Dhaka Default Courier"
+                            label="Your Store City (District)"
+                            options={ALL_64_DISTRICT_OPTIONS}
+                            value={baseCity}
+                            disabled={!canUseAutoRouting}
+                            onChange={(val) => setBaseCity(val)}
+                            helpText="আপনার স্টোর বা গোডাউন কোন জেলায় অবস্থিত তা সিলেক্ট করুন।"
+                          />
+                        </Grid.Cell>
+
+                        {/* Column 2: Inside ${baseCity} Default Courier */}
+                        <Grid.Cell columnSpan={{ xs: 6, sm: 6, md: 2, lg: 4, xl: 4 }}>
+                          <Select
+                            label={`Inside ${baseCity} Default Courier`}
                             options={COURIER_OPTIONS}
                             value={insideDhakaCourier}
                             disabled={!canUseAutoRouting}
                             onChange={(val) => setInsideDhakaCourier(val)}
-                            helpText="ঢাকা সিটির ভেতরের সমস্ত অর্ডারের জন্য প্রধান কুরিয়ার।"
+                            helpText={`${baseCity} জেলার ভেতরের সব অর্ডারের জন্য কোন কুরিয়ারটি অটোমেটিক সিলেক্ট হবে।`}
                           />
                         </Grid.Cell>
 
+                        {/* Column 3: Outside ${baseCity} Default Courier */}
                         <Grid.Cell columnSpan={{ xs: 6, sm: 6, md: 2, lg: 4, xl: 4 }}>
                           <Select
-                            label="Outside Dhaka Default Courier"
+                            label={`Outside ${baseCity} Default Courier`}
                             options={COURIER_OPTIONS}
                             value={outsideDhakaCourier}
                             disabled={!canUseAutoRouting}
                             onChange={(val) => setOutsideDhakaCourier(val)}
-                            helpText="ঢাকা সিটির বাইরের সমস্ত অর্ডারের জন্য প্রধান কুরিয়ার।"
-                          />
-                        </Grid.Cell>
-
-                        <Grid.Cell columnSpan={{ xs: 6, sm: 6, md: 2, lg: 4, xl: 4 }}>
-                          <Select
-                            label="Catch-All Fallback Courier"
-                            options={COURIER_OPTIONS}
-                            value={defaultCourier}
-                            disabled={!canUseAutoRouting}
-                            onChange={(val) => setDefaultCourier(val)}
-                            helpText="উপরে কোনো কাস্টম বা আঞ্চলিক নিয়ম ম্যাচ না করলে এই ব্যাকআপ কুরিয়ারটি ব্যবহার করা হবে।"
+                            helpText={`${baseCity} জেলার বাইরের সব অর্ডারের জন্য কোন কুরিয়ারটি অটোমেটিক সিলেক্ট হবে।`}
                           />
                         </Grid.Cell>
                       </Grid>
@@ -3816,7 +3998,7 @@ export default function CourierSettingsPage() {
                             disabled={!canUseAutoRouting}
                             onChange={(val) => setMinSuccessRate(val)}
                             autoComplete="off"
-                            helpText="যেসব কাস্টমারের আগের পার্সেল ডেলিভারির সফলতার হার (Success Rate) এই পার্সেন্টেজের চেয়ে কম, কুরিয়ারে লস এড়াতে তাদের অর্ডারগুলো স্বয়ংক্রিয়ভাবে লক হয়ে যাবে যাতে আপনি ম্যানুয়ালি চেক করতে পারেন।"
+                            helpText="কাস্টমারের আগের ডেলিভারি রেকর্ড এই পার্সেন্টেজের কম হলে অর্ডারটিতে অটোমেটিক কুরিয়ার বসবে না, যাতে আপনি আগে কল দিয়ে কনফার্ম করতে পারেন।"
                           />
                         </Grid.Cell>
                       </Grid>

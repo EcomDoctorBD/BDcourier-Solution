@@ -395,6 +395,11 @@ const courierConfigSchema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
+    baseCity: {
+      type: String,
+      default: "Dhaka",
+      trim: true,
+    },
     insideDhakaCourier: {
       type: String,
       enum: ["pathao", "steadfast", "redx", "carrybee", "bahok"],
@@ -408,6 +413,12 @@ const courierConfigSchema = new mongoose.Schema(
       trim: true,
     },
     defaultCourier: {
+      type: String,
+      enum: ["pathao", "steadfast", "redx", "carrybee", "bahok"],
+      default: "steadfast",
+      trim: true,
+    },
+    catchAllCourier: {
       type: String,
       enum: ["pathao", "steadfast", "redx", "carrybee", "bahok"],
       default: "steadfast",
@@ -430,7 +441,8 @@ const courierConfigSchema = new mongoose.Schema(
         new mongoose.Schema(
           {
             division: { type: String, required: true, trim: true },
-            district: { type: String, required: true, trim: true },
+            district: { type: String, trim: true },
+            districts: { type: [String], default: [] },
             courier: {
               type: String,
               enum: ["pathao", "steadfast", "redx", "carrybee", "bahok"],
@@ -442,10 +454,11 @@ const courierConfigSchema = new mongoose.Schema(
         ),
       ],
       default: [
-        { division: "Dhaka", district: "Dhaka", courier: "pathao" },
+        { division: "Dhaka", district: "Dhaka", districts: ["Dhaka"], courier: "pathao" },
         {
           division: "Chattogram",
           district: "All Districts in Division",
+          districts: [],
           courier: "steadfast",
         },
       ],

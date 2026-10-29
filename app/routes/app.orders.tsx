@@ -217,6 +217,7 @@ export const COURIER_OPTIONS = [
 export interface CustomRouteRule {
   division: string;
   district: string;
+  districts?: string[];
   courier: string;
 }
 
@@ -286,6 +287,7 @@ export interface FraudStatsProfile {
 export interface AutoRoutingConfig {
   autoRoutingEnabled: boolean;
   isAutoRoutingEnabled: boolean;
+  baseCity?: string;
   insideDhakaCourier: string;
   outsideDhakaCourier: string;
   defaultCourier: string;
@@ -1380,23 +1382,28 @@ export function evaluateWebhookOrderRouting(params: {
 
   const normalizedCity = (orderCity || "").trim().toLowerCase();
 
-  // Step 2: Primary Exact District Match or Division Wildcard Match, Fallback to defaultCourier
-  const exactDistrictRule = customRoutes.find(
-    (r) => r.district.toLowerCase() === normalizedCity
-  );
+  // Step 2: Specific District Rule Match (Priority A)
+  const specificDistrictRule = customRoutes.find((r) => {
+    const selectedList = Array.isArray(r.districts) && r.districts.length > 0
+      ? r.districts
+      : r.district && r.district !== "All Districts in Division"
+      ? [r.district]
+      : [];
+    return selectedList.some((d) => d.trim().toLowerCase() === normalizedCity);
+  });
 
+  // Step 3: Division Wildcard Match (Priority B)
   const divisionWildcardRule = customRoutes.find((r) => {
-    if (r.district !== "All Districts in Division") return false;
+    const hasSpecificDistricts = Array.isArray(r.districts) && r.districts.length > 0;
+    if (hasSpecificDistricts) return false;
+    if (r.district && r.district !== "All Districts in Division") return false;
     const divisionDistricts = BANGLADESH_LOCATIONS[r.division] || [];
-    return divisionDistricts.some(
-      (d) => d.toLowerCase() === normalizedCity
-    );
+    return divisionDistricts.some((d) => d.toLowerCase() === normalizedCity);
   });
 
   const assignedCourier =
-    exactDistrictRule?.courier ||
+    specificDistrictRule?.courier ||
     divisionWildcardRule?.courier ||
-    customRoutes.find((r) => r.district === orderCity)?.courier ||
     defaultCourier;
 
   return {
@@ -1420,20 +1427,35 @@ function applyRoutingAndSafetyLogic(
   const locationString =
     `${order.city} ${order.province} ${order.shippingAddress}`.toLowerCase();
 
+  const baseCity = (routingConfig.baseCity || "Dhaka").trim();
+  const isDhakaBase = baseCity.toLowerCase() === "dhaka";
+
   // Zone Evaluation: AddressCache verified district check + Local Neighborhood Map + Substring matches
-  const isDistrictDhaka = Boolean(
-    cachedDistrict && cachedDistrict.trim().toLowerCase().includes("dhaka")
-  );
-
-  const matchesNeighborhood = DHAKA_NEIGHBORHOOD_KEYWORDS.some((keyword) =>
-    locationString.includes(keyword)
-  );
-
-  const isInsideDhaka =
-    isDistrictDhaka ||
-    locationString.includes("dhaka") ||
-    locationString.includes("dacca") ||
-    matchesNeighborhood;
+  let isInsideBaseCity = false;
+  if (isDhakaBase) {
+    const isDistrictDhaka = Boolean(
+      cachedDistrict && cachedDistrict.trim().toLowerCase().includes("dhaka")
+    );
+    const matchesNeighborhood = DHAKA_NEIGHBORHOOD_KEYWORDS.some((keyword) =>
+      locationString.includes(keyword)
+    );
+    isInsideBaseCity =
+      isDistrictDhaka ||
+      locationString.includes("dhaka") ||
+      locationString.includes("dacca") ||
+      matchesNeighborhood;
+  } else {
+    const baseCityNorm = baseCity.toLowerCase();
+    const isDistrictBase = Boolean(
+      cachedDistrict && cachedDistrict.trim().toLowerCase() === baseCityNorm
+    );
+    const isOrderCityBase = Boolean(
+      order.city && order.city.trim().toLowerCase() === baseCityNorm
+    );
+    isInsideBaseCity =
+      isDistrictBase || isOrderCityBase || locationString.includes(baseCityNorm);
+  }
+  const isInsideDhaka = isInsideBaseCity;
 
   const isEnabled = Boolean(
     routingConfig.isAutoRoutingEnabled ?? routingConfig.autoRoutingEnabled
@@ -1475,37 +1497,42 @@ function applyRoutingAndSafetyLogic(
     }
 
     const orderCity = (order.city || "").trim();
-    const effectiveCity = orderCity || cachedDistrict || (isInsideDhaka ? "Dhaka" : "");
+    const effectiveCity = orderCity || cachedDistrict || (isInsideDhaka ? baseCity : "");
     const normalizedCity = effectiveCity.toLowerCase();
     const customRoutes = routingConfig.customRoutes || [];
 
-    const exactDistrictRule = customRoutes.find(
-      (r) => r.district.toLowerCase() === normalizedCity
-    );
+    const specificDistrictRule = customRoutes.find((r) => {
+      const selectedList = Array.isArray(r.districts) && r.districts.length > 0
+        ? r.districts
+        : r.district && r.district !== "All Districts in Division"
+        ? [r.district]
+        : [];
+      return selectedList.some((d) => d.trim().toLowerCase() === normalizedCity);
+    });
 
     const divisionWildcardRule = customRoutes.find((r) => {
-      if (r.district !== "All Districts in Division") return false;
+      const hasSpecificDistricts = Array.isArray(r.districts) && r.districts.length > 0;
+      if (hasSpecificDistricts) return false;
+      if (r.district && r.district !== "All Districts in Division") return false;
       const divisionDistricts = BANGLADESH_LOCATIONS[r.division] || [];
-      return divisionDistricts.some(
-        (d) => d.toLowerCase() === normalizedCity
-      );
+      return divisionDistricts.some((d) => d.toLowerCase() === normalizedCity);
     });
 
     const routedCourier =
-      exactDistrictRule?.courier ||
+      specificDistrictRule?.courier ||
       divisionWildcardRule?.courier ||
       (isInsideDhaka
         ? routingConfig.insideDhakaCourier
         : routingConfig.outsideDhakaCourier) ||
       fallbackCourier;
 
-    const matchedRuleText = exactDistrictRule
-      ? `District Match: ${exactDistrictRule.district} → ${exactDistrictRule.courier.toUpperCase()}`
+    const matchedRuleText = specificDistrictRule
+      ? `District Match: ${specificDistrictRule.districts?.length ? specificDistrictRule.districts.join(", ") : specificDistrictRule.district} → ${specificDistrictRule.courier.toUpperCase()}`
       : divisionWildcardRule
       ? `Division Rule: ${divisionWildcardRule.division} → ${divisionWildcardRule.courier.toUpperCase()}`
       : isInsideDhaka
-      ? `Inside Dhaka → ${routedCourier.toUpperCase()}`
-      : `Default Courier → ${routedCourier.toUpperCase()}`;
+      ? `Inside ${baseCity} → ${routedCourier.toUpperCase()}`
+      : `Outside ${baseCity} → ${routedCourier.toUpperCase()}`;
 
     return {
       ...order,
@@ -2710,19 +2737,26 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const isAutoRoutingEnabled = canUseAutoRouting && Boolean(
     storeConfig?.isAutoRoutingEnabled ?? storeConfig?.autoRoutingEnabled ?? false
   );
+  const baseCity = String(storeConfig?.baseCity || "Dhaka").trim();
   const customRoutes: CustomRouteRule[] =
     Array.isArray(storeConfig?.customRoutes) &&
     storeConfig.customRoutes.length > 0
       ? storeConfig.customRoutes.map((r: any) => ({
           division: String(r.division || "Dhaka"),
           district: String(r.district || "Dhaka"),
+          districts: Array.isArray(r.districts)
+            ? r.districts.map(String)
+            : r.district && r.district !== "All Districts in Division"
+            ? [String(r.district)]
+            : [],
           courier: String(r.courier || "pathao"),
         }))
       : [
-          { division: "Dhaka", district: "Dhaka", courier: "pathao" },
+          { division: "Dhaka", district: "Dhaka", districts: ["Dhaka"], courier: "pathao" },
           {
             division: "Chattogram",
             district: "All Districts in Division",
+            districts: [],
             courier: "steadfast",
           },
         ];
@@ -2734,6 +2768,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const routingConfig: AutoRoutingConfig = {
     autoRoutingEnabled: isAutoRoutingEnabled,
     isAutoRoutingEnabled,
+    baseCity: baseCity || "Dhaka",
     insideDhakaCourier: storeConfig?.insideDhakaCourier || "pathao",
     outsideDhakaCourier: storeConfig?.outsideDhakaCourier || "steadfast",
     defaultCourier,
@@ -5585,7 +5620,7 @@ export default function OrdersFulfillmentPage() {
               {canUseAutoRouting && (
                 <div style={{ width: "fit-content", display: "inline-flex", alignSelf: "flex-start" }}>
                   <Badge tone="info" size="small">
-                    {order.isInsideDhaka ? "Inside Dhaka" : "Outside Dhaka"}
+                    {order.isInsideDhaka ? `Inside ${routingConfig.baseCity || "Dhaka"}` : `Outside ${routingConfig.baseCity || "Dhaka"}`}
                   </Badge>
                 </div>
               )}
