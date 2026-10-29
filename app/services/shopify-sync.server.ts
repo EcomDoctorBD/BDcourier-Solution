@@ -1,5 +1,6 @@
 import { unauthenticated } from "../shopify.server";
 import { connectDB, ShipmentBooking } from "../db.server";
+import { sanitizeBangladeshPhone } from "../utils/phone";
 
 /**
  * Generates the public customer tracking URL for Pathao, Steadfast, and RedX
@@ -14,7 +15,7 @@ export function getCourierTrackingUrl(
 
   const key = String(courier || "").toLowerCase().trim();
   if (key.includes("pathao")) {
-    const cleanPhone = String(phone || "").replace(/\D/g, "");
+    const cleanPhone = sanitizeBangladeshPhone(phone);
     return `https://pathao.com/courier/tracking/?consignment_id=${encodeURIComponent(
       trk
     )}&phone=${encodeURIComponent(cleanPhone)}`;

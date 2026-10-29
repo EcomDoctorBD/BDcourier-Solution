@@ -45,6 +45,12 @@ import {
 
 import { authenticate, unauthenticated, sessionStorage } from "../shopify.server";
 import { getCourierTrackingUrl } from "../services/shopify-sync.server";
+import {
+  sanitizeBangladeshPhone,
+  isValidBangladeshMobile,
+  formatBangladeshPhoneForWhatsApp,
+  convertBengaliDigitsToAscii,
+} from "../utils/phone";
 import CourierConfig, {
   connectDB,
   getPlanLimit,
@@ -499,17 +505,7 @@ export interface DispatchedSlipRecord {
 }
 
 function formatBangladeshPhone(rawPhone: string): string {
-  const digitsOnly = (rawPhone || "").replace(/\D/g, "");
-  if (digitsOnly.startsWith("8801") && digitsOnly.length === 13) {
-    return digitsOnly.slice(2);
-  }
-  if (digitsOnly.startsWith("1") && digitsOnly.length === 10) {
-    return `0${digitsOnly}`;
-  }
-  if (digitsOnly.startsWith("01") && digitsOnly.length === 11) {
-    return digitsOnly;
-  }
-  return digitsOnly.length >= 10 ? digitsOnly : "";
+  return sanitizeBangladeshPhone(rawPhone);
 }
 
 function getSuccessRateBadgeTone(
@@ -1503,8 +1499,8 @@ async function resolveCustomerFraudProfile(
   storeConfig: any,
   cachedPathaoTokenRef: { token: string | null; attempted: boolean }
 ): Promise<FraudStatsProfile | null> {
-  const cleanPhone = formatBangladeshPhone(rawPhone);
-  if (!cleanPhone || cleanPhone.length < 11) {
+  const cleanPhone = sanitizeBangladeshPhone(rawPhone);
+  if (!isValidBangladeshMobile(cleanPhone)) {
     return null;
   }
   const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
@@ -2001,7 +1997,14 @@ async function dispatchSingleOrderToCourier(params: {
   // Courier API transmission instruction (fallback to Shopify Order name if both are completely empty)
   const courierInstructionPayload = effectiveWarehouseNote || `Shopify Order ${orderName}`;
 
-  const cleanPhone = formatBangladeshPhone(customerPhone);
+  // Pre-Dispatch Customer Phone Sanitization & Strict Validation Guard
+  const cleanPhone = sanitizeBangladeshPhone(customerPhone);
+  if (!isValidBangladeshMobile(cleanPhone)) {
+    return rollbackBooking(
+      `Invalid Bangladesh mobile number (${cleanPhone || 'empty'}). Must be an 11-digit number starting with 013-019.`
+    );
+  }
+
   const cleanAddress =
     addressResolution.cleanAddress ||
     shippingAddress ||
@@ -3201,7 +3204,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         [cust?.firstName, cust?.lastName].filter(Boolean).join(" ") ||
         "";
 
-      const customerPhone = addr?.phone || cust?.phone || "";
+      const customerPhone = sanitizeBangladeshPhone(addr?.phone || cust?.phone || "");
 
       const city = addr?.city || "";
       const province = addr?.province || city;
@@ -3643,6 +3646,18 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           };
         }
 
+        const cleanItemPhone = sanitizeBangladeshPhone(item.customerPhone);
+        if (!isValidBangladeshMobile(cleanItemPhone)) {
+          return {
+            success: false,
+            orderId: String(item.orderId || ""),
+            orderName: String(item.orderName || ""),
+            courierName: "",
+            trackingNumber: "",
+            message: `Invalid Bangladesh mobile number (${cleanItemPhone || 'empty'}). Must be an 11-digit number starting with 013-019.`,
+          };
+        }
+
         return dispatchSingleOrderToCourier({
           shopDomain,
           storeConfig,
@@ -3650,7 +3665,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           orderName: String(item.orderName || ""),
           selectedCourier: String(item.selectedCourier || "pathao"),
           customerName: String(item.customerName || "Customer"),
-          customerPhone: String(item.customerPhone || ""),
+          customerPhone: cleanItemPhone,
           shippingAddress: String(item.shippingAddress || ""),
           isInsideDhaka: Boolean(item.isInsideDhaka),
           codAmount: String(item.codAmount || "0"),
@@ -3768,6 +3783,17 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     };
   }
 
+  const cleanCustomerPhone = sanitizeBangladeshPhone(rawCustomerPhone);
+  if (!isValidBangladeshMobile(cleanCustomerPhone)) {
+    return {
+      success: false,
+      actionType: "dispatchOrder",
+      limitReached: false,
+      message: `Invalid Bangladesh mobile number (${cleanCustomerPhone || 'empty'}). Must be an 11-digit number starting with 013-019.`,
+      bookedSlips: [] as DispatchedSlipRecord[],
+    };
+  }
+
   const sharedPathaoTokenRef = {
     token: null as string | null,
     attempted: false,
@@ -3780,7 +3806,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     orderName,
     selectedCourier,
     customerName,
-    customerPhone: rawCustomerPhone,
+    customerPhone: cleanCustomerPhone,
     shippingAddress: rawShippingAddress,
     isInsideDhaka,
     codAmount,
@@ -4267,7 +4293,7 @@ export default function OrdersFulfillmentPage() {
   const handleCopyPhone = useCallback((phone: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
     if (!phone) return;
-    const cleanNumber = phone.trim();
+    const cleanNumber = sanitizeBangladeshPhone(phone) || phone.trim();
     if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
       navigator.clipboard.writeText(cleanNumber).catch(() => {});
     }
@@ -4732,10 +4758,11 @@ export default function OrdersFulfillmentPage() {
       // 1. Search Query Filter (Phone, Order Name, Customer Name, Address, Tracking)
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase().trim();
-        const qDigits = q.replace(/\D/g, "");
+        const cleanQ = convertBengaliDigitsToAscii(q).trim().toLowerCase();
+        const qDigits = cleanQ.replace(/\D/g, "");
         const dispatched = dispatchedOrders[order.id];
         const matchesName = order.name.toLowerCase().includes(q);
-        const phoneDigits = (order.customerPhone || "").replace(/\D/g, "");
+        const phoneDigits = sanitizeBangladeshPhone(order.customerPhone);
         const matchesPhone = qDigits.length > 0 && phoneDigits.includes(qDigits);
         const matchesCustomer = order.customerName.toLowerCase().includes(q);
         const matchesAddress = order.shippingAddress.toLowerCase().includes(q);
@@ -5687,7 +5714,7 @@ export default function OrdersFulfillmentPage() {
                       onClick={(e) => e.stopPropagation()}
                     >
                       <Link
-                        url={`tel:${order.customerPhone.replace(/\D/g, "")}`}
+                        url={`tel:${sanitizeBangladeshPhone(order.customerPhone)}`}
                         removeUnderline
                       >
                         <span
@@ -5711,7 +5738,7 @@ export default function OrdersFulfillmentPage() {
                         </span>
                       </Link>
                       <Link
-                        url={`https://wa.me/${order.customerPhone.replace(/\D/g, "").replace(/^0/, "880")}`}
+                        url={`https://wa.me/${formatBangladeshPhoneForWhatsApp(order.customerPhone)}`}
                         target="_blank"
                         removeUnderline
                       >
