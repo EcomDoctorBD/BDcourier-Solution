@@ -294,6 +294,39 @@ const DEFAULT_PRODUCT_PLACEHOLDER =
 
 
 /**
+ * Normalizes all Shopify weight units (GRAMS, POUNDS, OUNCES, KILOGRAMS) to strict Kilograms (kg).
+ * Rounds to 3 decimal places.
+ */
+export function convertShopifyWeightToKg(
+  value?: number | string | null,
+  unit?: string | null
+): number {
+  if (value === null || value === undefined) return 0;
+  const numValue = Number(value);
+  if (isNaN(numValue) || numValue <= 0) return 0;
+
+  const normalizedUnit = String(unit || "KILOGRAMS").toUpperCase().trim();
+  let weightInKg = numValue;
+
+  if (normalizedUnit === "GRAMS" || normalizedUnit === "G") {
+    weightInKg = numValue / 1000;
+  } else if (
+    normalizedUnit === "POUNDS" ||
+    normalizedUnit === "LB" ||
+    normalizedUnit === "LBS"
+  ) {
+    weightInKg = numValue * 0.45359237;
+  } else if (normalizedUnit === "OUNCES" || normalizedUnit === "OZ") {
+    weightInKg = numValue * 0.02834952;
+  } else {
+    // Default: "KILOGRAMS" or "KG"
+    weightInKg = numValue;
+  }
+
+  return Math.round(weightInKg * 1000) / 1000;
+}
+
+/**
  * SHOPIFY TO KG DYNAMIC UNIT CONVERSION MATRIX & FALLBACK RESOLVER
  * Converts Grams, Pounds, Ounces, and Kilograms into strict Kilograms (KG).
  * Falls back to merchant's persistent CourierConfig if order weight is missing/zero.
@@ -318,31 +351,12 @@ export function calculateOrderWeightKg(params: {
   if (Array.isArray(lineItems) && lineItems.length > 0) {
     for (const item of lineItems) {
       const qty = Number(item.quantity || 1);
-      const rawWeight = Number(
-        item.weight ??
-        item.variant?.weight ??
-        0
-      );
-      const rawUnit = String(
-        item.weightUnit ??
-        item.variant?.weightUnit ??
-        "KILOGRAMS"
-      ).toUpperCase().trim();
+      const rawWeight = item.weight ?? item.variant?.weight ?? 0;
+      const rawUnit = item.weightUnit ?? item.variant?.weightUnit ?? "KILOGRAMS";
 
-      if (!isNaN(rawWeight) && rawWeight > 0) {
-        let weightInKg = 0;
-        if (rawUnit === "GRAMS" || rawUnit === "G") {
-          weightInKg = rawWeight * 0.001;
-        } else if (rawUnit === "POUNDS" || rawUnit === "LB" || rawUnit === "LBS") {
-          weightInKg = rawWeight * 0.453592;
-        } else if (rawUnit === "OUNCES" || rawUnit === "OZ") {
-          weightInKg = rawWeight * 0.0283495;
-        } else {
-          // Default: KILOGRAMS / KG
-          weightInKg = rawWeight;
-        }
-
-        accumulatedWeightKg += weightInKg * qty;
+      const itemWeightKg = convertShopifyWeightToKg(rawWeight, rawUnit);
+      if (itemWeightKg > 0) {
+        accumulatedWeightKg += itemWeightKg * qty;
       }
     }
   }
@@ -351,7 +365,7 @@ export function calculateOrderWeightKg(params: {
   if (accumulatedWeightKg <= 0 && orderTotalWeight && !isNaN(Number(orderTotalWeight))) {
     const rawOrderWeight = Number(orderTotalWeight);
     if (rawOrderWeight > 0) {
-      accumulatedWeightKg = rawOrderWeight * 0.001;
+      accumulatedWeightKg = rawOrderWeight / 1000;
     }
   }
 
@@ -361,17 +375,17 @@ export function calculateOrderWeightKg(params: {
     let configuredWeight = 0;
 
     if (normalizedCourier === "pathao") {
-      configuredWeight = parseFloat(String(storeConfig?.pathaoDefaultWeight || storeConfig?.defaultParcelWeight || "0.5"));
+      configuredWeight = parseFloat(String(storeConfig?.pathaoDefaultWeight || storeConfig?.defaultParcelWeight || storeConfig?.defaultWeight || "0.5"));
     } else if (normalizedCourier === "redx") {
-      configuredWeight = parseFloat(String(storeConfig?.redxDefaultWeight || storeConfig?.defaultParcelWeight || "0.5"));
+      configuredWeight = parseFloat(String(storeConfig?.redxDefaultWeight || storeConfig?.defaultParcelWeight || storeConfig?.defaultWeight || "0.5"));
     } else if (normalizedCourier === "carrybee") {
-      configuredWeight = parseFloat(String(storeConfig?.carrybeeDefaultWeight || storeConfig?.defaultParcelWeight || "0.5"));
+      configuredWeight = parseFloat(String(storeConfig?.carrybeeDefaultWeight || storeConfig?.defaultParcelWeight || storeConfig?.defaultWeight || "0.5"));
     } else if (normalizedCourier === "bahok") {
-      configuredWeight = parseFloat(String(storeConfig?.bahokDefaultWeight || storeConfig?.defaultParcelWeight || "0.5"));
+      configuredWeight = parseFloat(String(storeConfig?.bahokDefaultWeight || storeConfig?.defaultParcelWeight || storeConfig?.defaultWeight || "0.5"));
     } else if (normalizedCourier === "steadfast") {
-      configuredWeight = parseFloat(String(storeConfig?.steadfastDefaultWeight || storeConfig?.defaultParcelWeight || "0.5"));
+      configuredWeight = parseFloat(String(storeConfig?.steadfastDefaultWeight || storeConfig?.defaultParcelWeight || storeConfig?.defaultWeight || "0.5"));
     } else {
-      configuredWeight = parseFloat(String(storeConfig?.defaultParcelWeight || "0.5"));
+      configuredWeight = parseFloat(String(storeConfig?.defaultParcelWeight || storeConfig?.defaultWeight || "0.5"));
     }
 
     accumulatedWeightKg = !isNaN(configuredWeight) && configuredWeight > 0 ? configuredWeight : 0.5;
@@ -498,6 +512,7 @@ export interface DispatchedSlipRecord {
   currencyCode: string;
   warehouseNote: string;
   lineItems: OrderLineItem[];
+  weight?: number;
   bookedAt: string;
   isCancelled?: boolean;
   cancelledAt?: string | null;
@@ -2144,7 +2159,7 @@ async function dispatchSingleOrderToCourier(params: {
         item_type: 2,
         special_instruction: courierInstructionPayload,
         item_quantity: 1,
-        item_weight: parcelWeightKg,
+        item_weight: Math.min(10, Math.max(0.5, Number(parcelWeightKg.toFixed(2)))),
         amount_to_collect: amountToCollect,
         item_description: `Order ${orderName} from ${shopDomain}`,
       };
@@ -2226,7 +2241,7 @@ async function dispatchSingleOrderToCourier(params: {
         recipient_address: cleanAddress,
         cod_amount: amountToCollect,
         note: courierInstructionPayload,
-        weight: parcelWeightKg,
+        weight: Number(parcelWeightKg.toFixed(2)),
       };
 
       let sfResponse = await fetch("https://packzy.com/api/v1/create_order", {
@@ -2339,7 +2354,7 @@ async function dispatchSingleOrderToCourier(params: {
           ? `${String(orderName || orderId).replace("#", "").trim()}-R${redispatchCount}`
           : String(orderName || orderId).replace("#", "").trim(),
         cash_collection_amount: String(amountToCollect),
-        parcel_weight: Math.max(100, Math.round(parcelWeightKg * 1000)),
+        parcel_weight: Math.max(500, Math.round(parcelWeightKg * 1000)),
         instruction: courierInstructionPayload,
         value: declaredParcelValue,
       };
@@ -2408,7 +2423,7 @@ async function dispatchSingleOrderToCourier(params: {
         recipient_address: cleanAddress,
         collectable_amount: amountToCollect,
         notes: courierInstructionPayload,
-        weight: parcelWeightKg,
+        weight: Number(parcelWeightKg.toFixed(2)),
       };
 
       const cbResponse = await fetch(`${baseUrl}/api/v1/orders`, {
@@ -2477,7 +2492,7 @@ async function dispatchSingleOrderToCourier(params: {
         recipient_address: cleanAddress,
         cod_amount: amountToCollect,
         instructions: courierInstructionPayload,
-        weight: parcelWeightKg,
+        weight: Number(parcelWeightKg.toFixed(2)),
       };
 
       const bahokResponse = await fetch(`${baseUrl}/api/v1/orders/create`, {
@@ -2632,6 +2647,7 @@ async function dispatchSingleOrderToCourier(params: {
       currencyCode,
       warehouseNote: effectiveWarehouseNote,
       lineItems,
+      weight: parcelWeightKg,
       bookedAt: bookedAtIso,
     },
   };
@@ -3079,7 +3095,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
               country
             }
             totalWeight
-            lineItems(first: 10) {
+            lineItems(first: 20) {
               edges {
                 node {
                   title
@@ -3093,9 +3109,18 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
                   }
                   variant {
                     id
+                    title
                     image {
                       url
                       altText
+                    }
+                    inventoryItem {
+                      measurement {
+                        weight {
+                          value
+                          unit
+                        }
+                      }
                     }
                   }
                   product {
@@ -3283,6 +3308,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
           item?.variant?.image?.url ||
           item?.product?.featuredImage?.url ||
           "";
+        const itemWeightKg = convertShopifyWeightToKg(
+          item?.variant?.inventoryItem?.measurement?.weight?.value,
+          item?.variant?.inventoryItem?.measurement?.weight?.unit
+        );
         return {
           title: item?.title || "",
           variantTitle: item?.variantTitle || "",
@@ -3293,8 +3322,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
             node?.totalPriceSet?.shopMoney?.amount ||
             "0.00",
           imageUrl,
-          weight: item?.variant?.weight !== undefined ? Number(item?.variant?.weight) : 0,
-          weightUnit: item?.variant?.weightUnit ? String(item?.variant?.weightUnit) : "kg",
+          weight: itemWeightKg,
+          weightUnit: "kg",
         };
       });
 
@@ -5306,6 +5335,12 @@ export default function OrdersFulfillmentPage() {
         warehouseNote:
           warehouseNotesByOrder[order.id] ?? order.warehouseNote,
         lineItems: order.lineItems,
+        weight: calculateOrderWeightKg({
+          lineItems: order.lineItems,
+          orderTotalWeight: order.totalWeight,
+          courierKey: chosenCourier,
+          storeConfig,
+        }),
         bookedAt: new Date().toISOString(),
         isCancelled: orderIsCancelled,
         cancelledAt: order.cancelledAt || null,
@@ -7558,7 +7593,7 @@ export default function OrdersFulfillmentPage() {
                                       whiteSpace: "nowrap",
                                     }}
                                   >
-                                    {totalItemsCount} Pcs
+                                    {totalItemsCount} Pcs{slip.weight ? ` • ${slip.weight} kg` : ""}
                                   </div>
                                 </div>
                               </div>
