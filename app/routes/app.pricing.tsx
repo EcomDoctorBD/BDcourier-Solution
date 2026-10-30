@@ -784,7 +784,7 @@ export default function PricingAndBillingPage() {
       ...tiers.map((t) => t.fulfillmentPrint),
     ],
     [
-      "Support & Financials",
+      "Support",
       ...tiers.map((t) => t.supportFinancials),
     ],
   ];
@@ -905,15 +905,18 @@ export default function PricingAndBillingPage() {
                     </Text>
                   </BlockStack>
 
-                  <Badge
-                    tone={
-                      subscription.billingStatus.includes("ACTIVE")
-                        ? "success"
-                        : "info"
-                    }
-                  >
-                    {subscription.billingStatus}
-                  </Badge>
+                  {subscription.currentPlan !== "Free" &&
+                    !subscription.billingStatus.includes("FREE PLAN") && (
+                      <Badge
+                        tone={
+                          subscription.billingStatus.includes("ACTIVE")
+                            ? "success"
+                            : "info"
+                        }
+                      >
+                        {subscription.billingStatus}
+                      </Badge>
+                    )}
                 </InlineStack>
               </InlineStack>
 
@@ -971,11 +974,10 @@ export default function PricingAndBillingPage() {
           <BlockStack gap="400">
             <BlockStack gap="100">
               <Text as="h2" variant="headingLg" fontWeight="bold">
-                Available SaaS Subscription Plans
+                Choose the Right Plan for Your Store
               </Text>
               <Text as="p" variant="bodyMd" tone="subdued">
-                Select your preferred billing interval and scale your logistics automation.
-                All paid plans are processed securely via official Shopify Billing.
+                Select your preferred billing cycle. All paid plans are billed securely through Shopify.
               </Text>
             </BlockStack>
 
@@ -1045,6 +1047,18 @@ export default function PricingAndBillingPage() {
               </div>
             </div>
 
+            <style>{`
+              .pricing-plan-card-wrapper,
+              .pricing-plan-card-wrapper > div,
+              .pricing-plan-card-wrapper [class*="ShadowBevel"],
+              .pricing-plan-card-wrapper [class*="Polaris-Box"] {
+                height: 100% !important;
+                display: flex !important;
+                flex-direction: column !important;
+                flex: 1 1 auto !important;
+              }
+            `}</style>
+
             <Grid columns={{ xs: 1, sm: 2, md: 3, lg: 3, xl: 3 }}>
               {tiers.map((tier) => {
                 const isActive =
@@ -1062,9 +1076,12 @@ export default function PricingAndBillingPage() {
                 return (
                   <Grid.Cell key={tier.id}>
                     <div
+                      className="pricing-plan-card-wrapper"
                       style={{
                         position: "relative",
                         height: "100%",
+                        display: "flex",
+                        flexDirection: "column",
                         overflow: "hidden",
                         borderRadius: "12px",
                       }}
@@ -1102,13 +1119,23 @@ export default function PricingAndBillingPage() {
                             : undefined
                         }
                       >
-                        <BlockStack gap="400">
+                        <div
+                          style={{
+                            height: "100%",
+                            display: "flex",
+                            flexDirection: "column",
+                            flex: "1 1 auto",
+                          }}
+                        >
                           {/* Tier Header & Clean Badges */}
                           <BlockStack gap="200">
-                            <InlineStack
-                              align="space-between"
-                              blockAlign="center"
-                              wrap
+                            <div
+                              style={{
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: "8px",
+                                flexWrap: "wrap",
+                              }}
                             >
                               <Text as="h3" variant="headingMd" fontWeight="bold">
                                 {tier.name}
@@ -1144,7 +1171,7 @@ export default function PricingAndBillingPage() {
                                   Popular
                                 </span>
                               ) : null}
-                            </InlineStack>
+                            </div>
 
                             {/* Large Target Font: prominent rate formatted as $X.XX /month */}
                             <div
@@ -1221,126 +1248,141 @@ export default function PricingAndBillingPage() {
                             </div>
                           </BlockStack>
 
-                        <Divider />
+                          <div style={{ margin: "16px 0" }}>
+                            <Divider />
+                          </div>
 
-                        {/* Structured Tier Features List */}
-                        <BlockStack gap="200">
-                          {tier.features.map((featureText) => (
-                            <InlineStack
-                              key={`${tier.id}-${featureText}`}
-                              gap="200"
-                              blockAlign="start"
-                              wrap={false}
-                            >
-                              <div
-                                style={{
-                                  width: "18px",
-                                  height: "18px",
-                                  minWidth: "18px",
-                                  display: "flex",
-                                  alignItems: "center",
-                                  justifyContent: "center",
-                                  marginTop: "2px",
-                                  flexShrink: 0,
-                                }}
+                          {/* Structured Tier Features List in flex: 1 container */}
+                          <div
+                            style={{
+                              flex: "1 1 auto",
+                              display: "flex",
+                              flexDirection: "column",
+                              gap: "8px",
+                            }}
+                          >
+                            {tier.features.map((featureText) => (
+                              <InlineStack
+                                key={`${tier.id}-${featureText}`}
+                                gap="200"
+                                blockAlign="start"
+                                wrap={false}
                               >
-                                <svg
-                                  viewBox="0 0 20 20"
-                                  fill="#202223"
-                                  width="18"
-                                  height="18"
-                                  aria-hidden="true"
+                                <div
+                                  style={{
+                                    width: "18px",
+                                    height: "18px",
+                                    minWidth: "18px",
+                                    display: "flex",
+                                    alignItems: "center",
+                                    justifyContent: "center",
+                                    marginTop: "2px",
+                                    flexShrink: 0,
+                                  }}
                                 >
-                                  <path
-                                    fillRule="evenodd"
-                                    d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm3.857-9.809a.75.75 0 0 0-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 1 0-1.06 1.061l2.5 2.5a.75.75 0 0 0 1.137-.089l4-5.5Z"
-                                    clipRule="evenodd"
-                                  />
-                                </svg>
-                              </div>
-                              <Text as="span" variant="bodySm">
-                                {featureText}
-                              </Text>
-                            </InlineStack>
-                          ))}
-                        </BlockStack>
+                                  <svg
+                                    viewBox="0 0 20 20"
+                                    fill="#202223"
+                                    width="18"
+                                    height="18"
+                                    aria-hidden="true"
+                                  >
+                                    <path
+                                      fillRule="evenodd"
+                                      d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm3.857-9.809a.75.75 0 0 0-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 1 0-1.06 1.061l2.5 2.5a.75.75 0 0 0 1.137-.089l4-5.5Z"
+                                      clipRule="evenodd"
+                                    />
+                                  </svg>
+                                </div>
+                                <Text as="span" variant="bodySm">
+                                  {featureText}
+                                </Text>
+                              </InlineStack>
+                            ))}
+                          </div>
 
-                        <Divider />
-
-                        {/* Upgrade / Subscribe / Active Action Button (Uniform Visual Hierarchy) */}
-                        <Box>
-                          {isActive ? (
-                            <button
-                              type="button"
-                              disabled
-                              className="w-full py-2.5 px-4 rounded-lg text-sm font-medium bg-gray-100 text-gray-500 border border-gray-200 cursor-default flex items-center justify-center transition-none"
-                              style={{
-                                width: "100%",
-                                padding: "10px 16px",
-                                borderRadius: "8px",
-                                fontSize: "14px",
-                                fontWeight: 600,
-                                border: "1px solid #E2E8F0",
-                                backgroundColor: "#F3F4F6",
-                                color: "#6B7280",
-                                cursor: "default",
-                                display: "flex",
-                                alignItems: "center",
-                                justifyContent: "center",
-                                boxShadow: "none",
-                                transition: "none",
-                              }}
-                            >
-                              Current Active Plan
-                            </button>
-                          ) : (
-                            <button
-                              type="button"
-                              disabled={isSubmittingThisTier}
-                              onClick={() => handleSelectPlan(tier.id)}
-                              className="w-full py-2.5 px-4 rounded-lg text-sm font-semibold bg-black text-white hover:bg-neutral-800 transition-all duration-150 cursor-pointer shadow-sm flex items-center justify-center gap-2"
-                              style={{
-                                width: "100%",
-                                padding: "10px 16px",
-                                borderRadius: "8px",
-                                fontSize: "14px",
-                                fontWeight: 600,
-                                cursor: isSubmittingThisTier ? "wait" : "pointer",
-                                transition: "all 0.15s ease-in-out",
-                                display: "flex",
-                                alignItems: "center",
-                                justifyContent: "center",
-                                gap: "8px",
-                                border: "none",
-                                backgroundColor: "#000000",
-                                color: "#FFFFFF",
-                                boxShadow: "0 1px 3px rgba(0, 0, 0, 0.2)",
-                              }}
-                              onMouseEnter={(e) => {
-                                if (!isSubmittingThisTier) {
-                                  e.currentTarget.style.backgroundColor = "#1F2937";
-                                }
-                              }}
-                              onMouseLeave={(e) => {
-                                if (!isSubmittingThisTier) {
-                                  e.currentTarget.style.backgroundColor = "#000000";
-                                }
-                              }}
-                            >
-                              {isSubmittingThisTier ? (
-                                <span>Processing...</span>
-                              ) : tier.id === "Free" ? (
-                                "Downgrade to Free"
+                          {/* Bottom Divider & Action Button aligned to bottom */}
+                          <div
+                            style={{
+                              marginTop: "auto",
+                              paddingTop: "16px",
+                            }}
+                          >
+                            <Divider />
+                            <div style={{ paddingTop: "16px" }}>
+                              {isActive ? (
+                                <button
+                                  type="button"
+                                  disabled
+                                  className="w-full py-2.5 px-4 rounded-lg text-sm font-medium bg-gray-100 text-gray-500 border border-gray-200 cursor-default flex items-center justify-center transition-none"
+                                  style={{
+                                    width: "100%",
+                                    padding: "10px 16px",
+                                    borderRadius: "8px",
+                                    fontSize: "14px",
+                                    fontWeight: 600,
+                                    border: "1px solid #E2E8F0",
+                                    backgroundColor: "#F3F4F6",
+                                    color: "#6B7280",
+                                    cursor: "default",
+                                    display: "flex",
+                                    alignItems: "center",
+                                    justifyContent: "center",
+                                    boxShadow: "none",
+                                    transition: "none",
+                                  }}
+                                >
+                                  Current Active Plan
+                                </button>
                               ) : (
-                                `Upgrade to ${tier.name} →`
+                                <button
+                                  type="button"
+                                  disabled={isSubmittingThisTier}
+                                  onClick={() => handleSelectPlan(tier.id)}
+                                  className="w-full py-2.5 px-4 rounded-lg text-sm font-semibold bg-black text-white hover:bg-neutral-800 transition-all duration-150 cursor-pointer shadow-sm flex items-center justify-center gap-2"
+                                  style={{
+                                    width: "100%",
+                                    padding: "10px 16px",
+                                    borderRadius: "8px",
+                                    fontSize: "14px",
+                                    fontWeight: 600,
+                                    cursor: isSubmittingThisTier ? "wait" : "pointer",
+                                    transition: "all 0.15s ease-in-out",
+                                    display: "flex",
+                                    alignItems: "center",
+                                    justifyContent: "center",
+                                    gap: "8px",
+                                    border: "none",
+                                    backgroundColor: "#000000",
+                                    color: "#FFFFFF",
+                                    boxShadow: "0 1px 3px rgba(0, 0, 0, 0.2)",
+                                  }}
+                                  onMouseEnter={(e) => {
+                                    if (!isSubmittingThisTier) {
+                                      e.currentTarget.style.backgroundColor = "#1F2937";
+                                    }
+                                  }}
+                                  onMouseLeave={(e) => {
+                                    if (!isSubmittingThisTier) {
+                                      e.currentTarget.style.backgroundColor = "#000000";
+                                    }
+                                  }}
+                                >
+                                  {isSubmittingThisTier ? (
+                                    <span>Processing...</span>
+                                  ) : tier.id === "Free" ? (
+                                    "Downgrade to Free"
+                                  ) : (
+                                    `Upgrade to ${tier.name} →`
+                                  )}
+                                </button>
                               )}
-                            </button>
-                          )}
-                        </Box>
-                      </BlockStack>
-                    </Card>
-                  </div>
-                </Grid.Cell>
+                            </div>
+                          </div>
+                        </div>
+                      </Card>
+                    </div>
+                  </Grid.Cell>
                 );
               })}
             </Grid>
@@ -1356,7 +1398,7 @@ export default function PricingAndBillingPage() {
                   Detailed Plan Comparison
                 </Text>
                 <Text as="p" variant="bodySm" tone="subdued">
-                  আমাদের ৬টি প্ল্যানের অর্ডার লিমিট, অটোমেটিক কুরিয়ার সিলেকশন, বাল্ক প্রসেসিং লিমিট, ফ্রড প্রটেকশন, প্যাকিং স্লিপ এবং ফিনান্সিয়াল সিঙ্ক-এর একটি তুলনামূলক বিবরণ।
+                  আমাদের প্রতিটি প্ল্যানের অর্ডার লিমিট, বাল্ক বুকিং, অটো কুরিয়ার সিলেকশন, ফ্রড চেক এবং প্রিন্ট টেমপ্লেটের তুলনামূলক তালিকা।
                 </Text>
               </BlockStack>
             </Box>
