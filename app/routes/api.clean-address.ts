@@ -17,7 +17,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   return json({
     status: "online",
-    service: "Delivery1 AI Address Correction & Caching Engine",
+    service: "SafeParcel BD AI Address Correction & Caching Engine",
   });
 };
 
