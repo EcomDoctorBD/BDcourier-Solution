@@ -4164,12 +4164,26 @@ export default function OrdersFulfillmentPage() {
   const submit = useSubmit();
   const navigation = useNavigation();
   const [searchParams, setSearchParams] = useSearchParams();
-  const urlTab = searchParams.get("tab") || "";
-  const initialTabId = urlTab || activeFilters?.tab || "new";
 
+  // Navigation states
   const isPaginating = navigation.state === "loading";
+  const isSubmitting = navigation.state === "submitting" || navigation.state === "loading";
+  const pendingActionType = navigation.formData?.get("actionType");
+  const isBulkSubmitting =
+    navigation.state === "submitting" &&
+    pendingActionType === "bulkBookCouriers";
+  const submittingOrderId = navigation.formData?.get("orderId");
 
-  // Core state declarations securely hoisted and initialized before handler bindings
+  // Fetchers
+  const fraudFetcher = useFetcher<any>();
+
+  // Synchronous lock refs
+  const isSubmittingRef = useRef(false);
+  const inFlightOrderIdRef = useRef<string | null>(null);
+  const fraudFetchTriggeredRef = useRef<Set<string>>(new Set());
+  const copyTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Core order selection & dispatch state
   const [selectedResources, setSelectedResources] = useState<string[]>([]);
   const [dispatchedOrders, setDispatchedOrders] = useState<
     Record<string, DispatchedSlipRecord>
@@ -4183,108 +4197,18 @@ export default function OrdersFulfillmentPage() {
   const [lockedRiskOrders, setLockedRiskOrders] = useState<
     Record<string, boolean>
   >({});
-  const [isUpdateStatusPopoverOpen, setIsUpdateStatusPopoverOpen] = useState(false);
-
-  // High-Speed Stage 2: Non-blocking Background Fraud Sync Fetcher
-  const fraudFetcher = useFetcher<any>();
-  const [liveFraudProfiles, setLiveFraudProfiles] = useState<Record<string, FraudStatsProfile>>({});
-  const fraudFetchTriggeredRef = useRef<Set<string>>(new Set());
-
-  useEffect(() => {
-    if (
-      fraudFetcher.data?.actionType === "syncBatchFraudProfiles" &&
-      fraudFetcher.data?.fraudProfiles
-    ) {
-      setLiveFraudProfiles((prev) => ({
-        ...prev,
-        ...fraudFetcher.data.fraudProfiles,
-      }));
-    }
-  }, [fraudFetcher.data]);
-
-  useEffect(() => {
-    const pendingPhones = displayedOrders
-      .filter((o) => {
-        const cleanP = sanitizeBangladeshPhone(o.customerPhone);
-        return (
-          o.fraudSyncPending &&
-          isValidBangladeshMobile(cleanP) &&
-          !liveFraudProfiles[cleanP] &&
-          !fraudFetchTriggeredRef.current.has(cleanP)
-        );
-      })
-      .map((o) => sanitizeBangladeshPhone(o.customerPhone));
-
-    const uniquePending = Array.from(new Set(pendingPhones)).slice(0, 50);
-    if (uniquePending.length > 0 && fraudFetcher.state === "idle") {
-      uniquePending.forEach((p) => fraudFetchTriggeredRef.current.add(p));
-      const fd = new FormData();
-      fd.append("actionType", "syncBatchFraudProfiles");
-      fd.append("phones", JSON.stringify(uniquePending));
-      fraudFetcher.submit(fd, { method: "post" });
-    }
-  }, [displayedOrders, liveFraudProfiles, fraudFetcher.state]);
-
-  useEffect(() => {
-    setSelectedResources([]);
-  }, [searchParams]);
-
-  const handleNextPage = useCallback(() => {
-    if (isPaginating || !pageInfo?.hasNextPage || !pageInfo?.endCursor) return;
-    const nextParams = new URLSearchParams(searchParams);
-    nextParams.set("cursor", pageInfo.endCursor);
-    nextParams.set("direction", "next");
-    nextParams.set("after", pageInfo.endCursor);
-    nextParams.delete("before");
-    setSearchParams(nextParams);
-  }, [isPaginating, pageInfo, searchParams, setSearchParams]);
-
-  const handlePreviousPage = useCallback(() => {
-    if (isPaginating || !pageInfo?.hasPreviousPage || !pageInfo?.startCursor) return;
-    const nextParams = new URLSearchParams(searchParams);
-    nextParams.set("cursor", pageInfo.startCursor);
-    nextParams.set("direction", "prev");
-    nextParams.set("before", pageInfo.startCursor);
-    nextParams.delete("after");
-    setSearchParams(nextParams);
-  }, [isPaginating, pageInfo, searchParams, setSearchParams]);
-
-  const handleBulkUpdateStatus = useCallback(
-    (targetStatus: "pending" | "cancelled") => {
-      if (selectedResources.length === 0) return;
-
-      setManualStatusOverrides((prev) => {
-        const next = { ...prev };
-        for (const id of selectedResources) {
-          next[id] = targetStatus;
-        }
-        return next;
-      });
-
-      setDispatchedOrders((prev) => {
-        const updated = { ...prev };
-        for (const id of selectedResources) {
-          if (updated[id]) {
-            updated[id] = {
-              ...updated[id],
-              courierStatus: targetStatus,
-            };
-          }
-        }
-        return updated;
-      });
-
-      setSelectedResources([]);
-    },
-    [selectedResources]
-  );
   const [selectedCouriersByOrder, setSelectedCouriersByOrder] = useState<
     Record<string, string>
   >({});
   const [warehouseNotesByOrder, setWarehouseNotesByOrder] = useState<
     Record<string, string>
   >({});
+  const [customCodAmountsByOrder, setCustomCodAmountsByOrder] = useState<
+    Record<string, string>
+  >({});
+  const [showCodEdit, setShowCodEdit] = useState<Record<string, boolean>>({});
 
+  // Manual location overrides
   const [manualCityIds, setManualCityIds] = useState<Record<string, string>>({});
   const [manualZoneIds, setManualZoneIds] = useState<Record<string, string>>({});
   const [manualAreaIds, setManualAreaIds] = useState<Record<string, string>>({});
@@ -4292,11 +4216,22 @@ export default function OrdersFulfillmentPage() {
   const [showLocationOverride, setShowLocationOverride] = useState<
     Record<string, boolean>
   >({});
+
+  // Live fraud profiles state (Stage 2 background sync)
+  const [liveFraudProfiles, setLiveFraudProfiles] = useState<Record<string, FraudStatsProfile>>({});
+
+  // Printing & packing slip states
   const [batchPrintSlips, setBatchPrintSlips] = useState<DispatchedSlipRecord[]>([]);
   const [showPackingSlipView, setShowPackingSlipView] = useState(false);
-  const [customCodAmountsByOrder, setCustomCodAmountsByOrder] = useState<Record<string, string>>({});
-  const [showCodEdit, setShowCodEdit] = useState<Record<string, boolean>>({});
+  const [showLabelConfigError, setShowLabelConfigError] = useState(false);
+  const [showInvoiceConfigError, setShowInvoiceConfigError] = useState(false);
+  const [showCancelledOrdersPrintWarning, setShowCancelledOrdersPrintWarning] = useState(false);
+  const [isPrintPopoverActive, setIsPrintPopoverActive] = useState(false);
+  const [printDocumentMode, setPrintDocumentMode] = useState<
+    "labels_4x6" | "invoices_a4"
+  >("invoices_a4");
 
+  // Plan & template states
   const planNormalized = usageSummary.currentPlan.toLowerCase();
   const isFreePlan = planNormalized === "free";
   const isEnterprisePlan = planNormalized === "enterprise";
@@ -4333,108 +4268,15 @@ export default function OrdersFulfillmentPage() {
     shippingLabelConfig?.brandLogo ||
     "";
 
-  // Standalone printing configuration error banner states
-  const [showLabelConfigError, setShowLabelConfigError] = useState(false);
-  const [showInvoiceConfigError, setShowInvoiceConfigError] = useState(false);
-  // Point 7 Cancelled Orders Printing Security banner state
-  const [showCancelledOrdersPrintWarning, setShowCancelledOrdersPrintWarning] = useState(false);
-
-  // Secondary dropdown for batch document printing (4x6 Shipping Labels vs A4 Invoices)
-  const [isPrintPopoverActive, setIsPrintPopoverActive] = useState(false);
-  const [printDocumentMode, setPrintDocumentMode] = useState<
-    "labels_4x6" | "invoices_a4"
-  >("invoices_a4");
-
+  // UI feedback & dialogs
   const [showBanner, setShowBanner] = useState(false);
   const [clientBatchError, setClientBatchError] = useState<string | null>(null);
-
   const [phoneCopiedToast, setPhoneCopiedToast] = useState(false);
-  const copyTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const [isUpdateStatusPopoverOpen, setIsUpdateStatusPopoverOpen] = useState(false);
 
-  // Advanced Audit Point 3: Immediate synchronous lock refs against rapid double-clicks
-  const isSubmittingRef = useRef(false);
-  const inFlightOrderIdRef = useRef<string | null>(null);
-
-  useEffect(() => {
-    if (navigation.state === "idle") {
-      isSubmittingRef.current = false;
-      inFlightOrderIdRef.current = null;
-    }
-  }, [navigation.state]);
-
-  const handleCopyPhone = useCallback((phone: string, e?: React.MouseEvent) => {
-    if (e) e.stopPropagation();
-    if (!phone) return;
-    const cleanNumber = sanitizeBangladeshPhone(phone) || phone.trim();
-    if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
-      navigator.clipboard.writeText(cleanNumber).catch(() => {});
-    }
-    setPhoneCopiedToast(true);
-    if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current);
-    copyTimeoutRef.current = setTimeout(() => {
-      setPhoneCopiedToast(false);
-    }, 3000);
-  }, []);
-
-  useEffect(() => {
-    return () => {
-      if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current);
-    };
-  }, []);
-
-  useEffect(() => {
-    if (invoiceConfig?.invoiceTemplate) {
-      setSelectedSlipTemplate(invoiceConfig.invoiceTemplate);
-    }
-  }, [invoiceConfig?.invoiceTemplate]);
-
-  useEffect(() => {
-    if (isFreePlan) {
-      setSelectedSlipTemplate("classic");
-    } else if (!isEnterprisePlan && selectedSlipTemplate === "warehouse") {
-      setSelectedSlipTemplate("modern");
-    }
-  }, [isFreePlan, isEnterprisePlan, selectedSlipTemplate]);
-
-  useEffect(() => {
-    if (actionData) {
-      setShowBanner(true);
-      setClientBatchError(null);
-      if (actionData.isRiskyLocked && (actionData as any).orderId) {
-        setLockedRiskOrders((prev) => ({
-          ...prev,
-          [(actionData as any).orderId]: true,
-        }));
-      }
-      if (Array.isArray((actionData as any).lockedOrderIds)) {
-        setLockedRiskOrders((prev) => {
-          const updated = { ...prev };
-          for (const id of (actionData as any).lockedOrderIds) {
-            updated[id] = true;
-          }
-          return updated;
-        });
-      }
-      if (
-        actionData.success &&
-        Array.isArray(actionData.bookedSlips) &&
-        actionData.bookedSlips.length > 0
-      ) {
-        setDispatchedOrders((prev) => {
-          const updated = { ...prev };
-          for (const slip of actionData.bookedSlips) {
-            updated[slip.orderId] = slip;
-          }
-          return updated;
-        });
-        setBatchPrintSlips(actionData.bookedSlips);
-        setSelectedResources([]);
-        setShowPackingSlipView(true);
-      }
-    }
-  }, [actionData]);
-
-  // 1. Filter Controls & States
+  // Search, tabs, and date filtering states
+  const urlTab = searchParams.get("tab") || "";
+  const initialTabId = urlTab || activeFilters?.tab || "new";
   const [searchQuery, setSearchQuery] = useState(
     searchParams.get("q") || activeFilters?.q || ""
   );
@@ -4459,16 +4301,397 @@ export default function OrdersFulfillmentPage() {
     }
     return "📅 All time";
   });
-
   const [{ month: pickerMonth, year: pickerYear }, setPickerMonthYear] = useState(() => {
     const d = dateRange?.start || new Date();
     return { month: d.getMonth(), year: d.getFullYear() };
   });
 
-  useEffect(() => {
-    const target = urlTab || "new";
-    setSelectedTabId(target);
-  }, [urlTab]);
+  // Pure Predicate Callbacks
+  const isOrderCancelledRecord = useCallback((order: any): boolean =>
+    Boolean(
+      order?.cancelReason ||
+      order?.cancelledAt ||
+      order?.isCancelled ||
+      order?.displayFulfillmentStatus === "CANCELLED" ||
+      order?.fulfillmentStatus === "CANCELLED" ||
+      order?.status?.toLowerCase() === "cancelled"
+    ), []);
+
+  const checkIsLocked = useCallback(
+    (order: NormalizedOrder) => {
+      const orderPhoneKey = sanitizeBangladeshPhone(order.customerPhone);
+      const activeStats = liveFraudProfiles[orderPhoneKey] || order.fraudStats;
+      return (
+        Boolean(
+          activeStats &&
+            activeStats.totalOrders > 0 &&
+            activeStats.successRate < (routingConfig.minSuccessRate || 70)
+        ) &&
+        (order.isRiskyLocked || Boolean(lockedRiskOrders[order.id])) &&
+        !manuallyUnlockedOrders[order.id]
+      );
+    },
+    [routingConfig.minSuccessRate, lockedRiskOrders, manuallyUnlockedOrders, liveFraudProfiles]
+  );
+
+  const matchesTab = useCallback(
+    (order: NormalizedOrder, tabId: string) => {
+      const manualStatus = manualStatusOverrides[order.id];
+      const dispatched = dispatchedOrders[order.id];
+      const courierStatus = (
+        manualStatus ||
+        dispatched?.courierStatus ||
+        order.reconciliation?.courierStatus ||
+        ""
+      ).toLowerCase();
+      const isLocked = checkIsLocked(order);
+
+      const isCancelledOrder =
+        Boolean(order.isCancelled) ||
+        order.financialStatus?.toUpperCase() === "VOIDED" ||
+        order.displayFinancialStatus?.toUpperCase() === "VOIDED" ||
+        order.fulfillmentStatus?.toUpperCase() === "CANCELLED" ||
+        courierStatus === "cancelled";
+
+      const isClosedOrder =
+        Boolean(order.isClosed) ||
+        order.fulfillmentStatus?.toUpperCase() === "CLOSED";
+
+      const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+
+      switch (tabId) {
+        case "all":
+          return true;
+        case "new":
+          return (
+            !dispatched &&
+            !order.isCancelled &&
+            !order.isClosed &&
+            !isCancelledOrder &&
+            !isClosedOrder &&
+            !isLocked &&
+            !["accepted", "processing", "in_review", "pending", "hold"].includes(courierStatus) &&
+            (order.fulfillmentStatus?.toUpperCase() === "UNFULFILLED" ||
+              !order.fulfillmentStatus)
+          );
+        case "accepted":
+          if (isCancelledOrder || isClosedOrder) return false;
+          return (
+            Boolean(dispatched) &&
+            (courierStatus === "accepted" ||
+              courierStatus === "in_review" ||
+              courierStatus === "processing" ||
+              courierStatus === "pending" ||
+              courierStatus === "" ||
+              !courierStatus)
+          );
+        case "pending":
+          if (isCancelledOrder || isClosedOrder || Boolean(dispatched)) return false;
+          return isLocked || courierStatus === "pending" || courierStatus === "hold";
+        case "shipping":
+          if (isCancelledOrder || isClosedOrder) return false;
+          return (
+            Boolean(dispatched) &&
+            courierStatus !== "delivered" &&
+            courierStatus !== "returned" &&
+            courierStatus !== "cancelled" &&
+            order.fulfillmentStatus?.toUpperCase() !== "FULFILLED"
+          );
+        case "delivered":
+          if (isCancelledOrder) return false;
+          return (
+            Boolean(dispatched) &&
+            (courierStatus === "delivered" ||
+              order.fulfillmentStatus?.toUpperCase() === "FULFILLED" ||
+              Boolean(order.reconciliation?.autoSyncedPaidFulfilled))
+          );
+        case "cancelled":
+          return isCancelledOrder;
+        case "returned":
+          if (isCancelledOrder) return false;
+          return courierStatus === "returned";
+        case "partially_delivered":
+          if (isCancelledOrder) return false;
+          return (
+            courierStatus === "partially_delivered" ||
+            courierStatus.includes("partial")
+          );
+        case "paid_returned":
+          if (isCancelledOrder) return false;
+          return (
+            courierStatus === "paid_returned" ||
+            (courierStatus === "returned" &&
+              Boolean(order.reconciliation?.courierCashCollected) &&
+              order.reconciliation?.courierCashCollected !== "0.00")
+          );
+        case "old_orders": {
+          const orderTime = new Date(order.createdAt).getTime();
+          const isOlderThan7Days = orderTime < sevenDaysAgo;
+          const isProcessedTerminal =
+            Boolean(dispatched) ||
+            isCancelledOrder ||
+            isClosedOrder ||
+            order.fulfillmentStatus?.toUpperCase() === "FULFILLED" ||
+            Boolean(order.reconciliation?.autoSyncedPaidFulfilled) ||
+            ["delivered", "returned", "cancelled", "paid_returned"].includes(courierStatus);
+
+          return (
+            Boolean(order.isClosed) ||
+            isClosedOrder ||
+            order.fulfillmentStatus?.toUpperCase() === "FULFILLED" ||
+            Boolean(order.reconciliation?.autoSyncedPaidFulfilled) ||
+            (isOlderThan7Days && isProcessedTerminal)
+          );
+        }
+        default:
+          return true;
+      }
+    },
+    [dispatchedOrders, checkIsLocked, manualStatusOverrides]
+  );
+
+  // Tab Definitions & Tab Count Pipeline
+  const tabDefinitions = useMemo(
+    () => [
+      { id: "all", content: "All" },
+      { id: "new", content: "New" },
+      { id: "accepted", content: "Accepted" },
+      { id: "pending", content: "Pending" },
+      { id: "shipping", content: "Shipping" },
+      { id: "delivered", content: "Delivered" },
+      { id: "cancelled", content: "Cancelled" },
+      { id: "returned", content: "Returned" },
+      { id: "partially_delivered", content: "Partially Delivered" },
+      { id: "paid_returned", content: "Paid Returned" },
+      { id: "old_orders", content: "Old Orders" },
+    ],
+    []
+  );
+
+  const tabCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const tab of tabDefinitions) {
+      counts[tab.id] = orders.filter((o) => matchesTab(o, tab.id)).length;
+    }
+    return counts;
+  }, [orders, tabDefinitions, matchesTab]);
+
+  const tabsList = useMemo(
+    () =>
+      tabDefinitions.map((tab) => ({
+        id: tab.id,
+        content: tab.content,
+        badge: String(tabCounts[tab.id] ?? 0),
+      })),
+    [tabDefinitions, tabCounts]
+  );
+
+  const selectedTabIndex = useMemo(() => {
+    const idx = tabDefinitions.findIndex((t) => t.id === selectedTabId);
+    return idx >= 0 ? idx : 1; // Default to 'new' (index 1)
+  }, [tabDefinitions, selectedTabId]);
+
+  // Tier 1 Non-Destructive Filter Pipeline (displayedOrders)
+  const displayedOrders = useMemo(() => {
+    return orders.filter((order) => {
+      // 1. Search Query Filter (Phone, Order Name, Customer Name, Address, Tracking)
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase().trim();
+        const cleanQ = convertBengaliDigitsToAscii(q).trim().toLowerCase();
+        const qDigits = cleanQ.replace(/\D/g, "");
+        const dispatched = dispatchedOrders[order.id];
+        const matchesName = order.name.toLowerCase().includes(q);
+        const phoneDigits = sanitizeBangladeshPhone(order.customerPhone);
+        const matchesPhone = qDigits.length > 0 && phoneDigits.includes(qDigits);
+        const matchesCustomer = order.customerName.toLowerCase().includes(q);
+        const matchesAddress = order.shippingAddress.toLowerCase().includes(q);
+        const matchesTracking = Boolean(
+          dispatched?.trackingNumber?.toLowerCase().includes(q)
+        );
+
+        if (
+          !matchesName &&
+          !matchesPhone &&
+          !matchesCustomer &&
+          !matchesAddress &&
+          !matchesTracking
+        ) {
+          return false;
+        }
+      }
+
+      // 2. Active Tab Status Filter
+      if (!matchesTab(order, selectedTabId)) {
+        return false;
+      }
+
+      // 3. Date Range Selector Filter (Bypassed for "new" tab to maintain perpetual unhandled visibility)
+      if (selectedTabId !== "new" && dateRange && (dateRange.start || dateRange.end)) {
+        const orderTime = new Date(order.createdAt).getTime();
+        if (dateRange.start && orderTime < dateRange.start.getTime()) {
+          return false;
+        }
+        if (dateRange.end && orderTime > dateRange.end.getTime()) {
+          return false;
+        }
+      }
+
+      return true;
+    });
+  }, [orders, searchQuery, selectedTabId, dateRange, matchesTab, dispatchedOrders]);
+
+  const riskyOrdersCount = useMemo(
+    () =>
+      displayedOrders.filter(
+        (o) =>
+          Boolean(
+            o.fraudStats &&
+              o.fraudStats.totalOrders > 0 &&
+              o.fraudStats.successRate < (routingConfig.minSuccessRate || 70)
+          ) &&
+          (o.isRiskyLocked || Boolean(lockedRiskOrders[o.id])) &&
+          !manuallyUnlockedOrders[o.id]
+      ).length,
+    [displayedOrders, routingConfig.minSuccessRate, lockedRiskOrders, manuallyUnlockedOrders]
+  );
+
+  // Courier Selection Options & Meta
+  const courierSelectOptions = useMemo(() => {
+    const list: Array<{ label: string; value: string; disabled?: boolean }> = [];
+    if (activeCouriers.pathao) {
+      list.push({ label: "Pathao Courier", value: "pathao" });
+    }
+    if (activeCouriers.steadfast) {
+      list.push({ label: "Steadfast Courier", value: "steadfast" });
+    }
+    if (activeCouriers.redx) {
+      list.push({ label: "RedX Delivery", value: "redx" });
+    }
+    if (activeCouriers.carrybee) {
+      list.push({ label: "CarryBee", value: "carrybee" });
+    }
+    if (activeCouriers.bahok) {
+      list.push({ label: "Bahok Courier", value: "bahok" });
+    }
+
+    if (list.length === 0) {
+      return [{ label: "No active courier configured", value: "", disabled: true }];
+    }
+
+    return list;
+  }, [activeCouriers]);
+
+  const hasActiveCouriers = useMemo(
+    () => courierSelectOptions.some((opt) => !opt.disabled && opt.value !== ""),
+    [courierSelectOptions]
+  );
+
+  const fallbackCourierOptions = useMemo(() => [
+    { label: "Pathao Courier", value: "pathao" },
+    { label: "Steadfast Courier", value: "steadfast" },
+    { label: "RedX Delivery", value: "redx" },
+    { label: "CarryBee", value: "carrybee" },
+    { label: "Bahok Courier", value: "bahok" },
+  ], []);
+
+  const templateSelectorOptions = useMemo(() => [
+    {
+      label: "1. Classic Minimalist (Standard Clean Invoice)",
+      value: "classic",
+    },
+    {
+      label: isFreePlan
+        ? "2. Modern Pro (🔒 Upgrade to Growth / Pro)"
+        : "2. Modern Pro (Dynamic Accent & Visual Product Table)",
+      value: "modern",
+      disabled: isFreePlan,
+    },
+    {
+      label: isEnterprisePlan
+        ? "3. Warehouse Fulfillment (Enterprise Mode — Industrial Pick/Pack)"
+        : "3. Warehouse Fulfillment (🔒 Upgrade to Enterprise)",
+      value: "warehouse",
+      disabled: !isEnterprisePlan,
+    },
+  ], [isFreePlan, isEnterprisePlan]);
+
+  const isCourierActive = useCallback((courierNameOrKey?: string | null) => {
+    if (!courierNameOrKey) return false;
+    const c = courierNameOrKey.toLowerCase();
+    if (c.includes("pathao")) return activeCouriers.pathao;
+    if (c.includes("steadfast")) return activeCouriers.steadfast;
+    if (c.includes("redx")) return activeCouriers.redx;
+    if (c.includes("carrybee")) return activeCouriers.carrybee;
+    if (c.includes("bahok")) return activeCouriers.bahok;
+    return false;
+  }, [activeCouriers]);
+
+  const COURIER_META = useMemo(() => [
+    { key: "pathao", name: "Pathao", active: Boolean(activeCouriers.pathao) },
+    { key: "steadfast", name: "Steadfast", active: Boolean(activeCouriers.steadfast) },
+    { key: "redx", name: "RedX", active: Boolean(activeCouriers.redx) },
+    { key: "carrybee", name: "CarryBee", active: Boolean(activeCouriers.carrybee) },
+    { key: "bahok", name: "Bahok", active: Boolean(activeCouriers.bahok) },
+  ], [activeCouriers]);
+
+  const activeCourierList = useMemo(() => COURIER_META.filter((c) => c.active), [COURIER_META]);
+  const preferredCourierKey = String(routingConfig?.defaultCourier || "").toLowerCase();
+  const configuredCouriers = useMemo(() => [...activeCourierList].sort((a, b) => {
+    if (a.key === preferredCourierKey) return -1;
+    if (b.key === preferredCourierKey) return 1;
+    return 0;
+  }), [activeCourierList, preferredCourierKey]);
+
+  const bookedSlipsList =
+    batchPrintSlips.length > 0
+      ? batchPrintSlips
+      : Object.values(dispatchedOrders);
+
+  const isBatchOverPlanCap =
+    !usageSummary.isUnlimitedBulk &&
+    selectedResources.length > usageSummary.bulkBatchLimit;
+
+  // Handler Callbacks
+  const handleNextPage = useCallback(() => {
+    if (isPaginating || !pageInfo?.hasNextPage || !pageInfo?.endCursor) return;
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.set("cursor", pageInfo.endCursor);
+    nextParams.set("direction", "next");
+    nextParams.set("after", pageInfo.endCursor);
+    nextParams.delete("before");
+    setSearchParams(nextParams);
+  }, [isPaginating, pageInfo, searchParams, setSearchParams]);
+
+  const handlePreviousPage = useCallback(() => {
+    if (isPaginating || !pageInfo?.hasPreviousPage || !pageInfo?.startCursor) return;
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.set("cursor", pageInfo.startCursor);
+    nextParams.set("direction", "prev");
+    nextParams.set("before", pageInfo.startCursor);
+    nextParams.delete("after");
+    setSearchParams(nextParams);
+  }, [isPaginating, pageInfo, searchParams, setSearchParams]);
+
+  const handleTabSelect = useCallback(
+    (index: number) => {
+      const targetTab = tabDefinitions[index]?.id || "new";
+      setSelectedTabId(targetTab);
+
+      // Sync URL parameters and reset pagination cursors
+      const nextParams = new URLSearchParams(searchParams);
+      nextParams.delete("cursor");
+      nextParams.delete("direction");
+      nextParams.delete("after");
+      nextParams.delete("before");
+      if (targetTab === "new") {
+        nextParams.delete("tab");
+      } else {
+        nextParams.set("tab", targetTab);
+      }
+      setSearchParams(nextParams, { replace: true });
+    },
+    [tabDefinitions, searchParams, setSearchParams]
+  );
 
   const handleMonthChange = useCallback((month: number, year: number) => {
     setPickerMonthYear({ month, year });
@@ -4629,261 +4852,6 @@ export default function OrdersFulfillmentPage() {
     }
   }, [searchParams, setSearchParams]);
 
-  const checkIsLocked = useCallback(
-    (order: NormalizedOrder) => {
-      return (
-        Boolean(
-          order.fraudStats &&
-            order.fraudStats.totalOrders > 0 &&
-            order.fraudStats.successRate < (routingConfig.minSuccessRate || 70)
-        ) &&
-        (order.isRiskyLocked || Boolean(lockedRiskOrders[order.id])) &&
-        !manuallyUnlockedOrders[order.id]
-      );
-    },
-    [routingConfig.minSuccessRate, lockedRiskOrders, manuallyUnlockedOrders]
-  );
-
-  const matchesTab = useCallback(
-    (order: NormalizedOrder, tabId: string) => {
-      const manualStatus = manualStatusOverrides[order.id];
-      const dispatched = dispatchedOrders[order.id];
-      const courierStatus = (
-        manualStatus ||
-        dispatched?.courierStatus ||
-        order.reconciliation?.courierStatus ||
-        ""
-      ).toLowerCase();
-      const isLocked = checkIsLocked(order);
-
-      const isCancelledOrder =
-        Boolean(order.isCancelled) ||
-        order.financialStatus?.toUpperCase() === "VOIDED" ||
-        order.displayFinancialStatus?.toUpperCase() === "VOIDED" ||
-        order.fulfillmentStatus?.toUpperCase() === "CANCELLED" ||
-        courierStatus === "cancelled";
-
-      const isClosedOrder =
-        Boolean(order.isClosed) ||
-        order.fulfillmentStatus?.toUpperCase() === "CLOSED";
-
-      const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
-
-      switch (tabId) {
-        case "all":
-          // Unrestricted All tab: renders all recent active orders regardless of age
-          return true;
-        case "new":
-          return (
-            !dispatched &&
-            !order.isCancelled &&
-            !order.isClosed &&
-            !isCancelledOrder &&
-            !isClosedOrder &&
-            !isLocked &&
-            !["accepted", "processing", "in_review", "pending", "hold"].includes(courierStatus) &&
-            (order.fulfillmentStatus?.toUpperCase() === "UNFULFILLED" ||
-              !order.fulfillmentStatus)
-          );
-        case "accepted":
-          if (isCancelledOrder || isClosedOrder) return false;
-          return (
-            Boolean(dispatched) &&
-            (courierStatus === "accepted" ||
-              courierStatus === "in_review" ||
-              courierStatus === "processing" ||
-              courierStatus === "pending" ||
-              courierStatus === "" ||
-              !courierStatus)
-          );
-        case "pending":
-          if (isCancelledOrder || isClosedOrder || Boolean(dispatched)) return false;
-          return isLocked || courierStatus === "pending" || courierStatus === "hold";
-        case "shipping":
-          if (isCancelledOrder || isClosedOrder) return false;
-          return (
-            Boolean(dispatched) &&
-            courierStatus !== "delivered" &&
-            courierStatus !== "returned" &&
-            courierStatus !== "cancelled" &&
-            order.fulfillmentStatus?.toUpperCase() !== "FULFILLED"
-          );
-        case "delivered":
-          if (isCancelledOrder) return false;
-          return (
-            Boolean(dispatched) &&
-            (courierStatus === "delivered" ||
-              order.fulfillmentStatus?.toUpperCase() === "FULFILLED" ||
-              Boolean(order.reconciliation?.autoSyncedPaidFulfilled))
-          );
-        case "cancelled":
-          // Unrestricted Cancelled tab: renders any cancelled or voided order in memory regardless of age
-          return isCancelledOrder;
-        case "returned":
-          if (isCancelledOrder) return false;
-          return courierStatus === "returned";
-        case "partially_delivered":
-          if (isCancelledOrder) return false;
-          return (
-            courierStatus === "partially_delivered" ||
-            courierStatus.includes("partial")
-          );
-        case "paid_returned":
-          if (isCancelledOrder) return false;
-          return (
-            courierStatus === "paid_returned" ||
-            (courierStatus === "returned" &&
-              Boolean(order.reconciliation?.courierCashCollected) &&
-              order.reconciliation?.courierCashCollected !== "0.00")
-          );
-        case "old_orders": {
-          const orderTime = new Date(order.createdAt).getTime();
-          const isOlderThan7Days = orderTime < sevenDaysAgo;
-          const isProcessedTerminal =
-            Boolean(dispatched) ||
-            isCancelledOrder ||
-            isClosedOrder ||
-            order.fulfillmentStatus?.toUpperCase() === "FULFILLED" ||
-            Boolean(order.reconciliation?.autoSyncedPaidFulfilled) ||
-            ["delivered", "returned", "cancelled", "paid_returned"].includes(courierStatus);
-
-          return (
-            Boolean(order.isClosed) ||
-            isClosedOrder ||
-            order.fulfillmentStatus?.toUpperCase() === "FULFILLED" ||
-            Boolean(order.reconciliation?.autoSyncedPaidFulfilled) ||
-            (isOlderThan7Days && isProcessedTerminal)
-          );
-        }
-        default:
-          return true;
-      }
-    },
-    [dispatchedOrders, checkIsLocked, manualStatusOverrides]
-  );
-
-  // Exact 11 Functional Tabs
-  const tabDefinitions = useMemo(
-    () => [
-      { id: "all", content: "All" },
-      { id: "new", content: "New" },
-      { id: "accepted", content: "Accepted" },
-      { id: "pending", content: "Pending" },
-      { id: "shipping", content: "Shipping" },
-      { id: "delivered", content: "Delivered" },
-      { id: "cancelled", content: "Cancelled" },
-      { id: "returned", content: "Returned" },
-      { id: "partially_delivered", content: "Partially Delivered" },
-      { id: "paid_returned", content: "Paid Returned" },
-      { id: "old_orders", content: "Old Orders" },
-    ],
-    []
-  );
-
-  const tabCounts = useMemo(() => {
-    const counts: Record<string, number> = {};
-    for (const tab of tabDefinitions) {
-      counts[tab.id] = orders.filter((o) => matchesTab(o, tab.id)).length;
-    }
-    return counts;
-  }, [orders, tabDefinitions, matchesTab]);
-
-  const tabsList = useMemo(
-    () =>
-      tabDefinitions.map((tab) => ({
-        id: tab.id,
-        content: tab.content,
-        badge: String(tabCounts[tab.id] ?? 0),
-      })),
-    [tabDefinitions, tabCounts]
-  );
-
-  const selectedTabIndex = useMemo(() => {
-    const idx = tabDefinitions.findIndex((t) => t.id === selectedTabId);
-    return idx >= 0 ? idx : 1; // Default to 'new' (index 1)
-  }, [tabDefinitions, selectedTabId]);
-
-  const handleTabSelect = useCallback(
-    (index: number) => {
-      const targetTab = tabDefinitions[index]?.id || "new";
-      setSelectedTabId(targetTab);
-
-      // Sync URL parameters and reset pagination cursors
-      const nextParams = new URLSearchParams(searchParams);
-      nextParams.delete("cursor");
-      nextParams.delete("direction");
-      nextParams.delete("after");
-      nextParams.delete("before");
-      if (targetTab === "new") {
-        nextParams.delete("tab");
-      } else {
-        nextParams.set("tab", targetTab);
-      }
-      setSearchParams(nextParams, { replace: true });
-    },
-    [tabDefinitions, searchParams, setSearchParams]
-  );
-
-  // 2. Tier 1 Non-Destructive Filter Pipeline
-  const displayedOrders = useMemo(() => {
-    return orders.filter((order) => {
-      // 1. Search Query Filter (Phone, Order Name, Customer Name, Address, Tracking)
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase().trim();
-        const cleanQ = convertBengaliDigitsToAscii(q).trim().toLowerCase();
-        const qDigits = cleanQ.replace(/\D/g, "");
-        const dispatched = dispatchedOrders[order.id];
-        const matchesName = order.name.toLowerCase().includes(q);
-        const phoneDigits = sanitizeBangladeshPhone(order.customerPhone);
-        const matchesPhone = qDigits.length > 0 && phoneDigits.includes(qDigits);
-        const matchesCustomer = order.customerName.toLowerCase().includes(q);
-        const matchesAddress = order.shippingAddress.toLowerCase().includes(q);
-        const matchesTracking = Boolean(
-          dispatched?.trackingNumber?.toLowerCase().includes(q)
-        );
-
-        if (
-          !matchesName &&
-          !matchesPhone &&
-          !matchesCustomer &&
-          !matchesAddress &&
-          !matchesTracking
-        ) {
-          return false;
-        }
-      }
-
-      // 2. Active Tab Status Filter
-      if (!matchesTab(order, selectedTabId)) {
-        return false;
-      }
-
-      // 3. Date Range Selector Filter (Bypassed for "new" tab to maintain perpetual unhandled visibility)
-      if (selectedTabId !== "new" && dateRange && (dateRange.start || dateRange.end)) {
-        const orderTime = new Date(order.createdAt).getTime();
-        if (dateRange.start && orderTime < dateRange.start.getTime()) {
-          return false;
-        }
-        if (dateRange.end && orderTime > dateRange.end.getTime()) {
-          return false;
-        }
-      }
-
-      return true;
-    });
-  }, [orders, searchQuery, selectedTabId, dateRange, matchesTab, dispatchedOrders]);
-
-  const riskyOrdersCount = displayedOrders.filter(
-    (o) =>
-      Boolean(
-        o.fraudStats &&
-        o.fraudStats.totalOrders > 0 &&
-        o.fraudStats.successRate < (routingConfig.minSuccessRate || 70)
-      ) &&
-      (o.isRiskyLocked || Boolean(lockedRiskOrders[o.id])) &&
-      !manuallyUnlockedOrders[o.id]
-  ).length;
-
   const handleSelectionChange = useCallback(
     (
       selectionType: string,
@@ -4913,74 +4881,58 @@ export default function OrdersFulfillmentPage() {
     [displayedOrders]
   );
 
-  const toggleSingleRowCheckbox = (orderId: string, checked: boolean) => {
+  const toggleSingleRowCheckbox = useCallback((orderId: string, checked: boolean) => {
     setClientBatchError(null);
     setSelectedResources((prev) =>
       checked ? [...prev, orderId] : prev.filter((id) => id !== orderId)
     );
-  };
+  }, []);
 
-  const courierSelectOptions = useMemo(() => {
-    const list: Array<{ label: string; value: string; disabled?: boolean }> = [];
-    if (activeCouriers.pathao) {
-      list.push({ label: "Pathao Courier", value: "pathao" });
+  const handleCopyPhone = useCallback((phone: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    if (!phone) return;
+    const cleanNumber = sanitizeBangladeshPhone(phone) || phone.trim();
+    if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(cleanNumber).catch(() => {});
     }
-    if (activeCouriers.steadfast) {
-      list.push({ label: "Steadfast Courier", value: "steadfast" });
-    }
-    if (activeCouriers.redx) {
-      list.push({ label: "RedX Delivery", value: "redx" });
-    }
-    if (activeCouriers.carrybee) {
-      list.push({ label: "CarryBee", value: "carrybee" });
-    }
-    if (activeCouriers.bahok) {
-      list.push({ label: "Bahok Courier", value: "bahok" });
-    }
+    setPhoneCopiedToast(true);
+    if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current);
+    copyTimeoutRef.current = setTimeout(() => {
+      setPhoneCopiedToast(false);
+    }, 3000);
+  }, []);
 
-    if (list.length === 0) {
-      return [{ label: "No active courier configured", value: "", disabled: true }];
-    }
+  const handleBulkUpdateStatus = useCallback(
+    (targetStatus: "pending" | "cancelled") => {
+      if (selectedResources.length === 0) return;
 
-    return list;
-  }, [activeCouriers]);
+      setManualStatusOverrides((prev) => {
+        const next = { ...prev };
+        for (const id of selectedResources) {
+          next[id] = targetStatus;
+        }
+        return next;
+      });
 
-  const hasActiveCouriers = useMemo(
-    () => courierSelectOptions.some((opt) => !opt.disabled && opt.value !== ""),
-    [courierSelectOptions]
+      setDispatchedOrders((prev) => {
+        const updated = { ...prev };
+        for (const id of selectedResources) {
+          if (updated[id]) {
+            updated[id] = {
+              ...updated[id],
+              courierStatus: targetStatus,
+            };
+          }
+        }
+        return updated;
+      });
+
+      setSelectedResources([]);
+    },
+    [selectedResources]
   );
 
-  const fallbackCourierOptions = [
-    { label: "Pathao Courier", value: "pathao" },
-    { label: "Steadfast Courier", value: "steadfast" },
-    { label: "RedX Delivery", value: "redx" },
-    { label: "CarryBee", value: "carrybee" },
-    { label: "Bahok Courier", value: "bahok" },
-  ];
-
-  const templateSelectorOptions = [
-    {
-      label: "1. Classic Minimalist (Standard Clean Invoice)",
-      value: "classic",
-    },
-    {
-      label: isFreePlan
-        ? "2. Modern Pro (🔒 Upgrade to Growth / Pro)"
-        : "2. Modern Pro (Dynamic Accent & Visual Product Table)",
-      value: "modern",
-      disabled: isFreePlan,
-    },
-    {
-      label: isEnterprisePlan
-        ? "3. Warehouse Fulfillment (Enterprise Mode — Industrial Pick/Pack)"
-        : "3. Warehouse Fulfillment (🔒 Upgrade to Enterprise)",
-      value: "warehouse",
-      disabled: !isEnterprisePlan,
-    },
-  ];
-
-  const handleSendSingleOrder = (order: NormalizedOrder) => {
-    // Advanced Audit Point 3: Synchronous double-click guard
+  const handleSendSingleOrder = useCallback((order: NormalizedOrder) => {
     if (
       isSubmittingRef.current ||
       inFlightOrderIdRef.current === order.id ||
@@ -5016,7 +4968,6 @@ export default function OrdersFulfillmentPage() {
         ? Math.round(Number(String(customCodVal).replace(/[^0-9.]/g, "")) || 0)
         : null;
 
-    // Rigid real-time intercept: block dispatch if custom COD exceeds order total
     if (!isPrepaid && enteredCodNum !== null && maxOrderPrice > 0 && enteredCodNum > maxOrderPrice) {
       isSubmittingRef.current = false;
       inFlightOrderIdRef.current = null;
@@ -5048,7 +4999,6 @@ export default function OrdersFulfillmentPage() {
     formData.append("isRiskyLocked", String(order.isRiskyLocked));
     formData.append("manualOverrideConfirmed", String(isUnlocked));
 
-    // Optional manual location overrides
     if (manualCityIds[order.id]) {
       formData.append("manualCityId", manualCityIds[order.id]);
     }
@@ -5063,15 +5013,26 @@ export default function OrdersFulfillmentPage() {
     }
 
     submit(formData, { method: "post" });
-  };
+  }, [
+    navigation.state,
+    selectedCouriersByOrder,
+    courierSelectOptions,
+    manuallyUnlockedOrders,
+    warehouseNotesByOrder,
+    customCodAmountsByOrder,
+    manualCityIds,
+    manualZoneIds,
+    manualAreaIds,
+    manualAreaNames,
+    submit,
+  ]);
 
-  const handleBulkSendToCourier = (overrideCourierKey?: string) => {
+  const handleBulkSendToCourier = useCallback((overrideCourierKey?: string) => {
     setClientBatchError(null);
     setShowLabelConfigError(false);
     setShowInvoiceConfigError(false);
     if (selectedResources.length === 0) return;
 
-    // Advanced Audit Point 3: Synchronous double-click guard for bulk dispatch
     if (
       isSubmittingRef.current ||
       navigation.state === "submitting" ||
@@ -5081,7 +5042,6 @@ export default function OrdersFulfillmentPage() {
     }
     isSubmittingRef.current = true;
 
-    // Synchronously update the selected couriers state in table rows
     if (overrideCourierKey) {
       setSelectedCouriersByOrder((prev) => {
         const updated = { ...prev };
@@ -5165,20 +5125,25 @@ export default function OrdersFulfillmentPage() {
     formData.append("actionType", "bulkBookCouriers");
     formData.append("ordersPayload", JSON.stringify(selectedOrderObjects));
     submit(formData, { method: "post" });
-  };
+  }, [
+    selectedResources,
+    navigation.state,
+    isBulkSubmitting,
+    usageSummary,
+    displayedOrders,
+    selectedCouriersByOrder,
+    courierSelectOptions,
+    customCodAmountsByOrder,
+    warehouseNotesByOrder,
+    manuallyUnlockedOrders,
+    manualCityIds,
+    manualZoneIds,
+    manualAreaIds,
+    manualAreaNames,
+    submit,
+  ]);
 
-  const isCourierActive = (courierNameOrKey?: string | null) => {
-    if (!courierNameOrKey) return false;
-    const c = courierNameOrKey.toLowerCase();
-    if (c.includes("pathao")) return activeCouriers.pathao;
-    if (c.includes("steadfast")) return activeCouriers.steadfast;
-    if (c.includes("redx")) return activeCouriers.redx;
-    if (c.includes("carrybee")) return activeCouriers.carrybee;
-    if (c.includes("bahok")) return activeCouriers.bahok;
-    return false;
-  };
-
-  const handleBulkAssignCourier = (courierKey: string) => {
+  const handleBulkAssignCourier = useCallback((courierKey: string) => {
     if (isSubmittingRef.current || navigation.state === "submitting") return;
     setSelectedCouriersByOrder((prev) => {
       const updated = { ...prev };
@@ -5189,89 +5154,9 @@ export default function OrdersFulfillmentPage() {
     });
     setShowLabelConfigError(false);
     setShowInvoiceConfigError(false);
-  };
+  }, [navigation.state, selectedResources]);
 
-  // Master Audit List Point 7: Real-time order cancellation status evaluation helper
-  const isOrderCancelledRecord = (order: any): boolean =>
-    Boolean(
-      order?.cancelReason ||
-      order?.cancelledAt ||
-      order?.isCancelled ||
-      order?.displayFulfillmentStatus === "CANCELLED" ||
-      order?.fulfillmentStatus === "CANCELLED" ||
-      order?.status?.toLowerCase() === "cancelled"
-    );
-
-  const handlePrintLabels = () => {
-    const selectedOrdersList = displayedOrders.filter((o) =>
-      selectedResources.includes(o.id)
-    );
-    if (selectedOrdersList.length === 0) return;
-
-    // Point 7 Check: Intercept single cancelled order print attempt
-    if (selectedOrdersList.length === 1 && isOrderCancelledRecord(selectedOrdersList[0])) {
-      setShowCancelledOrdersPrintWarning(true);
-      setShowLabelConfigError(false);
-      setShowInvoiceConfigError(false);
-      window.scrollTo({ top: 0, behavior: "smooth" });
-      return;
-    }
-
-    const hasCancelled = selectedOrdersList.some(isOrderCancelledRecord);
-    setShowCancelledOrdersPrintWarning(hasCancelled);
-
-    const hasUnbookedOrders = selectedOrdersList.some(
-      (order) => !dispatchedOrders[order.id]?.trackingNumber && !order.trackingNumber
-    );
-
-    if (hasUnbookedOrders) {
-      setShowLabelConfigError(true);
-      setShowInvoiceConfigError(false);
-      window.scrollTo({ top: 0, behavior: "smooth" });
-      return;
-    }
-
-    setShowLabelConfigError(false);
-    setShowInvoiceConfigError(false);
-    handlePrintBatchDocuments("labels_4x6");
-  };
-
-  const handlePrintInvoices = () => {
-    const selectedOrdersList = displayedOrders.filter((o) =>
-      selectedResources.includes(o.id)
-    );
-    if (selectedOrdersList.length === 0) return;
-
-    // Point 7 Check: Intercept single cancelled order print attempt
-    if (selectedOrdersList.length === 1 && isOrderCancelledRecord(selectedOrdersList[0])) {
-      setShowCancelledOrdersPrintWarning(true);
-      setShowLabelConfigError(false);
-      setShowInvoiceConfigError(false);
-      window.scrollTo({ top: 0, behavior: "smooth" });
-      return;
-    }
-
-    const hasCancelled = selectedOrdersList.some(isOrderCancelledRecord);
-    setShowCancelledOrdersPrintWarning(hasCancelled);
-
-    const hasMissingInvoiceConfig =
-      !invoiceConfig ||
-      !invoiceConfig.invoiceBrandName ||
-      invoiceConfig.invoiceBrandName.trim() === "";
-
-    if (hasMissingInvoiceConfig) {
-      setShowInvoiceConfigError(true);
-      setShowLabelConfigError(false);
-      window.scrollTo({ top: 0, behavior: "smooth" });
-      return;
-    }
-
-    setShowLabelConfigError(false);
-    setShowInvoiceConfigError(false);
-    handlePrintBatchDocuments("invoices_a4");
-  };
-
-  const handlePrintBatchDocuments = (mode: "labels_4x6" | "invoices_a4") => {
+  const handlePrintBatchDocuments = useCallback((mode: "labels_4x6" | "invoices_a4") => {
     setIsPrintPopoverActive(false);
     setPrintDocumentMode(mode);
 
@@ -5332,7 +5217,6 @@ export default function OrdersFulfillmentPage() {
           lineItems: order.lineItems,
           orderTotalWeight: order.totalWeight,
           courierKey: chosenCourier,
-          storeConfig,
         }),
         bookedAt: new Date().toISOString(),
         isCancelled: orderIsCancelled,
@@ -5349,22 +5233,93 @@ export default function OrdersFulfillmentPage() {
         window.print();
       }, 350);
     }
-  };
+  }, [
+    displayedOrders,
+    selectedResources,
+    isOrderCancelledRecord,
+    selectedCouriersByOrder,
+    dispatchedOrders,
+    warehouseNotesByOrder,
+  ]);
 
-  const isSubmitting = navigation.state === "submitting" || navigation.state === "loading";
-  const pendingActionType = navigation.formData?.get("actionType");
-  const isBulkSubmitting =
-    navigation.state === "submitting" &&
-    pendingActionType === "bulkBookCouriers";
-  const submittingOrderId = navigation.formData?.get("orderId");
+  const handlePrintLabels = useCallback(() => {
+    const selectedOrdersList = displayedOrders.filter((o) =>
+      selectedResources.includes(o.id)
+    );
+    if (selectedOrdersList.length === 0) return;
 
-  const bookedSlipsList =
-    batchPrintSlips.length > 0
-      ? batchPrintSlips
-      : Object.values(dispatchedOrders);
-  const isBatchOverPlanCap =
-    !usageSummary.isUnlimitedBulk &&
-    selectedResources.length > usageSummary.bulkBatchLimit;
+    if (selectedOrdersList.length === 1 && isOrderCancelledRecord(selectedOrdersList[0])) {
+      setShowCancelledOrdersPrintWarning(true);
+      setShowLabelConfigError(false);
+      setShowInvoiceConfigError(false);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
+
+    const hasCancelled = selectedOrdersList.some(isOrderCancelledRecord);
+    setShowCancelledOrdersPrintWarning(hasCancelled);
+
+    const hasUnbookedOrders = selectedOrdersList.some(
+      (order) => !dispatchedOrders[order.id]?.trackingNumber && !order.trackingNumber
+    );
+
+    if (hasUnbookedOrders) {
+      setShowLabelConfigError(true);
+      setShowInvoiceConfigError(false);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
+
+    setShowLabelConfigError(false);
+    setShowInvoiceConfigError(false);
+    handlePrintBatchDocuments("labels_4x6");
+  }, [
+    displayedOrders,
+    selectedResources,
+    isOrderCancelledRecord,
+    dispatchedOrders,
+    handlePrintBatchDocuments,
+  ]);
+
+  const handlePrintInvoices = useCallback(() => {
+    const selectedOrdersList = displayedOrders.filter((o) =>
+      selectedResources.includes(o.id)
+    );
+    if (selectedOrdersList.length === 0) return;
+
+    if (selectedOrdersList.length === 1 && isOrderCancelledRecord(selectedOrdersList[0])) {
+      setShowCancelledOrdersPrintWarning(true);
+      setShowLabelConfigError(false);
+      setShowInvoiceConfigError(false);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
+
+    const hasCancelled = selectedOrdersList.some(isOrderCancelledRecord);
+    setShowCancelledOrdersPrintWarning(hasCancelled);
+
+    const hasMissingInvoiceConfig =
+      !invoiceConfig ||
+      !invoiceConfig.invoiceBrandName ||
+      invoiceConfig.invoiceBrandName.trim() === "";
+
+    if (hasMissingInvoiceConfig) {
+      setShowInvoiceConfigError(true);
+      setShowLabelConfigError(false);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
+
+    setShowLabelConfigError(false);
+    setShowInvoiceConfigError(false);
+    handlePrintBatchDocuments("invoices_a4");
+  }, [
+    displayedOrders,
+    selectedResources,
+    isOrderCancelledRecord,
+    invoiceConfig,
+    handlePrintBatchDocuments,
+  ]);
 
   // Reorganized 8-Column Table Headings for High-Converting Courier Fulfillment
   const tableHeadings = [
@@ -5388,23 +5343,6 @@ export default function OrdersFulfillmentPage() {
     { title: "Note" },
     { title: "Action" },
   ];
-
-  // Configured active couriers for 1-Click Bulk Dispatch
-  const COURIER_META = [
-    { key: "pathao", name: "Pathao", active: Boolean(activeCouriers.pathao) },
-    { key: "steadfast", name: "Steadfast", active: Boolean(activeCouriers.steadfast) },
-    { key: "redx", name: "RedX", active: Boolean(activeCouriers.redx) },
-    { key: "carrybee", name: "CarryBee", active: Boolean(activeCouriers.carrybee) },
-    { key: "bahok", name: "Bahok", active: Boolean(activeCouriers.bahok) },
-  ];
-
-  const activeCourierList = COURIER_META.filter((c) => c.active);
-  const preferredCourierKey = String(routingConfig?.defaultCourier || "").toLowerCase();
-  const configuredCouriers = [...activeCourierList].sort((a, b) => {
-    if (a.key === preferredCourierKey) return -1;
-    if (b.key === preferredCourierKey) return 1;
-    return 0;
-  });
 
   // Official Polaris Native Bulk Actions Pipeline (1-Click Courier Dispatch & Left-Aligned)
   const promotedBulkActions: any[] = [
@@ -5463,6 +5401,127 @@ export default function OrdersFulfillmentPage() {
       loading: isBulkSubmitting,
     },
   ];
+
+  // --------------------------------------------------------------------------
+  // ALL SIDE-EFFECTS (Strictly Post-Initialization to Prevent Any TDZ / Hoisting Bug)
+  // --------------------------------------------------------------------------
+
+  // 1. Navigation submission reset
+  useEffect(() => {
+    if (navigation.state === "idle") {
+      isSubmittingRef.current = false;
+      inFlightOrderIdRef.current = null;
+    }
+  }, [navigation.state]);
+
+  // 2. Clipboard timeout cleanup
+  useEffect(() => {
+    return () => {
+      if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current);
+    };
+  }, []);
+
+  // 3. Invoice template synchronization
+  useEffect(() => {
+    if (invoiceConfig?.invoiceTemplate) {
+      setSelectedSlipTemplate(invoiceConfig.invoiceTemplate);
+    }
+  }, [invoiceConfig?.invoiceTemplate]);
+
+  useEffect(() => {
+    if (isFreePlan) {
+      setSelectedSlipTemplate("classic");
+    } else if (!isEnterprisePlan && selectedSlipTemplate === "warehouse") {
+      setSelectedSlipTemplate("modern");
+    }
+  }, [isFreePlan, isEnterprisePlan, selectedSlipTemplate]);
+
+  // 4. Action data response handler
+  useEffect(() => {
+    if (actionData) {
+      setShowBanner(true);
+      setClientBatchError(null);
+      if (actionData.isRiskyLocked && (actionData as any).orderId) {
+        setLockedRiskOrders((prev) => ({
+          ...prev,
+          [(actionData as any).orderId]: true,
+        }));
+      }
+      if (Array.isArray((actionData as any).lockedOrderIds)) {
+        setLockedRiskOrders((prev) => {
+          const updated = { ...prev };
+          for (const id of (actionData as any).lockedOrderIds) {
+            updated[id] = true;
+          }
+          return updated;
+        });
+      }
+      if (
+        actionData.success &&
+        Array.isArray(actionData.bookedSlips) &&
+        actionData.bookedSlips.length > 0
+      ) {
+        setDispatchedOrders((prev) => {
+          const updated = { ...prev };
+          for (const slip of actionData.bookedSlips) {
+            updated[slip.orderId] = slip;
+          }
+          return updated;
+        });
+        setBatchPrintSlips(actionData.bookedSlips);
+        setSelectedResources([]);
+        setShowPackingSlipView(true);
+      }
+    }
+  }, [actionData]);
+
+  // 5. Active tab URL synchronization
+  useEffect(() => {
+    const target = urlTab || "new";
+    setSelectedTabId(target);
+  }, [urlTab]);
+
+  // 6. Reset resource selection on search/filter change
+  useEffect(() => {
+    setSelectedResources([]);
+  }, [searchParams]);
+
+  // 7. High-Speed Stage 2: Fraud sync receiver
+  useEffect(() => {
+    if (
+      fraudFetcher.data?.actionType === "syncBatchFraudProfiles" &&
+      fraudFetcher.data?.fraudProfiles
+    ) {
+      setLiveFraudProfiles((prev) => ({
+        ...prev,
+        ...fraudFetcher.data.fraudProfiles,
+      }));
+    }
+  }, [fraudFetcher.data]);
+
+  // 8. High-Speed Stage 2: Automatic non-blocking background fraud fetch trigger
+  useEffect(() => {
+    const pendingPhones = displayedOrders
+      .filter((o) => {
+        const cleanP = sanitizeBangladeshPhone(o.customerPhone);
+        return (
+          o.fraudSyncPending &&
+          isValidBangladeshMobile(cleanP) &&
+          !liveFraudProfiles[cleanP] &&
+          !fraudFetchTriggeredRef.current.has(cleanP)
+        );
+      })
+      .map((o) => sanitizeBangladeshPhone(o.customerPhone));
+
+    const uniquePending = Array.from(new Set(pendingPhones)).slice(0, 50);
+    if (uniquePending.length > 0 && fraudFetcher.state === "idle") {
+      uniquePending.forEach((p) => fraudFetchTriggeredRef.current.add(p));
+      const fd = new FormData();
+      fd.append("actionType", "syncBatchFraudProfiles");
+      fd.append("phones", JSON.stringify(uniquePending));
+      fraudFetcher.submit(fd, { method: "post" });
+    }
+  }, [displayedOrders, liveFraudProfiles, fraudFetcher.state]);
 
   const rowMarkup = displayedOrders.map((order, index) => {
     const isRowPrepaid =
