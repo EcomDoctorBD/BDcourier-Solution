@@ -491,10 +491,7 @@ export default function CourierDashboard() {
   ].filter(Boolean).length;
 
   return (
-    <Page
-      title="Dashboard"
-      subtitle={`Analytics & Overview • Connected Store: ${shopDomain}`}
-    >
+    <Page>
       <TitleBar title="Dashboard" />
 
       <BlockStack gap="500">
@@ -526,9 +523,6 @@ export default function CourierDashboard() {
                           ? "ACTIVE"
                           : subscription.billingStatus || "ACTIVE"}
                       </Badge>
-                      {subscription.badgeLabel && (
-                        <Badge tone="info">{subscription.badgeLabel}</Badge>
-                      )}
                     </InlineStack>
 
                     <Text as="h1" variant="headingXl" fontWeight="bold">
@@ -642,10 +636,10 @@ export default function CourierDashboard() {
                             AI ADDRESS NORMALIZER
                           </Text>
                           <Badge
-                            tone={aiConfig.isAiNormalizerEnabled ? "success" : "critical"}
+                            tone={aiConfig.isAiNormalizerEnabled ? "success" : "info"}
                             progress={aiConfig.isAiNormalizerEnabled ? "complete" : "incomplete"}
                           >
-                            {aiConfig.isAiNormalizerEnabled ? "Active" : "Inactive"}
+                            {aiConfig.isAiNormalizerEnabled ? "Active" : "Available in Settings"}
                           </Badge>
                         </InlineStack>
 
@@ -698,71 +692,127 @@ export default function CourierDashboard() {
         {/* ==================== 2. QUICK NAVIGATION TILES ==================== */}
         <Layout>
           <Layout.Section>
-            <Grid>
-              <Grid.Cell columnSpan={{ xs: 6, sm: 6, md: 3, lg: 3, xl: 3 }}>
-                <Card padding="500">
-                  <BlockStack gap="300">
-                    <Text as="h3" variant="headingSm">
-                      📦 Orders
-                    </Text>
-                    <Text as="p" variant="bodySm" tone="subdued">
-                      Bulk order booking, customer fraud scoring, and courier dispatch with smart address cleaning.
-                    </Text>
-                    <Link to={`/app/orders${searchStr}`}>
-                      <Button variant="plain">Open Orders →</Button>
-                    </Link>
-                  </BlockStack>
-                </Card>
-              </Grid.Cell>
+            <div
+              className="quick-nav-grid-container"
+              style={{ width: "100%" }}
+            >
+              <style>{`
+                .quick-nav-grid-container .Polaris-Grid {
+                  align-items: stretch;
+                }
+                .quick-nav-grid-container .Polaris-Grid-Cell {
+                  display: flex;
+                  flex-direction: column;
+                }
+                .quick-nav-grid-container .Polaris-ShadowBevel {
+                  height: 100%;
+                  display: flex;
+                  flex-direction: column;
+                  flex: 1;
+                }
+                .quick-nav-grid-container .Polaris-Box {
+                  height: 100%;
+                  display: flex;
+                  flex-direction: column;
+                  flex: 1;
+                }
+                .quick-nav-grid-container .Polaris-BlockStack {
+                  height: 100%;
+                  display: flex;
+                  flex-direction: column;
+                  flex: 1;
+                }
+              `}</style>
+              <Grid>
+                <Grid.Cell columnSpan={{ xs: 6, sm: 6, md: 3, lg: 3, xl: 3 }}>
+                  <div style={{ height: "100%", display: "flex", flexDirection: "column" }}>
+                    <Card padding="500">
+                      <div style={{ height: "100%", display: "flex", flexDirection: "column" }}>
+                        <BlockStack gap="300">
+                          <Text as="h3" variant="headingSm">
+                            📦 Orders
+                          </Text>
+                          <Text as="p" variant="bodySm" tone="subdued">
+                            Bulk order booking, customer fraud scoring, and courier dispatch with smart address cleaning.
+                          </Text>
+                          <div style={{ marginTop: "auto", paddingTop: "8px" }}>
+                            <Link to={`/app/orders${searchStr}`}>
+                              <Button variant="plain">Open Orders →</Button>
+                            </Link>
+                          </div>
+                        </BlockStack>
+                      </div>
+                    </Card>
+                  </div>
+                </Grid.Cell>
 
-              <Grid.Cell columnSpan={{ xs: 6, sm: 6, md: 3, lg: 3, xl: 3 }}>
-                <Card padding="500">
-                  <BlockStack gap="300">
-                    <Text as="h3" variant="headingSm">
-                      ⚙️ Courier Settings
-                    </Text>
-                    <Text as="p" variant="bodySm" tone="subdued">
-                      Configure API credentials and automatic courier selection for all 5 courier partners.
-                    </Text>
-                    <Link to={`/app/courier-settings${searchStr}`}>
-                      <Button variant="plain">Configure Routing →</Button>
-                    </Link>
-                  </BlockStack>
-                </Card>
-              </Grid.Cell>
+                <Grid.Cell columnSpan={{ xs: 6, sm: 6, md: 3, lg: 3, xl: 3 }}>
+                  <div style={{ height: "100%", display: "flex", flexDirection: "column" }}>
+                    <Card padding="500">
+                      <div style={{ height: "100%", display: "flex", flexDirection: "column" }}>
+                        <BlockStack gap="300">
+                          <Text as="h3" variant="headingSm">
+                            ⚙️ Courier Settings
+                          </Text>
+                          <Text as="p" variant="bodySm" tone="subdued">
+                            Configure API credentials and automatic courier selection for all 5 courier partners.
+                          </Text>
+                          <div style={{ marginTop: "auto", paddingTop: "8px" }}>
+                            <Link to={`/app/courier-settings${searchStr}`}>
+                              <Button variant="plain">Configure Routing →</Button>
+                            </Link>
+                          </div>
+                        </BlockStack>
+                      </div>
+                    </Card>
+                  </div>
+                </Grid.Cell>
 
-              <Grid.Cell columnSpan={{ xs: 6, sm: 6, md: 3, lg: 3, xl: 3 }}>
-                <Card padding="500">
-                  <BlockStack gap="300">
-                    <Text as="h3" variant="headingSm">
-                      🚚 Shipping Rates
-                    </Text>
-                    <Text as="p" variant="bodySm" tone="subdued">
-                      Delivery charge rules, custom weight tiers, and checkout rates for all 64 districts.
-                    </Text>
-                    <Link to={`/app/shipping-rates${searchStr}`}>
-                      <Button variant="plain">Manage Rates →</Button>
-                    </Link>
-                  </BlockStack>
-                </Card>
-              </Grid.Cell>
+                <Grid.Cell columnSpan={{ xs: 6, sm: 6, md: 3, lg: 3, xl: 3 }}>
+                  <div style={{ height: "100%", display: "flex", flexDirection: "column" }}>
+                    <Card padding="500">
+                      <div style={{ height: "100%", display: "flex", flexDirection: "column" }}>
+                        <BlockStack gap="300">
+                          <Text as="h3" variant="headingSm">
+                            🚚 Shipping Rates
+                          </Text>
+                          <Text as="p" variant="bodySm" tone="subdued">
+                            Delivery charge rules, custom weight tiers, and checkout rates for all 64 districts.
+                          </Text>
+                          <div style={{ marginTop: "auto", paddingTop: "8px" }}>
+                            <Link to={`/app/shipping-rates${searchStr}`}>
+                              <Button variant="plain">Manage Rates →</Button>
+                            </Link>
+                          </div>
+                        </BlockStack>
+                      </div>
+                    </Card>
+                  </div>
+                </Grid.Cell>
 
-              <Grid.Cell columnSpan={{ xs: 6, sm: 6, md: 3, lg: 3, xl: 3 }}>
-                <Card padding="500">
-                  <BlockStack gap="300">
-                    <Text as="h3" variant="headingSm">
-                      🔌 Integrations
-                    </Text>
-                    <Text as="p" variant="bodySm" tone="subdued">
-                      Stream captured orders to Google Sheets in real-time on dispatch.
-                    </Text>
-                    <Link to={`/app/integrations${searchStr}`}>
-                      <Button variant="plain">Manage Sheets →</Button>
-                    </Link>
-                  </BlockStack>
-                </Card>
-              </Grid.Cell>
-            </Grid>
+                <Grid.Cell columnSpan={{ xs: 6, sm: 6, md: 3, lg: 3, xl: 3 }}>
+                  <div style={{ height: "100%", display: "flex", flexDirection: "column" }}>
+                    <Card padding="500">
+                      <div style={{ height: "100%", display: "flex", flexDirection: "column" }}>
+                        <BlockStack gap="300">
+                          <Text as="h3" variant="headingSm">
+                            🔌 Integrations
+                          </Text>
+                          <Text as="p" variant="bodySm" tone="subdued">
+                            Stream captured orders to Google Sheets in real-time on dispatch.
+                          </Text>
+                          <div style={{ marginTop: "auto", paddingTop: "8px" }}>
+                            <Link to={`/app/integrations${searchStr}`}>
+                              <Button variant="plain">Manage Sheets →</Button>
+                            </Link>
+                          </div>
+                        </BlockStack>
+                      </div>
+                    </Card>
+                  </div>
+                </Grid.Cell>
+              </Grid>
+            </div>
           </Layout.Section>
         </Layout>
 
@@ -880,10 +930,6 @@ export default function CourierDashboard() {
                               Automated parcel booking, express delivery, and live
                               consignment tracking with Pathao Merchant API.
                             </Text>
-
-                            <Text as="p" variant="bodySm" tone="subdued">
-                              Required: <strong>Client ID, Client Secret, Username, Password, Store ID</strong>
-                            </Text>
                           </BlockStack>
                         </div>
 
@@ -945,10 +991,6 @@ export default function CourierDashboard() {
                               Fast Cash-on-Delivery (COD) fulfillment and nationwide
                               parcel booking across Bangladesh.
                             </Text>
-
-                            <Text as="p" variant="bodySm" tone="subdued">
-                              Required: <strong>API Key, Secret Key</strong>
-                            </Text>
                           </BlockStack>
                         </div>
 
@@ -1008,10 +1050,6 @@ export default function CourierDashboard() {
                               64-district doorstep delivery network with automated
                               pickup scheduling and label generation.
                             </Text>
-
-                            <Text as="p" variant="bodySm" tone="subdued">
-                              Required: <strong>API Access Token, Pickup Store ID</strong>
-                            </Text>
                           </BlockStack>
                         </div>
 
@@ -1045,7 +1083,7 @@ export default function CourierDashboard() {
                           <InlineStack gap="300" blockAlign="center">
                             <CourierLogo courier="carrybee" size={44} />
                             <Text as="h3" variant="headingMd">
-                              CarryBee
+                              CarryBee Logistics
                             </Text>
                           </InlineStack>
 
@@ -1071,10 +1109,6 @@ export default function CourierDashboard() {
                           <BlockStack gap="200">
                             <Text as="p" variant="bodyMd" tone="subdued">
                               Tech-first automated logistics network with rapid parcel dispatch and API status sync.
-                            </Text>
-
-                            <Text as="p" variant="bodySm" tone="subdued">
-                              Required: <strong>Client ID, Client Secret, Client Context</strong>
                             </Text>
                           </BlockStack>
                         </div>
@@ -1135,10 +1169,6 @@ export default function CourierDashboard() {
                           <BlockStack gap="200">
                             <Text as="p" variant="bodyMd" tone="subdued">
                               Reliable nationwide e-commerce courier service with doorstep delivery across Bangladesh.
-                            </Text>
-
-                            <Text as="p" variant="bodySm" tone="subdued">
-                              Required: <strong>Merchant ID, API Key, API Secret / Token</strong>
                             </Text>
                           </BlockStack>
                         </div>

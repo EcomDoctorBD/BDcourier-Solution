@@ -150,14 +150,6 @@ export default function HelpAndSupportRoute() {
                         : "Email Support Desk"}
                     </Text>
                   </BlockStack>
-
-                  <InlineStack gap="200">
-                    <Badge tone={isUnlimitedTier ? "success" : "info"}>
-                      {isUnlimitedTier
-                        ? `${currentPlan} (Unlimited Tier)`
-                        : `${currentPlan} Tier`}
-                    </Badge>
-                  </InlineStack>
                 </InlineStack>
 
                 <Divider />
@@ -352,8 +344,8 @@ export default function HelpAndSupportRoute() {
                       <div style={{ flex: "1 1 300px" }}>
                         <Text as="p" variant="bodySm">
                           <strong>Want 24/7 instant WhatsApp Helpline access?</strong>{" "}
-                          Upgrade to our Unlimited / Pro plans for dedicated priority
-                          logistics support.
+                          Upgrade to our Pro, Advanced, or Enterprise plans for priority
+                          WhatsApp support.
                         </Text>
                       </div>
                       <div

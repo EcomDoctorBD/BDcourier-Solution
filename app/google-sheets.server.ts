@@ -6,14 +6,14 @@ import { encryptSecret, decryptSecret } from "./utils/crypto.server";
 // Standard Google Sheets Columns strictly defined for Bangladeshi Courier Hub
 export const GOOGLE_SHEETS_COLUMNS = [
   "Order ID",
-  "Timestamp",
+  "Order Date",
   "Customer Name",
   "Phone Number",
-  "Raw Shopify Address",
-  "Cleaned District",
-  "Cleaned Thana",
-  "Courier Partner Assigned",
-  "Official Courier Tracking ID",
+  "Delivery Address",
+  "District",
+  "Area / Thana",
+  "Assigned Courier",
+  "Tracking ID",
 ] as const;
 
 export interface SyncOrderPayload {

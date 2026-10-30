@@ -43,14 +43,14 @@ import {
 
 export const GOOGLE_SHEETS_COLUMNS = [
   "Order ID",
-  "Timestamp",
+  "Order Date",
   "Customer Name",
   "Phone Number",
-  "Raw Shopify Address",
-  "Cleaned District",
-  "Cleaned Thana",
-  "Courier Partner Assigned",
-  "Official Courier Tracking ID",
+  "Delivery Address",
+  "District",
+  "Area / Thana",
+  "Assigned Courier",
+  "Tracking ID",
 ] as const;
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
@@ -411,7 +411,7 @@ export default function IntegrationsPage() {
                     <Card background="bg-surface-secondary">
                       <BlockStack gap="200">
                         <Text variant="headingSm" as="h3">
-                          Standard Exported Columns (9 Logistics Attributes):
+                          Automatically Exported Order Columns:
                         </Text>
                         <InlineStack gap="200" wrap>
                           {GOOGLE_SHEETS_COLUMNS.map((col) => (

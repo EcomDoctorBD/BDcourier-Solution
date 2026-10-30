@@ -422,7 +422,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           success: true,
           actionType: "saveZone",
           isSynced: false,
-          message: `Shipping Zone "${zoneName}" saved! Note: Auto-sync encountered an issue: ${syncResult.message}. Please click "কাস্টমারদের জন্য লাইভ করুন" to connect checkout.`,
+          message: `Shipping Zone "${zoneName}" saved! Note: Auto-sync encountered an issue: ${syncResult.message}. Please click "Publish Rates to Checkout" to connect checkout.`,
         });
       }
     }
@@ -438,7 +438,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       success: true,
       actionType: "saveZone",
       isSynced: false,
-      message: `Shipping Zone "${zoneName}" saved with ${districtIds.length} districts and ${weightTiers.length} weight tiers! Click "কাস্টমারদের জন্য লাইভ করুন" to update your live checkout rates.`,
+      message: `Shipping Zone "${zoneName}" saved with ${districtIds.length} districts and ${weightTiers.length} weight tiers! Click "Publish Rates to Checkout" to update your live checkout rates.`,
     });
   }
 
@@ -485,9 +485,7 @@ export default function ShippingRatesPage() {
     { maxWeight: 2, extraRate: 20 },
   ]);
   const [selectedDistricts, setSelectedDistricts] = useState<string[]>([]);
-  const [openDivisions, setOpenDivisions] = useState<Record<string, boolean>>({
-    dhaka: true,
-  });
+  const [openDivisions, setOpenDivisions] = useState<Record<string, boolean>>({});
   const [showBanner, setShowBanner] = useState(false);
 
   useEffect(() => {
@@ -742,7 +740,7 @@ export default function ShippingRatesPage() {
               >
                 <div style={{ flex: 1, minWidth: "260px" }}>
                   <Text as="p" variant="bodyMd" fontWeight="semibold">
-                    ⚠️ আপনি আপনার ডেলিভারি চার্জ পরিবর্তন করেছেন, কিন্তু এটি এখনও কাস্টমারদের জন্য লাইভ করা হয়নি। নতুন রেট চালু করতে পাশের &quot;কাস্টমারদের জন্য লাইভ করুন&quot; বাটনে ক্লিক করুন।
+                    ⚠️ You have unsaved or updated shipping rate rules that are not live yet. Click &quot;Publish Rates to Checkout&quot; to update your live Shopify checkout rates.
                   </Text>
                 </div>
                 <button
@@ -779,7 +777,7 @@ export default function ShippingRatesPage() {
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
                     </svg>
                   )}
-                  কাস্টমারদের জন্য লাইভ করুন
+                  Publish Rates to Checkout
                 </button>
               </div>
             </Banner>
@@ -865,7 +863,7 @@ export default function ShippingRatesPage() {
                           </Text>
                           <Box paddingBlockStart="200" paddingBlockEnd="200">
                             <Text as="p" variant="bodySm" tone="subdued">
-                              অতিরিক্ত ওজনের পার্সেলের জন্য বাড়তি ডেলিভারি চার্জ নির্ধারণ করুন।
+                              Configure additional delivery fees for parcels exceeding base weight limits.
                             </Text>
                           </Box>
                         </BlockStack>
@@ -1271,7 +1269,7 @@ export default function ShippingRatesPage() {
                       Active Delivery Charge Rules
                     </Text>
                     <Text as="p" variant="bodySm" tone="subdued">
-                      আপনার সেভ করা ডেলিভারি জোন এবং শিপিং রুলসের তালিকা। কাস্টমার যখন শপিফাইতে অর্ডার সাবমিট করবেন, তখন তার ঠিকানার সাথে মিলিয়ে এখান থেকে লাইভ ডেলিভারি চার্জ হিসাব করা হবে।
+                      List of configured delivery zones and shipping rules. Real-time shipping rates and weight charges are calculated dynamically at checkout based on the customer&apos;s delivery district.
                     </Text>
                   </BlockStack>
                   <span
