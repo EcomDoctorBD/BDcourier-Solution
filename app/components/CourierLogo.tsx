@@ -7,6 +7,14 @@ export interface CourierLogoProps {
   style?: React.CSSProperties;
 }
 
+export const COURIER_LOGO_PATHS = {
+  pathao: "/logos/pathao.png",
+  steadfast: "/logos/steadfast.png",
+  redx: "/logos/redx.png",
+  carrybee: "/logos/carrybee.png",
+  bahok: "/logos/bahok.png",
+} as const;
+
 export function CourierLogo({
   courier,
   size = 44,
@@ -23,31 +31,31 @@ export function CourierLogo({
   > = {
     pathao: {
       name: "Pathao Courier",
-      src: "/logos/pathao.png",
+      src: COURIER_LOGO_PATHS.pathao,
       bgColor: "#FFFFFF",
       padding: "2px",
     },
     steadfast: {
       name: "Steadfast Courier",
-      src: "/logos/steadfast.png",
+      src: COURIER_LOGO_PATHS.steadfast,
       bgColor: "#E8FCE8",
       padding: "0px",
     },
     redx: {
       name: "REDX Delivery",
-      src: "/logos/redx.png",
+      src: COURIER_LOGO_PATHS.redx,
       bgColor: "#FFFFFF",
       padding: "5px",
     },
     carrybee: {
       name: "CarryBee",
-      src: "/logos/carrybee.png",
+      src: COURIER_LOGO_PATHS.carrybee,
       bgColor: "#000000",
       padding: "0px",
     },
     bahok: {
       name: "Bahok Courier",
-      src: "/logos/bahok.png",
+      src: COURIER_LOGO_PATHS.bahok,
       bgColor: "#FFFFFF",
       padding: "0px",
     },
@@ -55,7 +63,7 @@ export function CourierLogo({
 
   const config = configMap[normalizedCourier] || {
     name: "Courier Partner",
-    src: "/logos/steadfast.png",
+    src: COURIER_LOGO_PATHS.steadfast,
     bgColor: "#FFFFFF",
     padding: "2px",
   };
@@ -93,6 +101,11 @@ export function CourierLogo({
         <img
           src={config.src}
           alt={config.name}
+          width={size}
+          height={size}
+          loading="eager"
+          decoding="sync"
+          fetchPriority="high"
           onError={() => setImgError(true)}
           style={{
             width: "100%",
@@ -100,7 +113,6 @@ export function CourierLogo({
             objectFit: isCover ? "cover" : "contain",
             display: "block",
           }}
-          loading="lazy"
         />
       ) : normalizedCourier === "pathao" ? (
         <svg viewBox="0 0 100 100" width="100%" height="100%">

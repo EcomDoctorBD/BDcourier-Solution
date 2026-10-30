@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import type { LinksFunction } from "@remix-run/node";
 import {
   Links,
   Meta,
@@ -10,8 +11,28 @@ import {
 } from "@remix-run/react";
 import { Analytics } from "@vercel/analytics/remix";
 import { SpeedInsights } from "@vercel/speed-insights/remix";
+import { COURIER_LOGO_PATHS } from "./components/CourierLogo";
+
+export const links: LinksFunction = () => {
+  return Object.values(COURIER_LOGO_PATHS).map((href) => ({
+    rel: "preload",
+    as: "image",
+    href,
+  }));
+};
 
 export default function App() {
+  // Pre-warm & decode the 5 courier logos in browser memory for 0ms visual pop-in
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      Object.values(COURIER_LOGO_PATHS).forEach((path) => {
+        const img = new Image();
+        img.decoding = "sync";
+        img.src = path;
+      });
+    }
+  }, []);
+
   // Safe Free Skew Protection against stale chunk cache when new deployments occur
   useEffect(() => {
     const handlePreloadError = () => {
