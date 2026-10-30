@@ -1073,6 +1073,7 @@ export default function PricingAndBillingPage() {
                   tier.id.toLowerCase() ===
                     (subscription.currentPlan || "Free").toLowerCase();
                 const isGrowthOrPopular = tier.id === "Growth";
+                const isProOrBestValue = tier.id === "Pro";
                 const isSubmittingThisTier =
                   navigation.state === "submitting" &&
                   submittingPlanId === tier.id;
@@ -1178,6 +1179,21 @@ export default function PricingAndBillingPage() {
                                   }}
                                 >
                                   Popular
+                                </span>
+                              ) : isProOrBestValue ? (
+                                <span
+                                  style={{
+                                    backgroundColor: "#e0e7ff",
+                                    color: "#3730a3",
+                                    fontSize: "12px",
+                                    fontWeight: 600,
+                                    padding: "2px 10px",
+                                    borderRadius: "9999px",
+                                    lineHeight: "1.2",
+                                    display: "inline-block",
+                                  }}
+                                >
+                                  Best Value
                                 </span>
                               ) : null}
                             </div>
@@ -1455,7 +1471,7 @@ export default function PricingAndBillingPage() {
                             }}
                           >
                             {heading}
-                            {colIdx === 3 && (
+                            {(heading === "Growth" || colIdx === 3) && (
                               <span
                                 style={{
                                   backgroundColor: "#E0F2FE",
@@ -1469,6 +1485,22 @@ export default function PricingAndBillingPage() {
                                 }}
                               >
                                 Popular
+                              </span>
+                            )}
+                            {(heading === "Pro" || colIdx === 4) && (
+                              <span
+                                style={{
+                                  backgroundColor: "#e0e7ff",
+                                  color: "#3730a3",
+                                  fontSize: "10px",
+                                  fontWeight: 700,
+                                  padding: "2px 7px",
+                                  borderRadius: "10px",
+                                  textTransform: "uppercase",
+                                  letterSpacing: "0.04em",
+                                }}
+                              >
+                                Best Value
                               </span>
                             )}
                           </span>
