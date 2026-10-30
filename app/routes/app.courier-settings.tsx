@@ -119,6 +119,12 @@ export interface CourierCredentials {
   carrybeeParcelNote?: string;
   bahokParcelNote?: string;
   defaultParcelNote?: string;
+  pathaoDefaultWeight?: number;
+  steadfastDefaultWeight?: number;
+  redxDefaultWeight?: number;
+  carrybeeDefaultWeight?: number;
+  bahokDefaultWeight?: number;
+  defaultParcelWeight?: number;
 }
 
 export interface AiConfig {
@@ -523,6 +529,12 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     carrybeeParcelNote: storeConfig?.carrybeeParcelNote || "",
     bahokParcelNote: storeConfig?.bahokParcelNote || "",
     defaultParcelNote: storeConfig?.defaultParcelNote || "",
+    pathaoDefaultWeight: storeConfig?.pathaoDefaultWeight ?? storeConfig?.defaultParcelWeight ?? 0.5,
+    steadfastDefaultWeight: storeConfig?.steadfastDefaultWeight ?? storeConfig?.defaultParcelWeight ?? 0.5,
+    redxDefaultWeight: storeConfig?.redxDefaultWeight ?? storeConfig?.defaultParcelWeight ?? 0.5,
+    carrybeeDefaultWeight: storeConfig?.carrybeeDefaultWeight ?? storeConfig?.defaultParcelWeight ?? 0.5,
+    bahokDefaultWeight: storeConfig?.bahokDefaultWeight ?? storeConfig?.defaultParcelWeight ?? 0.5,
+    defaultParcelWeight: storeConfig?.defaultParcelWeight ?? 0.5,
   };
 
   let addressCacheCount = 0;
@@ -737,6 +749,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const steadfastParcelNote = String(formData.get("steadfastParcelNote") || "").trim();
     if (formData.has("steadfastParcelNote")) {
       updateSet.steadfastParcelNote = steadfastParcelNote;
+    }
+    const steadfastDefaultWeight = parseFloat(String(formData.get("steadfastDefaultWeight") || ""));
+    if (!isNaN(steadfastDefaultWeight) && steadfastDefaultWeight > 0) {
+      updateSet.steadfastDefaultWeight = steadfastDefaultWeight;
+      updateSet.defaultParcelWeight = steadfastDefaultWeight;
     }
 
     await CourierConfig.findOneAndUpdate(
@@ -979,6 +996,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const bahokParcelNote = String(formData.get("bahokParcelNote") || "").trim();
     if (formData.has("bahokParcelNote")) {
       updateSet.bahokParcelNote = bahokParcelNote;
+    }
+    const bahokDefaultWeight = parseFloat(String(formData.get("bahokDefaultWeight") || ""));
+    if (!isNaN(bahokDefaultWeight) && bahokDefaultWeight > 0) {
+      updateSet.bahokDefaultWeight = bahokDefaultWeight;
+      updateSet.defaultParcelWeight = bahokDefaultWeight;
     }
 
     await CourierConfig.findOneAndUpdate(
@@ -1379,7 +1401,7 @@ export default function CourierSettingsPage() {
   const [showPathaoSecret, setShowPathaoSecret] = useState(false);
   const [showPathaoPassword, setShowPathaoPassword] = useState(false);
   const [pathaoStores, setPathaoStores] = useState<PathaoStore[]>([]);
-  const [pathaoDefaultWeight, setPathaoDefaultWeight] = useState("0.5");
+  const [pathaoDefaultWeight, setPathaoDefaultWeight] = useState(String(courierConfig.pathaoDefaultWeight ?? "0.5"));
   const [pathaoParcelNote, setPathaoParcelNote] = useState(courierConfig.pathaoParcelNote || "");
   const [pathaoDeliveryType, setPathaoDeliveryType] = useState("regular");
 
@@ -1391,6 +1413,7 @@ export default function CourierSettingsPage() {
   };
 
   const handleResetSteadfast = () => {
+    setSteadfastDefaultWeight("0.5");
     setSteadfastDeliveryType("home");
     setSteadfastParcelNote("");
     setDefaultCourier(routingConfig.defaultCourier || "steadfast");
@@ -1411,6 +1434,7 @@ export default function CourierSettingsPage() {
   };
 
   const handleResetBahok = () => {
+    setBahokDefaultWeight("0.5");
     setBahokParcelNote("");
     setDefaultCourier(routingConfig.defaultCourier || "steadfast");
   };
@@ -1478,6 +1502,7 @@ export default function CourierSettingsPage() {
   const [steadfastApiKey, setSteadfastApiKey] = useState(courierConfig.steadfastApiKey);
   const [steadfastSecretKey, setSteadfastSecretKey] = useState(courierConfig.steadfastSecretKey);
   const [showSteadfastSecret, setShowSteadfastSecret] = useState(false);
+  const [steadfastDefaultWeight, setSteadfastDefaultWeight] = useState(String(courierConfig.steadfastDefaultWeight ?? "0.5"));
   const [steadfastDeliveryType, setSteadfastDeliveryType] = useState("home");
   const [steadfastParcelNote, setSteadfastParcelNote] = useState(courierConfig.steadfastParcelNote || "");
 
@@ -1496,6 +1521,7 @@ export default function CourierSettingsPage() {
     formData.append("steadfastApiKey", steadfastApiKey);
     formData.append("steadfastSecretKey", steadfastSecretKey);
     formData.append("defaultCourier", defaultCourier);
+    formData.append("steadfastDefaultWeight", steadfastDefaultWeight);
     formData.append("steadfastDeliveryType", steadfastDeliveryType);
     formData.append("steadfastParcelNote", steadfastParcelNote);
     submit(formData, { method: "post" });
@@ -1516,7 +1542,7 @@ export default function CourierSettingsPage() {
   );
   const [showRedxToken, setShowRedxToken] = useState(false);
   const [redxStores, setRedxStores] = useState<RedxStore[]>([]);
-  const [redxDefaultWeight, setRedxDefaultWeight] = useState("0.5");
+  const [redxDefaultWeight, setRedxDefaultWeight] = useState(String(courierConfig.redxDefaultWeight ?? "0.5"));
   const [redxParcelNote, setRedxParcelNote] = useState(courierConfig.redxParcelNote || "");
 
   const isRedxConnected = Boolean(
@@ -1565,7 +1591,7 @@ export default function CourierSettingsPage() {
   const [showCarrybeeSecret, setShowCarrybeeSecret] = useState(false);
   const [showCarrybeeContext, setShowCarrybeeContext] = useState(false);
   const [showCarrybeeWebhookSecret, setShowCarrybeeWebhookSecret] = useState(false);
-  const [carrybeeDefaultWeight, setCarrybeeDefaultWeight] = useState("0.5");
+  const [carrybeeDefaultWeight, setCarrybeeDefaultWeight] = useState(String(courierConfig.carrybeeDefaultWeight ?? "0.5"));
   const [carrybeeParcelNote, setCarrybeeParcelNote] = useState(courierConfig.carrybeeParcelNote || "");
   const [carrybeeDeliveryType, setCarrybeeDeliveryType] = useState("normal");
   const [carrybeeProductType, setCarrybeeProductType] = useState("parcel");
@@ -1604,6 +1630,7 @@ export default function CourierSettingsPage() {
   const [bahokWebhookSecret, setBahokWebhookSecret] = useState(courierConfig.bahokWebhookSecret || "");
   const [showBahokToken, setShowBahokToken] = useState(false);
   const [showBahokWebhookSecret, setShowBahokWebhookSecret] = useState(false);
+  const [bahokDefaultWeight, setBahokDefaultWeight] = useState(String(courierConfig.bahokDefaultWeight ?? "0.5"));
   const [bahokParcelNote, setBahokParcelNote] = useState(courierConfig.bahokParcelNote || "");
 
   const isBahokConnected = Boolean(
@@ -1623,6 +1650,7 @@ export default function CourierSettingsPage() {
     formData.append("bahokApiToken", bahokApiToken);
     formData.append("bahokWebhookSecret", bahokWebhookSecret);
     formData.append("defaultCourier", defaultCourier);
+    formData.append("bahokDefaultWeight", bahokDefaultWeight);
     formData.append("bahokParcelNote", bahokParcelNote);
     submit(formData, { method: "post" });
   };
@@ -2309,7 +2337,7 @@ export default function CourierSettingsPage() {
                           <BlockStack gap="100">
                             <Text as="h3" variant="headingMd" fontWeight="bold">Pathao API Credentials</Text>
                             <Text as="p" variant="bodySm" tone="subdued">
-                              Enter your Pathao Merchant API credentials to enable automated consignment creation.
+                              Enter your Pathao API credentials to connect your courier account.
                             </Text>
                           </BlockStack>
                           <Divider />
@@ -2336,7 +2364,6 @@ export default function CourierSettingsPage() {
                                   {showPathaoSecret ? "Hide" : "Show"}
                                 </Button>
                               }
-                              helpText="Stored encrypted with AES-256-GCM."
                             />
                             <TextField
                               label="Merchant Username (Email)"
@@ -2344,7 +2371,6 @@ export default function CourierSettingsPage() {
                               onChange={(val) => setPathaoUsername(val)}
                               placeholder="merchant@example.com"
                               autoComplete="off"
-                              helpText="Merchant Portal login email (used for OAuth token authorization)."
                             />
                             <TextField
                               label="Merchant Password"
@@ -2361,7 +2387,6 @@ export default function CourierSettingsPage() {
                                   {showPathaoPassword ? "Hide" : "Show"}
                                 </Button>
                               }
-                              helpText="Stored encrypted with AES-256-GCM."
                             />
                             <InlineStack gap="300" blockAlign="center">
                               <Button
@@ -2371,9 +2396,6 @@ export default function CourierSettingsPage() {
                               >
                                 Verify Credentials & Fetch Stores
                               </Button>
-                              <Text as="p" variant="bodyXs" tone="subdued">
-                                Authenticate and load pickup stores directly from Pathao API.
-                              </Text>
                             </InlineStack>
                             {pathaoStores.length > 0 ? (
                               <Select
@@ -2395,24 +2417,24 @@ export default function CourierSettingsPage() {
                               />
                             ) : (
                               <TextField
-                                label="Pathao Store ID"
+                                label="Store ID"
                                 value={pathaoStoreId}
                                 onChange={(val) => setPathaoStoreId(val)}
                                 placeholder="e.g. 12345"
                                 autoComplete="off"
-                                helpText="Numeric store ID from Pathao. Click 'Verify Credentials & Fetch Stores' above to auto-detect."
+                                helpText="Click 'Verify Credentials & Fetch Stores' above to load your store ID automatically."
                               />
                             )}
-                            <TextField
-                              label="Store Name"
-                              value={pathaoStoreName}
-                              onChange={(val) => setPathaoStoreName(val)}
-                              placeholder="e.g. Main Warehouse"
-                              autoComplete="off"
-                            />
                           </BlockStack>
                           <Divider />
-                          <InlineStack align="end">
+                          <InlineStack align="space-between" blockAlign="center">
+                            <Button
+                              variant="plain"
+                              tone="critical"
+                              onClick={handleResetPathao}
+                            >
+                              Reset
+                            </Button>
                             <Button
                               variant="primary"
                               loading={isSubmittingPathao}
@@ -2433,7 +2455,7 @@ export default function CourierSettingsPage() {
                               <Badge tone="info">Live Webhook</Badge>
                             </InlineStack>
                             <Text as="p" variant="bodySm" tone="subdued">
-                              Copy and paste these parameters in Pathao Developer Portal &rarr; Webhook Setup to enable real-time delivery status updates.
+                              Copy and paste this URL and Secret Token into your Pathao Merchant Portal webhook settings to sync delivery statuses automatically.
                             </Text>
                           </BlockStack>
                           <Divider />
@@ -2448,10 +2470,9 @@ export default function CourierSettingsPage() {
                                   {copiedKey === "pathao_url" ? "Copied!" : "Copy URL"}
                                 </Button>
                               }
-                              helpText="Enter as the Callback URL in Pathao Merchant Portal."
                             />
                             <TextField
-                              label="Secret Token"
+                              label="Webhook Secret Token"
                               value={webhookSecret}
                               readOnly
                               autoComplete="off"
@@ -2460,7 +2481,6 @@ export default function CourierSettingsPage() {
                                   {copiedKey === "pathao_secret" ? "Copied!" : "Copy Token"}
                                 </Button>
                               }
-                              helpText="Paste in Pathao Webhook Secret Token field to verify webhook signature."
                             />
                             <InlineStack align="end">
                               <Button
@@ -2482,9 +2502,9 @@ export default function CourierSettingsPage() {
                         <Card padding="500">
                           <BlockStack gap="400">
                             <BlockStack gap="100">
-                              <Text as="h3" variant="headingMd" fontWeight="bold">Pathao Fulfillment &amp; Delivery Defaults</Text>
+                              <Text as="h3" variant="headingMd" fontWeight="bold">Pathao Default Settings</Text>
                               <Text as="p" variant="bodySm" tone="subdued">
-                                Configure default parcel preferences and automated dispatch parameters for Pathao Courier.
+                                Set your default parcel weight and delivery note for Pathao orders.
                               </Text>
                             </BlockStack>
                             <Divider />
@@ -2513,7 +2533,7 @@ export default function CourierSettingsPage() {
                                 placeholder="e.g. Please call customer before delivery"
                                 multiline={3}
                                 autoComplete="off"
-                                helpText="Don't use any special characters or emoji characters."
+                                helpText="Avoid using emojis or special characters."
                               />
                               <BlockStack gap="150">
                                 <Text as="p" variant="bodyMd" fontWeight="medium">
@@ -2536,13 +2556,6 @@ export default function CourierSettingsPage() {
                                   />
                                 </InlineStack>
                               </BlockStack>
-                              {pathaoStoreId && (
-                                <div className="bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-lg" style={{ backgroundColor: "var(--p-color-bg-surface-secondary, #F8FAFC)", padding: "14px 16px", borderRadius: "10px", border: "1px solid var(--p-color-border, #E2E8F0)" }}>
-                                  <Text as="p" variant="bodySm" tone="subdued">
-                                    Default Pickup Store: <strong>{pathaoStoreName || pathaoStoreId}</strong> (ID: {pathaoStoreId}). Configured under API Configuration.
-                                  </Text>
-                                </div>
-                              )}
                             </BlockStack>
                             <Divider />
                             <InlineStack align="space-between" blockAlign="center">
@@ -2576,7 +2589,7 @@ export default function CourierSettingsPage() {
                           <BlockStack gap="100">
                             <Text as="h3" variant="headingMd" fontWeight="bold">Steadfast API Credentials</Text>
                             <Text as="p" variant="bodySm" tone="subdued">
-                              Enter your Steadfast Merchant API credentials for automated consignment creation.
+                              Enter your Steadfast API credentials to connect your courier account.
                             </Text>
                           </BlockStack>
                           <Divider />
@@ -2606,7 +2619,14 @@ export default function CourierSettingsPage() {
                             />
                           </BlockStack>
                           <Divider />
-                          <InlineStack align="end">
+                          <InlineStack align="space-between" blockAlign="center">
+                            <Button
+                              variant="plain"
+                              tone="critical"
+                              onClick={handleResetSteadfast}
+                            >
+                              Reset
+                            </Button>
                             <Button
                               variant="primary"
                               loading={isSubmittingSteadfast}
@@ -2627,7 +2647,7 @@ export default function CourierSettingsPage() {
                               <Badge tone="info">Live Webhook</Badge>
                             </InlineStack>
                             <Text as="p" variant="bodySm" tone="subdued">
-                              Paste in Steadfast Merchant Portal &rarr; API &rarr; Webhook to receive instant parcel tracking callbacks.
+                              Copy and paste this URL and Secret Token into your Steadfast Merchant Portal webhook settings to sync delivery statuses automatically.
                             </Text>
                           </BlockStack>
                           <Divider />
@@ -2644,16 +2664,15 @@ export default function CourierSettingsPage() {
                               }
                             />
                             <TextField
-                              label="Webhook Secret"
+                              label="Webhook Secret Token"
                               value={webhookSecret}
                               readOnly
                               autoComplete="off"
                               connectedRight={
                                 <Button onClick={() => copyToClipboard(webhookSecret, "steadfast_secret")}>
-                                  {copiedKey === "steadfast_secret" ? "Copied!" : "Copy Secret"}
+                                  {copiedKey === "steadfast_secret" ? "Copied!" : "Copy Token"}
                                 </Button>
                               }
-                              helpText="Paste in Steadfast Webhook Secret field."
                             />
                             <InlineStack align="end">
                               <Button
@@ -2675,9 +2694,9 @@ export default function CourierSettingsPage() {
                         <Card padding="500">
                           <BlockStack gap="400">
                             <BlockStack gap="100">
-                              <Text as="h3" variant="headingMd" fontWeight="bold">Default Delivery &amp; COD Settings</Text>
+                              <Text as="h3" variant="headingMd" fontWeight="bold">Steadfast Default Settings</Text>
                               <Text as="p" variant="bodySm" tone="subdued">
-                                Configure default parcel preferences and delivery dispatch rules for Steadfast Courier.
+                                Set your default parcel weight and delivery note for Steadfast orders.
                               </Text>
                             </BlockStack>
                             <Divider />
@@ -2688,6 +2707,25 @@ export default function CourierSettingsPage() {
                                 onChange={(newChecked) => {
                                   setDefaultCourier(newChecked ? "steadfast" : "pathao");
                                 }}
+                              />
+                              <TextField
+                                label="Default Parcel Weight (kg)"
+                                type="number"
+                                value={steadfastDefaultWeight}
+                                onChange={(val) => setSteadfastDefaultWeight(val)}
+                                placeholder="0.5"
+                                autoComplete="off"
+                                min={0.1}
+                                step={0.1}
+                              />
+                              <TextField
+                                label="Default Parcel Note"
+                                value={steadfastParcelNote}
+                                onChange={(val) => setSteadfastParcelNote(val)}
+                                placeholder="e.g. Please call customer before delivery"
+                                multiline={3}
+                                autoComplete="off"
+                                helpText="Avoid using emojis or special characters."
                               />
                               <BlockStack gap="150">
                                 <Text as="p" variant="bodyMd" fontWeight="medium">
@@ -2710,15 +2748,6 @@ export default function CourierSettingsPage() {
                                   />
                                 </InlineStack>
                               </BlockStack>
-                              <TextField
-                                label="Default Parcel Note"
-                                value={steadfastParcelNote}
-                                onChange={(val) => setSteadfastParcelNote(val)}
-                                placeholder="e.g. Please call customer before delivery"
-                                multiline={3}
-                                autoComplete="off"
-                                helpText="Don't use any special characters or emoji characters."
-                              />
                             </BlockStack>
                             <Divider />
                             <InlineStack align="space-between" blockAlign="center">
@@ -2752,7 +2781,7 @@ export default function CourierSettingsPage() {
                           <BlockStack gap="100">
                             <Text as="h3" variant="headingMd" fontWeight="bold">REDX API Credentials</Text>
                             <Text as="p" variant="bodySm" tone="subdued">
-                              Enter your REDX OpenAPI credentials for automated delivery booking.
+                              Enter your REDX API credentials to connect your courier account.
                             </Text>
                           </BlockStack>
                           <Divider />
@@ -2772,7 +2801,6 @@ export default function CourierSettingsPage() {
                                   {showRedxToken ? "Hide" : "Show"}
                                 </Button>
                               }
-                              helpText="REDX OpenAPI Bearer token. Stored encrypted with AES-256-GCM."
                             />
                             <InlineStack gap="300" blockAlign="center">
                               <Button
@@ -2782,9 +2810,6 @@ export default function CourierSettingsPage() {
                               >
                                 Verify Credentials & Fetch Pickup Stores
                               </Button>
-                              <Text as="p" variant="bodyXs" tone="subdued">
-                                Retrieve your active pickup stores directly from REDX API.
-                              </Text>
                             </InlineStack>
                             {redxStores.length > 0 ? (
                               <Select
@@ -2810,7 +2835,7 @@ export default function CourierSettingsPage() {
                               />
                             ) : (
                               <TextField
-                                label="Pickup Store ID / Location ID"
+                                label="Store ID"
                                 value={redxPickupStoreId}
                                 onChange={(val) => {
                                   setRedxPickupStoreId(val);
@@ -2818,30 +2843,19 @@ export default function CourierSettingsPage() {
                                 }}
                                 placeholder="e.g. 101"
                                 autoComplete="off"
-                                helpText="Your numeric REDX pickup store ID. Click 'Verify Credentials & Fetch Pickup Stores' above to auto-load."
+                                helpText="Click 'Verify Credentials & Fetch Stores' above to load your store ID automatically."
                               />
                             )}
-                            <TextField
-                              label="Pickup Store Name / Label"
-                              value={redxPickupStoreName}
-                              onChange={(val) => {
-                                setRedxPickupStoreName(val);
-                                if (!redxProfileId) setRedxProfileId(val);
-                              }}
-                              placeholder="e.g. Dhanmondi Warehouse"
-                              autoComplete="off"
-                            />
-                            <TextField
-                              label="Profile ID"
-                              value={redxProfileId}
-                              onChange={(val) => setRedxProfileId(val)}
-                              placeholder="e.g. MyStore_Profile"
-                              autoComplete="off"
-                              helpText="Merchant Profile identifier used for REDX order tracking."
-                            />
                           </BlockStack>
                           <Divider />
-                          <InlineStack align="end">
+                          <InlineStack align="space-between" blockAlign="center">
+                            <Button
+                              variant="plain"
+                              tone="critical"
+                              onClick={handleResetRedX}
+                            >
+                              Reset
+                            </Button>
                             <Button
                               variant="primary"
                               loading={isSubmittingRedx}
@@ -2862,7 +2876,7 @@ export default function CourierSettingsPage() {
                               <Badge tone="info">Live Webhook</Badge>
                             </InlineStack>
                             <Text as="p" variant="bodySm" tone="subdued">
-                              Paste in REDX Developer Portal &rarr; Webhook Setup to receive real-time parcel delivery status webhooks.
+                              Copy and paste this URL and Secret Token into your REDX Merchant Portal webhook settings to sync delivery statuses automatically.
                             </Text>
                           </BlockStack>
                           <Divider />
@@ -2879,16 +2893,15 @@ export default function CourierSettingsPage() {
                               }
                             />
                             <TextField
-                              label="Your Secret Key"
+                              label="Webhook Secret Token"
                               value={webhookSecret}
                               readOnly
                               autoComplete="off"
                               connectedRight={
                                 <Button onClick={() => copyToClipboard(webhookSecret, "redx_secret")}>
-                                  {copiedKey === "redx_secret" ? "Copied!" : "Copy Key"}
+                                  {copiedKey === "redx_secret" ? "Copied!" : "Copy Token"}
                                 </Button>
                               }
-                              helpText="Paste in REDX Webhook Secret field."
                             />
                             <InlineStack align="end">
                               <Button
@@ -2910,15 +2923,15 @@ export default function CourierSettingsPage() {
                         <Card padding="500">
                           <BlockStack gap="400">
                             <BlockStack gap="100">
-                              <Text as="h3" variant="headingMd" fontWeight="bold">REDX Fulfillment Defaults</Text>
+                              <Text as="h3" variant="headingMd" fontWeight="bold">REDX Default Settings</Text>
                               <Text as="p" variant="bodySm" tone="subdued">
-                                Configure default parcel preferences and automated dispatch parameters for REDX Delivery.
+                                Set your default parcel weight and delivery note for REDX orders.
                               </Text>
                             </BlockStack>
                             <Divider />
                             <BlockStack gap="400">
                               <Checkbox
-                                label="Set Redx as default courier"
+                                label="Set REDX as default courier"
                                 checked={defaultCourier === "redx"}
                                 onChange={(newChecked) => {
                                   setDefaultCourier(newChecked ? "redx" : "pathao");
@@ -2938,10 +2951,10 @@ export default function CourierSettingsPage() {
                                 label="Default Parcel Note"
                                 value={redxParcelNote}
                                 onChange={(val) => setRedxParcelNote(val)}
-                                placeholder="e.g. Handle with care - fragile cosmetics"
+                                placeholder="e.g. Please call customer before delivery"
                                 multiline={3}
                                 autoComplete="off"
-                                helpText="Don't use any special characters or emoji characters."
+                                helpText="Avoid using emojis or special characters."
                               />
                             </BlockStack>
                             <Divider />
@@ -2976,7 +2989,7 @@ export default function CourierSettingsPage() {
                           <BlockStack gap="100">
                             <Text as="h3" variant="headingMd" fontWeight="bold">CarryBee API Credentials</Text>
                             <Text as="p" variant="bodySm" tone="subdued">
-                              Enter your CarryBee Client ID, Secret, and Client Context.
+                              Enter your CarryBee API credentials to connect your courier account.
                             </Text>
                           </BlockStack>
                           <Divider />
@@ -2993,7 +3006,7 @@ export default function CourierSettingsPage() {
                               type={showCarrybeeSecret ? "text" : "password"}
                               value={carrybeeClientSecret}
                               onChange={(val) => setCarrybeeClientSecret(val)}
-                              placeholder="Enter your CarryBee Client Secret"
+                              placeholder="••••••••••••••••"
                               autoComplete="off"
                               connectedRight={
                                 <Button
@@ -3009,7 +3022,7 @@ export default function CourierSettingsPage() {
                               type={showCarrybeeContext ? "text" : "password"}
                               value={carrybeeClientContext}
                               onChange={(val) => setCarrybeeClientContext(val)}
-                              placeholder="Enter your unique CarryBee Client Context token"
+                              placeholder="••••••••••••••••"
                               autoComplete="off"
                               connectedRight={
                                 <Button
@@ -3027,31 +3040,16 @@ export default function CourierSettingsPage() {
                               placeholder="Enter your CarryBee Store ID (e.g. cb_store_101)"
                               autoComplete="off"
                             />
-                            <TextField
-                              label="Custom Webhook Secret (Optional)"
-                              type={showCarrybeeWebhookSecret ? "text" : "password"}
-                              value={carrybeeWebhookSecret}
-                              onChange={(val) => setCarrybeeWebhookSecret(val)}
-                              placeholder="Enter custom signature secret (optional)"
-                              autoComplete="off"
-                              connectedRight={
-                                <Button
-                                  variant="plain"
-                                  onClick={() => setShowCarrybeeWebhookSecret((prev) => !prev)}
-                                >
-                                  {showCarrybeeWebhookSecret ? "Hide" : "Show"}
-                                </Button>
-                              }
-                            />
-                            <Checkbox
-                              label="Sandbox / Test API Mode"
-                              checked={carrybeeSandbox}
-                              onChange={(val) => setCarrybeeSandbox(val)}
-                              helpText="Enable to run simulated orders in the CarryBee Sandbox environment."
-                            />
                           </BlockStack>
                           <Divider />
-                          <InlineStack align="end">
+                          <InlineStack align="space-between" blockAlign="center">
+                            <Button
+                              variant="plain"
+                              tone="critical"
+                              onClick={handleResetCarrybee}
+                            >
+                              Reset
+                            </Button>
                             <Button
                               variant="primary"
                               loading={isSubmittingCarrybee}
@@ -3072,7 +3070,7 @@ export default function CourierSettingsPage() {
                               <Badge tone="info">Live Webhook</Badge>
                             </InlineStack>
                             <Text as="p" variant="bodySm" tone="subdued">
-                              Configure this Webhook Callback URL in your CarryBee Developer Settings.
+                              Copy and paste this URL and Secret Token into your CarryBee Merchant Portal webhook settings to sync delivery statuses automatically.
                             </Text>
                           </BlockStack>
                           <Divider />
@@ -3089,16 +3087,15 @@ export default function CourierSettingsPage() {
                               }
                             />
                             <TextField
-                              label="Your Secret Key"
+                              label="Webhook Secret Token"
                               value={carrybeeWebhookSecret || webhookSecret}
                               readOnly
                               autoComplete="off"
                               connectedRight={
                                 <Button onClick={() => copyToClipboard(carrybeeWebhookSecret || webhookSecret, "carrybee_secret")}>
-                                  {copiedKey === "carrybee_secret" ? "Copied!" : "Copy Key"}
+                                  {copiedKey === "carrybee_secret" ? "Copied!" : "Copy Token"}
                                 </Button>
                               }
-                              helpText="Paste in CarryBee Webhook Secret field."
                             />
                             <InlineStack align="end">
                               <Button
@@ -3120,15 +3117,15 @@ export default function CourierSettingsPage() {
                         <Card padding="500">
                           <BlockStack gap="400">
                             <BlockStack gap="100">
-                              <Text as="h3" variant="headingMd" fontWeight="bold">CarryBee Fulfillment Defaults</Text>
+                              <Text as="h3" variant="headingMd" fontWeight="bold">CarryBee Default Settings</Text>
                               <Text as="p" variant="bodySm" tone="subdued">
-                                Configure default parcel preferences and automated dispatch parameters for Carry Bee Logistics.
+                                Set your default parcel weight and delivery note for CarryBee orders.
                               </Text>
                             </BlockStack>
                             <Divider />
                             <BlockStack gap="400">
                               <Checkbox
-                                label="Set Carry Bee as default courier"
+                                label="Set CarryBee as default courier"
                                 checked={defaultCourier === "carrybee"}
                                 onChange={(newChecked) => {
                                   setDefaultCourier(newChecked ? "carrybee" : "pathao");
@@ -3151,57 +3148,8 @@ export default function CourierSettingsPage() {
                                 placeholder="e.g. Please call before delivery"
                                 multiline={3}
                                 autoComplete="off"
-                                helpText="Don't use any special characters or emoji characters."
+                                helpText="Avoid using emojis or special characters."
                               />
-                              <BlockStack gap="150">
-                                <Text as="p" variant="bodyMd" fontWeight="medium">
-                                  Default Delivery Type
-                                </Text>
-                                <InlineStack gap="400">
-                                  <RadioButton
-                                    label="Normal Delivery"
-                                    checked={carrybeeDeliveryType === "normal"}
-                                    id="carrybee_delivery_normal"
-                                    name="carrybeeDeliveryType"
-                                    onChange={() => setCarrybeeDeliveryType("normal")}
-                                  />
-                                  <RadioButton
-                                    label="Express Delivery"
-                                    checked={carrybeeDeliveryType === "express"}
-                                    id="carrybee_delivery_express"
-                                    name="carrybeeDeliveryType"
-                                    onChange={() => setCarrybeeDeliveryType("express")}
-                                  />
-                                </InlineStack>
-                              </BlockStack>
-                              <BlockStack gap="150">
-                                <Text as="p" variant="bodyMd" fontWeight="medium">
-                                  Default Product Type
-                                </Text>
-                                <InlineStack gap="400">
-                                  <RadioButton
-                                    label="Parcel"
-                                    checked={carrybeeProductType === "parcel"}
-                                    id="carrybee_product_parcel"
-                                    name="carrybeeProductType"
-                                    onChange={() => setCarrybeeProductType("parcel")}
-                                  />
-                                  <RadioButton
-                                    label="Book"
-                                    checked={carrybeeProductType === "book"}
-                                    id="carrybee_product_book"
-                                    name="carrybeeProductType"
-                                    onChange={() => setCarrybeeProductType("book")}
-                                  />
-                                  <RadioButton
-                                    label="Document"
-                                    checked={carrybeeProductType === "document"}
-                                    id="carrybee_product_document"
-                                    name="carrybeeProductType"
-                                    onChange={() => setCarrybeeProductType("document")}
-                                  />
-                                </InlineStack>
-                              </BlockStack>
                             </BlockStack>
                             <Divider />
                             <InlineStack align="space-between" blockAlign="center">
@@ -3235,7 +3183,7 @@ export default function CourierSettingsPage() {
                           <BlockStack gap="100">
                             <Text as="h3" variant="headingMd" fontWeight="bold">Bahok API Credentials</Text>
                             <Text as="p" variant="bodySm" tone="subdued">
-                              Enter your Bahok Merchant ID, API Key, and Token for automated dispatch.
+                              Enter your Bahok API credentials to connect your courier account.
                             </Text>
                           </BlockStack>
                           <Divider />
@@ -3259,7 +3207,7 @@ export default function CourierSettingsPage() {
                               type={showBahokToken ? "text" : "password"}
                               value={bahokApiToken}
                               onChange={(val) => setBahokApiToken(val)}
-                              placeholder="Enter your Bahok Authorization Token"
+                              placeholder="••••••••••••••••"
                               autoComplete="off"
                               connectedRight={
                                 <Button
@@ -3270,25 +3218,16 @@ export default function CourierSettingsPage() {
                                 </Button>
                               }
                             />
-                            <TextField
-                              label="Custom Webhook Secret (Optional)"
-                              type={showBahokWebhookSecret ? "text" : "password"}
-                              value={bahokWebhookSecret}
-                              onChange={(val) => setBahokWebhookSecret(val)}
-                              placeholder="Enter custom webhook secret (optional)"
-                              autoComplete="off"
-                              connectedRight={
-                                <Button
-                                  variant="plain"
-                                  onClick={() => setShowBahokWebhookSecret((prev) => !prev)}
-                                >
-                                  {showBahokWebhookSecret ? "Hide" : "Show"}
-                                </Button>
-                              }
-                            />
                           </BlockStack>
                           <Divider />
-                          <InlineStack align="end">
+                          <InlineStack align="space-between" blockAlign="center">
+                            <Button
+                              variant="plain"
+                              tone="critical"
+                              onClick={handleResetBahok}
+                            >
+                              Reset
+                            </Button>
                             <Button
                               variant="primary"
                               loading={isSubmittingBahok}
@@ -3309,7 +3248,7 @@ export default function CourierSettingsPage() {
                               <Badge tone="info">Live Webhook</Badge>
                             </InlineStack>
                             <Text as="p" variant="bodySm" tone="subdued">
-                              Enter this URL in Bahok Merchant Portal &rarr; Settings &rarr; Webhook to receive parcel tracking updates.
+                              Copy and paste this URL and Secret Token into your Bahok Merchant Portal webhook settings to sync delivery statuses automatically.
                             </Text>
                           </BlockStack>
                           <Divider />
@@ -3326,7 +3265,7 @@ export default function CourierSettingsPage() {
                               }
                             />
                             <TextField
-                              label="Webhook Auth Token"
+                              label="Webhook Secret Token"
                               value={bahokWebhookSecret || webhookSecret}
                               readOnly
                               autoComplete="off"
@@ -3335,7 +3274,6 @@ export default function CourierSettingsPage() {
                                   {copiedKey === "bahok_secret" ? "Copied!" : "Copy Token"}
                                 </Button>
                               }
-                              helpText="Bearer token for Bahok webhook authorization."
                             />
                             <InlineStack align="end">
                               <Button
@@ -3357,9 +3295,9 @@ export default function CourierSettingsPage() {
                         <Card padding="500">
                           <BlockStack gap="400">
                             <BlockStack gap="100">
-                              <Text as="h3" variant="headingMd" fontWeight="bold">Bahok Fulfillment Defaults</Text>
+                              <Text as="h3" variant="headingMd" fontWeight="bold">Bahok Default Settings</Text>
                               <Text as="p" variant="bodySm" tone="subdued">
-                                Configure default parcel preferences and automated dispatch parameters for Bahok Courier.
+                                Set your default parcel weight and delivery note for Bahok orders.
                               </Text>
                             </BlockStack>
                             <Divider />
@@ -3372,13 +3310,23 @@ export default function CourierSettingsPage() {
                                 }}
                               />
                               <TextField
+                                label="Default Parcel Weight (kg)"
+                                type="number"
+                                value={bahokDefaultWeight}
+                                onChange={(val) => setBahokDefaultWeight(val)}
+                                placeholder="0.5"
+                                autoComplete="off"
+                                min={0.1}
+                                step={0.1}
+                              />
+                              <TextField
                                 label="Default Parcel Note"
                                 value={bahokParcelNote}
                                 onChange={(val) => setBahokParcelNote(val)}
                                 placeholder="e.g. Please call customer before delivery"
                                 multiline={3}
                                 autoComplete="off"
-                                helpText="Don't use any special characters or emoji characters."
+                                helpText="Avoid using emojis or special characters."
                               />
                             </BlockStack>
                             <Divider />
