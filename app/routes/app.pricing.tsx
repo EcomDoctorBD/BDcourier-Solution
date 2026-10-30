@@ -1049,13 +1049,20 @@ export default function PricingAndBillingPage() {
 
             <style>{`
               .pricing-plan-card-wrapper,
-              .pricing-plan-card-wrapper > div,
+              .pricing-plan-card-wrapper > .Polaris-ShadowBevel,
               .pricing-plan-card-wrapper [class*="ShadowBevel"],
               .pricing-plan-card-wrapper [class*="Polaris-Box"] {
                 height: 100% !important;
                 display: flex !important;
                 flex-direction: column !important;
                 flex: 1 1 auto !important;
+              }
+              .pricing-plan-card-wrapper .pricing-ribbon {
+                height: 24px !important;
+                max-height: 24px !important;
+                width: 130px !important;
+                flex: none !important;
+                display: block !important;
               }
             `}</style>
 
@@ -1089,25 +1096,27 @@ export default function PricingAndBillingPage() {
                       {/* Top-Right Ribbon: for non-free plans when active toggle is not monthly */}
                       {tier.id !== "Free" && interval !== "monthly" && (
                         <div
+                          className="pricing-ribbon"
                           style={{
                             position: "absolute",
-                            top: "14px",
-                            right: "-32px",
-                            transform: "rotate(45deg)",
-                            backgroundColor: "#16A34A",
-                            color: "#FFFFFF",
-                            fontSize: "10px",
-                            fontWeight: 800,
-                            letterSpacing: "0.06em",
-                            padding: "4px 34px",
+                            top: "16px",
+                            right: "-34px",
+                            width: "130px",
+                            height: "24px",
+                            lineHeight: "24px",
+                            backgroundColor: "#16a34a",
+                            color: "#ffffff",
+                            fontSize: "11px",
+                            fontWeight: 700,
                             textAlign: "center",
-                            boxShadow: "0 2px 4px rgba(0, 0, 0, 0.15)",
-                            textTransform: "uppercase",
-                            zIndex: 10,
+                            transform: "rotate(45deg)",
+                            boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
+                            zIndex: 2,
                             pointerEvents: "none",
+                            flexShrink: 0,
                           }}
                         >
-                          {interval === "6months" ? "10% Save" : "18% Save"}
+                          {interval === "6months" ? "10% SAVE" : "18% SAVE"}
                         </div>
                       )}
 
