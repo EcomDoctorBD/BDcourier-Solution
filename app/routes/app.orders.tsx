@@ -3924,11 +3924,17 @@ export function DynamicBarcodeGraphic({
   height = 42,
   showText = false,
   fontSize = "11px",
+  width,
+  maxWidth,
+  style,
 }: {
   code?: string;
   height?: number;
   showText?: boolean;
   fontSize?: string;
+  width?: string | number;
+  maxWidth?: string | number;
+  style?: React.CSSProperties;
 }) {
   const cleanCode = (code || "").trim();
   if (!cleanCode) {
@@ -3971,25 +3977,38 @@ export function DynamicBarcodeGraphic({
     currentX += barWidth;
   }
 
+  const hasExplicitWidth = Boolean(width || maxWidth);
+  const containerWidth = width ? (typeof width === "number" ? `${width}px` : width) : "auto";
+  const containerMaxWidth = maxWidth ? (typeof maxWidth === "number" ? `${maxWidth}px` : maxWidth) : "100%";
+
   return (
     <div
       style={{
-        display: "inline-flex",
+        display: "flex",
         flexDirection: "column",
         alignItems: "center",
         justifyContent: "center",
+        margin: "0 auto",
+        width: containerWidth,
+        maxWidth: containerMaxWidth,
         flexShrink: 0,
+        boxSizing: "border-box",
+        ...style,
       }}
     >
       <svg
-        width={svgWidth}
+        width={hasExplicitWidth ? "100%" : svgWidth}
         height={height}
         viewBox={`0 0 ${svgWidth} ${height}`}
+        preserveAspectRatio="none"
+        shapeRendering="crispEdges"
         style={{
           background: "#ffffff",
           display: "block",
           margin: "0 auto",
-          maxWidth: "100%",
+          width: hasExplicitWidth ? "100%" : `${svgWidth}px`,
+          maxWidth: containerMaxWidth,
+          height: `${height}px`,
           shapeRendering: "crispEdges",
         }}
       >
@@ -3998,9 +4017,9 @@ export function DynamicBarcodeGraphic({
           <rect
             key={idx}
             x={r.x}
-            y={2}
+            y={1}
             width={r.width}
-            height={height - 4}
+            height={height - 2}
             fill="#000000"
           />
         ))}
@@ -4017,6 +4036,8 @@ export function DynamicBarcodeGraphic({
             whiteSpace: "nowrap",
             overflow: "hidden",
             textOverflow: "ellipsis",
+            textAlign: "center",
+            width: "100%",
           }}
         >
           {cleanCode}
@@ -4024,6 +4045,34 @@ export function DynamicBarcodeGraphic({
       )}
     </div>
   );
+}
+
+export function getThermalBarcodeDimensions(labelSize: string = "4in x 6in"): {
+  width: string;
+  maxWidth: string;
+  height: number;
+} {
+  switch (labelSize) {
+    case "4in x 6in":
+    case "3in x 4in":
+      return { width: "58%", maxWidth: "155px", height: 36 };
+    case "3in x 3in":
+    case "2in x 2.95in":
+      return { width: "58%", maxWidth: "155px", height: 32 };
+    case "4in x 2in":
+    case "3in x 2in":
+      return { width: "55%", maxWidth: "145px", height: 24 };
+    case "2in x 1.5in":
+      return { width: "55%", maxWidth: "125px", height: 20 };
+    case "1.5in x 1in":
+      return { width: "60%", maxWidth: "95px", height: 16 };
+    case "2.2in x 1.4in":
+    case "2in x 1.15in":
+    case "2in x 1in":
+      return { width: "60%", maxWidth: "110px", height: 18 };
+    default:
+      return { width: "58%", maxWidth: "155px", height: 36 };
+  }
 }
 
 const formatDateToYMD = (d: Date | null): string => {
@@ -4091,13 +4140,13 @@ export const getPrintLabelDimensions = (size: string) => {
     case "2in x 1.5in":
       return { width: "50mm", maxHeight: "36mm", padding: "2.5mm" };
     case "1.5in x 1in":
-      return { width: "38mm", maxHeight: "23mm", padding: "2mm" };
+      return { width: "38mm", maxHeight: "23mm", padding: "1.5mm" };
     case "2in x 1in":
-      return { width: "50mm", maxHeight: "23mm", padding: "2mm" };
+      return { width: "50mm", maxHeight: "23mm", padding: "1.5mm" };
     case "2in x 1.15in":
-      return { width: "50mm", maxHeight: "27mm", padding: "2mm" };
+      return { width: "50mm", maxHeight: "27mm", padding: "1.5mm" };
     case "2.2in x 1.4in":
-      return { width: "55mm", maxHeight: "33mm", padding: "2.5mm" };
+      return { width: "55mm", maxHeight: "33mm", padding: "2mm" };
     case "2in x 2.95in":
       return { width: "50mm", maxHeight: "72mm", padding: "3mm" };
     default:
@@ -7252,6 +7301,8 @@ export default function OrdersFulfillmentPage() {
                               "2in x 1.5in",
                               "2in x 2.95in",
                             ].includes(labelSize);
+                          const isWideHorizontal = labelSize === "4in x 2in";
+                          const barcodeDims = getThermalBarcodeDimensions(labelSize);
 
                           // Master Audit Point 9: Compact Thermal Conditional Font-Scaling & Overflow Engine
                           const thermalTypography = {
@@ -7266,7 +7317,7 @@ export default function OrdersFulfillmentPage() {
                             codAmount: isMicro ? "10.5px" : isCompact ? "13px" : "17px",
                             itemsTotal: isMicro ? "8.5px" : isCompact ? "11px" : "13px",
                             footerText: isMicro ? "6.5px" : isCompact ? "8px" : "9.5px",
-                            barcodeHeight: isMicro ? 14 : isCompact ? 26 : 42,
+                            barcodeHeight: barcodeDims.height,
                             addressLineClamp: isMicro ? 1 : isCompact ? 2 : 3,
                             noteLineClamp: isMicro ? 1 : isCompact ? 1 : 2,
                           };
@@ -7308,10 +7359,10 @@ export default function OrdersFulfillmentPage() {
                               <div
                                 style={{
                                   borderBottom: "1.5px solid #000000",
-                                  paddingBottom: isCompact ? "2px" : "5px",
+                                  paddingBottom: isMicro ? "1px" : isCompact ? "2px" : "4px",
                                   flexShrink: 0,
                                   overflow: "hidden",
-                                  maxHeight: isMicro ? "28px" : isCompact ? "36px" : "48px",
+                                  maxHeight: isMicro ? "24px" : isCompact ? (isWideHorizontal ? "38px" : "36px") : "48px",
                                 }}
                               >
                                 <div
@@ -7404,9 +7455,9 @@ export default function OrdersFulfillmentPage() {
                                     style={{
                                       textAlign: "right",
                                       flexShrink: 0,
-                                      maxWidth: "45%",
+                                      maxWidth: isWideHorizontal ? "50%" : "45%",
                                       overflow: "hidden",
-                                      maxHeight: isMicro ? "16px" : isCompact ? "20px" : "30px",
+                                      maxHeight: isMicro ? "16px" : isCompact ? (isWideHorizontal ? "34px" : "20px") : "30px",
                                     }}
                                   >
                                     <span
@@ -7423,7 +7474,46 @@ export default function OrdersFulfillmentPage() {
                                     >
                                       {slip.orderName}
                                     </span>
-                                    {brandLogo && (
+                                    {isWideHorizontal ? (
+                                      <div
+                                        style={{
+                                          fontSize: "7.5px",
+                                          color: "#333333",
+                                          lineHeight: 1.15,
+                                          display: "flex",
+                                          flexDirection: "column",
+                                          alignItems: "flex-end",
+                                          gap: "1px",
+                                          marginTop: "1px",
+                                        }}
+                                      >
+                                        {((shippingLabelConfig?.brandPhone || brandPhone || "") as string).trim() && (
+                                          <div
+                                            style={{
+                                              whiteSpace: "nowrap",
+                                              overflow: "hidden",
+                                              textOverflow: "ellipsis",
+                                              maxWidth: "100%",
+                                            }}
+                                          >
+                                            📞 {((shippingLabelConfig?.brandPhone || brandPhone || "") as string).trim()}
+                                          </div>
+                                        )}
+                                        {((shippingLabelConfig?.brandAddress || brandAddress || "") as string).trim() && (
+                                          <div
+                                            style={{
+                                              whiteSpace: "nowrap",
+                                              overflow: "hidden",
+                                              textOverflow: "ellipsis",
+                                              maxWidth: "100%",
+                                            }}
+                                            title={((shippingLabelConfig?.brandAddress || brandAddress || "") as string).trim()}
+                                          >
+                                            📍 {((shippingLabelConfig?.brandAddress || brandAddress || "") as string).trim()}
+                                          </div>
+                                        )}
+                                      </div>
+                                    ) : brandLogo ? (
                                       <div
                                         style={{
                                           fontSize: isMicro ? "7px" : "9px",
@@ -7436,7 +7526,7 @@ export default function OrdersFulfillmentPage() {
                                       >
                                         {slip.courierName.toUpperCase()}
                                       </div>
-                                    )}
+                                    ) : null}
                                   </div>
                                 </div>
 
@@ -7490,7 +7580,7 @@ export default function OrdersFulfillmentPage() {
                               <div
                                 style={{
                                   textAlign: "center",
-                                  padding: isMicro ? "1px 0" : isCompact ? "2px 0" : "5px 0",
+                                  padding: isMicro ? "0px 0" : isCompact ? "1px 0" : "4px 0",
                                   borderBottom: "1px solid #000000",
                                   flexShrink: 0,
                                   overflow: "hidden",
@@ -7499,14 +7589,18 @@ export default function OrdersFulfillmentPage() {
                                 <div
                                   style={{
                                     display: "flex",
-                                    justifyContent: "center",
+                                    flexDirection: "column",
                                     alignItems: "center",
+                                    justifyContent: "center",
+                                    margin: "0 auto",
                                     overflow: "hidden",
                                   }}
                                 >
                                   <DynamicBarcodeGraphic
                                     code={distinctTrackingNumber}
-                                    height={thermalTypography.barcodeHeight}
+                                    width={barcodeDims.width}
+                                    maxWidth={barcodeDims.maxWidth}
+                                    height={barcodeDims.height}
                                     showText={false}
                                   />
                                 </div>
@@ -7530,7 +7624,7 @@ export default function OrdersFulfillmentPage() {
                               <div
                                 style={{
                                   borderBottom: "1.5px solid #000000",
-                                  padding: isMicro ? "2px 0" : isCompact ? "3px 0" : "5px 0",
+                                  padding: isMicro ? "1px 0" : isCompact ? "2px 0" : "4px 0",
                                   overflow: "hidden",
                                 }}
                               >
@@ -7597,7 +7691,7 @@ export default function OrdersFulfillmentPage() {
                                   display: "flex",
                                   justifyContent: "space-between",
                                   alignItems: "center",
-                                  padding: isMicro ? "1px 0" : isCompact ? "2px 0" : "4px 0",
+                                  padding: isMicro ? "1px 0" : isCompact ? "1px 0" : "3px 0",
                                   borderBottom: "1px solid #000000",
                                   flexShrink: 0,
                                   overflow: "hidden",

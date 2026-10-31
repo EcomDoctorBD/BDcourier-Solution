@@ -43,7 +43,7 @@ import {
 
 import { authenticate } from "../shopify.server";
 import { CourierLogo } from "../components/CourierLogo";
-import { DynamicBarcodeGraphic } from "./app.orders";
+import { DynamicBarcodeGraphic, getThermalBarcodeDimensions } from "./app.orders";
 import CourierConfig, {
   connectDB,
   AddressCache,
@@ -1933,6 +1933,7 @@ export default function CourierSettingsPage() {
   const isSquare3x3 = labelSize === "3in x 3in";
   const isMedium3x4 = labelSize === "3in x 4in";
   const isFullSlip = ["4in x 6in", "3in x 4in", "3in x 3in"].includes(labelSize);
+  const barcodeDims = getThermalBarcodeDimensions(labelSize);
 
   const getLabelDimensions = (size: string) => {
     switch (size) {
@@ -1951,13 +1952,13 @@ export default function CourierSettingsPage() {
       case "2in x 2.95in":
         return { maxWidth: "220px", minHeight: "315px", padding: "8px 8px", aspectRatio: "2 / 2.95" };
       case "2.2in x 1.4in":
-        return { maxWidth: "260px", minHeight: "165px", padding: "4px 6px", aspectRatio: "2.2 / 1.4" };
+        return { maxWidth: "260px", minHeight: "165px", padding: "3px 5px", aspectRatio: "2.2 / 1.4" };
       case "2in x 1.15in":
-        return { maxWidth: "250px", minHeight: "144px", padding: "4px 6px", aspectRatio: "2 / 1.15" };
+        return { maxWidth: "250px", minHeight: "144px", padding: "3px 5px", aspectRatio: "2 / 1.15" };
       case "2in x 1in":
-        return { maxWidth: "250px", minHeight: "125px", padding: "4px 6px", aspectRatio: "2 / 1" };
+        return { maxWidth: "250px", minHeight: "125px", padding: "3px 5px", aspectRatio: "2 / 1" };
       case "1.5in x 1in":
-        return { maxWidth: "225px", minHeight: "150px", padding: "4px 6px", aspectRatio: "1.5 / 1" };
+        return { maxWidth: "225px", minHeight: "150px", padding: "3px 5px", aspectRatio: "1.5 / 1" };
       default:
         return { maxWidth: "320px", minHeight: "460px", padding: "16px 18px", aspectRatio: "2 / 3" };
     }
@@ -4371,16 +4372,64 @@ export default function CourierSettingsPage() {
                               </div>
                             )}
                           </div>
-                          <div style={{ textAlign: "right", fontSize: "8.5px", color: "#333333", lineHeight: 1.2, minWidth: 0, maxWidth: "45%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          <div
+                            style={{
+                              textAlign: "right",
+                              fontSize: "8px",
+                              color: "#333333",
+                              lineHeight: 1.15,
+                              minWidth: 0,
+                              maxWidth: "50%",
+                              overflow: "hidden",
+                            }}
+                          >
                             {labelStyle === "brand_centric" && socialHandle.trim() ? (
-                              <span style={{ color: "#1d4ed8", fontWeight: 700 }}>
+                              <div
+                                style={{
+                                  color: "#1d4ed8",
+                                  fontWeight: 700,
+                                  whiteSpace: "nowrap",
+                                  overflow: "hidden",
+                                  textOverflow: "ellipsis",
+                                }}
+                              >
                                 📱 {socialHandle.startsWith("@") ? socialHandle : `@${socialHandle}`}
-                              </span>
+                              </div>
                             ) : (
-                              <>
-                                {brandPhone.trim() && <div>📞 {brandPhone}</div>}
-                                {brandAddress.trim() && !brandPhone.trim() && <div>📍 {brandAddress}</div>}
-                              </>
+                              <div
+                                style={{
+                                  display: "flex",
+                                  flexDirection: "column",
+                                  alignItems: "flex-end",
+                                  gap: "1px",
+                                }}
+                              >
+                                {brandPhone.trim() && (
+                                  <div
+                                    style={{
+                                      whiteSpace: "nowrap",
+                                      overflow: "hidden",
+                                      textOverflow: "ellipsis",
+                                      maxWidth: "100%",
+                                    }}
+                                  >
+                                    📞 {brandPhone}
+                                  </div>
+                                )}
+                                {brandAddress.trim() && (
+                                  <div
+                                    style={{
+                                      whiteSpace: "nowrap",
+                                      overflow: "hidden",
+                                      textOverflow: "ellipsis",
+                                      maxWidth: "100%",
+                                    }}
+                                    title={brandAddress}
+                                  >
+                                    📍 {brandAddress}
+                                  </div>
+                                )}
+                              </div>
                             )}
                           </div>
                         </div>
@@ -4572,24 +4621,17 @@ export default function CourierSettingsPage() {
                           display: "flex",
                           flexDirection: "column",
                           alignItems: "center",
+                          justifyContent: "center",
+                          margin: "0 auto",
+                          width: "100%",
                           gap: "1px",
                         }}
                       >
                         <DynamicBarcodeGraphic
-                          code="PREVIEW-TRACK-SAMPLE"
-                          height={
-                            isUltraSmall
-                              ? 13
-                              : isWideHorizontal
-                              ? 16
-                              : isSquare3x3
-                              ? 18
-                              : isMedium3x4
-                              ? 24
-                              : isCompactLabel
-                              ? 22
-                              : 34
-                          }
+                          code="TRK-984210"
+                          width={barcodeDims.width}
+                          maxWidth={barcodeDims.maxWidth}
+                          height={barcodeDims.height}
                           showText={true}
                           fontSize={
                             isUltraSmall
