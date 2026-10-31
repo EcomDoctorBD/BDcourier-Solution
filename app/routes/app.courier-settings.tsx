@@ -5505,18 +5505,18 @@ export default function CourierSettingsPage() {
                           </div>
                         )}
 
-                        {/* ==================== C. WAREHOUSE FULFILLMENT (ENTERPRISE / NEW) TIER VIEW ==================== */}
+                        {/* ==================== C. WAREHOUSE FULFILLMENT (PREMIUM) TIER VIEW ==================== */}
                         {invoiceTemplate === "warehouse" && (
                           <div style={{ display: "flex", flexDirection: "column", justifyContent: "space-between", height: "100%" }}>
                             <div>
-                              {/* Warehouse Dual-Identity Banner Header: INVOICE / PACKING SLIP */}
+                              {/* Header Banner: INVOICE & Brand Name on Left, ORDER #1001 & Date on Right */}
                               <div style={{ border: `2px solid ${invoiceAccentColor || "#2563eb"}`, padding: "8px 12px", borderRadius: "4px", background: "#f9fafb", display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
                                 <div>
-                                  <div style={{ fontSize: "14px", fontWeight: "900", letterSpacing: "1px", color: invoiceAccentColor || "#2563eb", textTransform: "uppercase", whiteSpace: "nowrap" }}>
-                                    INVOICE / PACKING SLIP
+                                  <div style={{ fontSize: "16px", fontWeight: "900", letterSpacing: "1px", color: invoiceAccentColor || "#2563eb", textTransform: "uppercase", whiteSpace: "nowrap" }}>
+                                    INVOICE
                                   </div>
-                                  <div style={{ fontSize: "10px", fontWeight: "600", color: "#4b5563", letterSpacing: "0.5px", whiteSpace: "nowrap" }}>
-                                    ENTERPRISE WAREHOUSE DISPATCH · HUB: DAC-NORTH
+                                  <div style={{ fontSize: "11px", fontWeight: "700", color: "#111827", whiteSpace: "nowrap", marginTop: "2px" }}>
+                                    {invoiceBrandName || "SafeParcel Store"}
                                   </div>
                                 </div>
                                 <div style={{ textAlign: "right" }}>
@@ -5582,15 +5582,14 @@ export default function CourierSettingsPage() {
                                 </div>
                               </div>
 
-                              {/* Order Table with Barcode Metadata */}
+                              {/* Order Table - Clean 4-column: ITEM DESCRIPTION, QTY, PRICE, TOTAL */}
                               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "11px", marginTop: "10px" }}>
                                 <thead>
                                   <tr style={{ backgroundColor: invoiceAccentColor || "#2563eb", color: "#ffffff", fontWeight: "700", fontSize: "10px", textTransform: "uppercase" }}>
-                                    <th style={{ padding: "6px 8px", textAlign: "left" }}>Item Details & Barcode</th>
-                                    <th style={{ padding: "6px 6px", textAlign: "center", whiteSpace: "nowrap" }}>Bin</th>
-                                    <th style={{ padding: "6px 6px", textAlign: "center", whiteSpace: "nowrap" }}>Pick</th>
-                                    <th style={{ padding: "6px 8px", textAlign: "right", whiteSpace: "nowrap" }}>Price</th>
-                                    <th style={{ padding: "6px 8px", textAlign: "right", whiteSpace: "nowrap" }}>Total</th>
+                                    <th style={{ padding: "6px 8px", textAlign: "left" }}>ITEM DESCRIPTION</th>
+                                    <th style={{ padding: "6px 8px", textAlign: "center", whiteSpace: "nowrap" }}>QTY</th>
+                                    <th style={{ padding: "6px 8px", textAlign: "right", whiteSpace: "nowrap" }}>PRICE</th>
+                                    <th style={{ padding: "6px 8px", textAlign: "right", whiteSpace: "nowrap" }}>TOTAL</th>
                                   </tr>
                                 </thead>
                                 <tbody>
@@ -5599,24 +5598,13 @@ export default function CourierSettingsPage() {
                                       <div style={{ fontWeight: "600", color: "#111827" }}>
                                         Premium Cotton Drop-Shoulder T-Shirt - Black / L
                                       </div>
-                                      <div style={{ marginTop: "3px", display: "flex", alignItems: "center", gap: "8px", flexWrap: "nowrap" }}>
+                                      <div style={{ marginTop: "2px", display: "flex", alignItems: "center", gap: "6px" }}>
                                         <span style={{ fontFamily: "monospace", fontSize: "9px", background: "#f3f4f6", padding: "1px 5px", borderRadius: "3px", border: "1px solid #e5e7eb", color: "#374151", fontWeight: "700", whiteSpace: "nowrap" }}>
                                           SKU: TSH-BLK-L-01
                                         </span>
-                                        <div style={{ display: "flex", alignItems: "center", gap: "1px", height: "13px", padding: "0 4px", background: "#ffffff", border: "1px solid #e5e7eb", flexShrink: 0 }}>
-                                          {[2,1,3,1,2,1,1,3,2,1,2,3,1,1,2,1,3,2,1,2].map((w, i) => (
-                                            <span
-                                              key={i}
-                                              style={{ background: "#000000", display: "inline-block", height: "100%", width: `${w}px` }}
-                                            />
-                                          ))}
-                                        </div>
                                       </div>
                                     </td>
-                                    <td style={{ padding: "6px 6px", textAlign: "center", fontFamily: "monospace", fontSize: "10px", color: "#374151", whiteSpace: "nowrap" }}>
-                                      A-04-12
-                                    </td>
-                                    <td style={{ padding: "6px 6px", textAlign: "center", fontWeight: "700", color: "#111827", whiteSpace: "nowrap" }}>
+                                    <td style={{ padding: "6px 8px", textAlign: "center", fontWeight: "700", color: "#111827", whiteSpace: "nowrap" }}>
                                       2
                                     </td>
                                     <td style={{ padding: "6px 8px", textAlign: "right", color: "#374151", whiteSpace: "nowrap" }}>৳ 850</td>
@@ -5627,24 +5615,13 @@ export default function CourierSettingsPage() {
                                       <div style={{ fontWeight: "600", color: "#111827" }}>
                                         Slim Fit Stretch Denim Jeans - Indigo / 32
                                       </div>
-                                      <div style={{ marginTop: "3px", display: "flex", alignItems: "center", gap: "8px", flexWrap: "nowrap" }}>
+                                      <div style={{ marginTop: "2px", display: "flex", alignItems: "center", gap: "6px" }}>
                                         <span style={{ fontFamily: "monospace", fontSize: "9px", background: "#f3f4f6", padding: "1px 5px", borderRadius: "3px", border: "1px solid #e5e7eb", color: "#374151", fontWeight: "700", whiteSpace: "nowrap" }}>
                                           SKU: JNS-IND-32-04
                                         </span>
-                                        <div style={{ display: "flex", alignItems: "center", gap: "1px", height: "13px", padding: "0 4px", background: "#ffffff", border: "1px solid #e5e7eb", flexShrink: 0 }}>
-                                          {[1,3,1,2,1,3,2,1,1,2,3,1,2,1,1,3,1,2,2,1].map((w, i) => (
-                                            <span
-                                              key={i}
-                                              style={{ background: "#000000", display: "inline-block", height: "100%", width: `${w}px` }}
-                                            />
-                                          ))}
-                                        </div>
                                       </div>
                                     </td>
-                                    <td style={{ padding: "6px 6px", textAlign: "center", fontFamily: "monospace", fontSize: "10px", color: "#374151", whiteSpace: "nowrap" }}>
-                                      B-02-08
-                                    </td>
-                                    <td style={{ padding: "6px 6px", textAlign: "center", fontWeight: "700", color: "#111827", whiteSpace: "nowrap" }}>
+                                    <td style={{ padding: "6px 8px", textAlign: "center", fontWeight: "700", color: "#111827", whiteSpace: "nowrap" }}>
                                       1
                                     </td>
                                     <td style={{ padding: "6px 8px", textAlign: "right", color: "#374151", whiteSpace: "nowrap" }}>৳ 1,450</td>
@@ -5676,61 +5653,25 @@ export default function CourierSettingsPage() {
                               </div>
                             </div>
 
-                            {/* Order Status QR Code Vector Box */}
-                            <div style={{ marginTop: "14px", paddingTop: "10px", borderTop: "2px dashed #d1d5db" }}>
-                              <div style={{ display: "flex", alignItems: "center", gap: "12px", padding: "10px", background: "#f9fafb", borderRadius: "6px", border: "1px solid #e5e7eb" }}>
-                                <div style={{ padding: "4px", background: "#ffffff", borderRadius: "4px", border: "1px solid #d1d5db", flexShrink: 0 }}>
-                                  <svg
-                                    style={{ width: "44px", height: "44px" }}
-                                    viewBox="0 0 100 100"
-                                    fill="none"
-                                    xmlns="http://www.w3.org/2000/svg"
-                                  >
-                                    <rect x="5" y="5" width="26" height="26" fill="black" />
-                                    <rect x="9" y="9" width="18" height="18" fill="white" />
-                                    <rect x="13" y="13" width="10" height="10" fill="black" />
-                                    <rect x="69" y="5" width="26" height="26" fill="black" />
-                                    <rect x="73" y="9" width="18" height="18" fill="white" />
-                                    <rect x="77" y="13" width="10" height="10" fill="black" />
-                                    <rect x="5" y="69" width="26" height="26" fill="black" />
-                                    <rect x="9" y="73" width="18" height="18" fill="white" />
-                                    <rect x="13" y="77" width="10" height="10" fill="black" />
-                                    <rect x="36" y="8" width="8" height="8" fill="black" />
-                                    <rect x="48" y="14" width="8" height="8" fill="black" />
-                                    <rect x="36" y="24" width="6" height="6" fill="black" />
-                                    <rect x="48" y="32" width="8" height="8" fill="black" />
-                                    <rect x="12" y="38" width="6" height="6" fill="black" />
-                                    <rect x="24" y="44" width="8" height="8" fill="black" />
-                                    <rect x="38" y="44" width="8" height="8" fill="black" />
-                                    <rect x="52" y="48" width="6" height="6" fill="black" />
-                                    <rect x="66" y="38" width="8" height="8" fill="black" />
-                                    <rect x="78" y="44" width="8" height="8" fill="black" />
-                                    <rect x="38" y="60" width="8" height="8" fill="black" />
-                                    <rect x="50" y="66" width="8" height="8" fill="black" />
-                                    <rect x="66" y="60" width="6" height="6" fill="black" />
-                                    <rect x="78" y="68" width="8" height="8" fill="black" />
-                                    <rect x="40" y="78" width="8" height="8" fill="black" />
-                                    <rect x="56" y="84" width="8" height="8" fill="black" />
-                                    <rect x="70" y="82" width="6" height="6" fill="black" />
-                                    <rect x="84" y="82" width="6" height="6" fill="black" />
-                                  </svg>
-                                </div>
-                                <div style={{ flex: 1 }}>
-                                  <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "2px" }}>
-                                    <span style={{ fontWeight: "700", fontSize: "11px", color: invoiceAccentColor || "#2563eb", textTransform: "uppercase" }}>
-                                      Order Status QR Code
-                                    </span>
-                                    <span style={{ fontSize: "9px", background: `${invoiceAccentColor || "#2563eb"}15`, color: invoiceAccentColor || "#2563eb", border: `1px solid ${invoiceAccentColor || "#2563eb"}33`, fontWeight: "700", padding: "1px 6px", borderRadius: "3px" }}>
-                                      Enterprise
-                                    </span>
-                                  </div>
-                                  <div style={{ fontSize: "10px", color: "#6b7280", lineHeight: "1.4" }}>
-                                    Scan with your camera to track live parcel delivery updates instantly via SafeParcel BD.
-                                  </div>
-                                  <div style={{ fontFamily: "monospace", fontSize: "9px", color: "#9ca3af", marginTop: "2px" }}>
-                                    AUTH-HASH: 9a8f2c31e4b7 · PARCEL: #1001-SF
-                                  </div>
-                                </div>
+                            {/* Premium Invoice Footer */}
+                            <div
+                              style={{
+                                marginTop: "16px",
+                                paddingTop: "10px",
+                                borderTop: "1px solid #f3f4f6",
+                                display: "flex",
+                                justifyContent: "space-between",
+                                alignItems: "center",
+                                fontSize: "10px",
+                                color: "#6b7280",
+                              }}
+                            >
+                              <div>
+                                <span style={{ fontWeight: "700", color: "#374151" }}>{invoiceBrandName || "SafeParcel Store"}</span>
+                                {" · Premium Store Invoice"}
+                              </div>
+                              <div style={{ fontWeight: "600", color: invoiceAccentColor || "#2563eb" }}>
+                                Verified E-Commerce Invoice
                               </div>
                             </div>
                           </div>

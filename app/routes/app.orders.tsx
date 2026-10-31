@@ -8110,21 +8110,39 @@ export default function OrdersFulfillmentPage() {
                                         <strong>Date:</strong> {slip.bookingDate}
                                       </div>
                                       <div>
-                                        <strong>Courier:</strong>{" "}
-                                        {slip.courierName}
-                                      </div>
-                                      {slip.trackingNumber && (
-                                        <div>
-                                          <strong>Consignment:</strong>{" "}
-                                          {slip.trackingNumber}
-                                        </div>
-                                      )}
-                                      <div>
                                         <strong>Payment:</strong>{" "}
                                         {Number(slip.codAmount) === 0
                                           ? "PREPAID"
                                           : "Cash On Delivery (COD)"}
                                       </div>
+                                      {distinctTrackingNumber ? (
+                                        <>
+                                          <div>
+                                            <strong>Courier:</strong>{" "}
+                                            {slip.courierName}
+                                          </div>
+                                          <div>
+                                            <strong>Consignment:</strong>{" "}
+                                            {distinctTrackingNumber}
+                                          </div>
+                                          <div
+                                            style={{
+                                              marginTop: "6px",
+                                              display: "flex",
+                                              flexDirection: "column",
+                                              alignItems: "flex-end",
+                                            }}
+                                          >
+                                            <DynamicBarcodeGraphic
+                                              code={distinctTrackingNumber}
+                                              width="100%"
+                                              maxWidth="150px"
+                                              height={30}
+                                              showText={false}
+                                            />
+                                          </div>
+                                        </>
+                                      ) : null}
                                     </div>
                                   </div>
                                 </div>
@@ -8613,22 +8631,73 @@ export default function OrdersFulfillmentPage() {
                                       </div>
                                     </div>
 
-                                    <div style={{ textAlign: "center" }}>
-                                      <DynamicBarcodeGraphic
-                                        code={distinctTrackingNumber}
-                                        height={36}
-                                        showText={false}
-                                      />
-                                      {distinctTrackingNumber && (
+                                    <div
+                                      style={{
+                                        textAlign: "center",
+                                        display: "flex",
+                                        flexDirection: "column",
+                                        alignItems: "center",
+                                        justifyContent: "center",
+                                      }}
+                                    >
+                                      {distinctTrackingNumber ? (
+                                        <>
+                                          <DynamicBarcodeGraphic
+                                            code={distinctTrackingNumber}
+                                            width="100%"
+                                            maxWidth="150px"
+                                            height={30}
+                                            showText={false}
+                                          />
+                                          <div
+                                            style={{
+                                              fontSize: "10px",
+                                              fontWeight: 700,
+                                              fontFamily: "monospace",
+                                              color: "#4b5563",
+                                              marginTop: "2px",
+                                              whiteSpace: "nowrap",
+                                            }}
+                                          >
+                                            {slip.courierName} • {distinctTrackingNumber}
+                                          </div>
+                                        </>
+                                      ) : (
                                         <div
                                           style={{
-                                            fontSize: "10px",
-                                            fontWeight: 700,
-                                            fontFamily: "monospace",
-                                            color: "#4b5563",
+                                            border: "1px dashed #9ca3af",
+                                            borderRadius: "6px",
+                                            padding: "6px 14px",
+                                            backgroundColor: "#f9fafb",
+                                            textAlign: "center",
                                           }}
                                         >
-                                          {slip.courierName} • {distinctTrackingNumber}
+                                          <div
+                                            style={{
+                                              fontSize: "12px",
+                                              fontWeight: 800,
+                                              color: "#111827",
+                                              whiteSpace: "nowrap",
+                                            }}
+                                          >
+                                            Order ID: {slip.orderName}
+                                          </div>
+                                          <div
+                                            style={{
+                                              fontSize: "10px",
+                                              fontWeight: 700,
+                                              color:
+                                                Number(slip.codAmount) === 0
+                                                  ? "#059669"
+                                                  : "#d97706",
+                                              marginTop: "2px",
+                                              whiteSpace: "nowrap",
+                                            }}
+                                          >
+                                            {Number(slip.codAmount) === 0
+                                              ? "Paid (Prepaid)"
+                                              : "COD (Due on Delivery)"}
+                                          </div>
                                         </div>
                                       )}
                                     </div>
@@ -9174,7 +9243,7 @@ export default function OrdersFulfillmentPage() {
                             }}
                           >
                             <div>
-                              {/* Warehouse Dual-Identity Banner Header */}
+                              {/* Header Banner: INVOICE & Brand Name on Left, ORDER & Date on Right */}
                               <div
                                 style={{
                                   border: `2px solid ${accent}`,
@@ -9192,23 +9261,25 @@ export default function OrdersFulfillmentPage() {
                                     style={{
                                       fontSize: "18px",
                                       fontWeight: 900,
-                                      letterSpacing: "1.5px",
+                                      letterSpacing: "1px",
                                       textTransform: "uppercase",
                                       color: accent,
                                     }}
                                   >
-                                    INVOICE / PACKING MANIFEST
+                                    INVOICE
                                   </div>
                                   <div
                                     style={{
-                                      fontSize: "10px",
+                                      fontSize: "12px",
                                       fontWeight: 700,
-                                      color: "#4b5563",
-                                      letterSpacing: "0.5px",
+                                      color: "#111827",
+                                      marginTop: "2px",
+                                      whiteSpace: "nowrap",
                                     }}
                                   >
-                                    ENTERPRISE WAREHOUSE DISPATCH • HUB:
-                                    DAC-NORTH
+                                    {invoiceConfig?.invoiceBrandName ||
+                                      brandName ||
+                                      shopDomain}
                                   </div>
                                 </div>
                                 <div style={{ textAlign: "right" }}>
@@ -9418,12 +9489,13 @@ export default function OrdersFulfillmentPage() {
                                 ⚠️ PACKAGING STAFF INSTRUCTION: {effectiveNote}
                               </div>
 
-                              {/* Order Table with Barcoding Metadata */}
+                              {/* Order Table - Clean 4-column: ITEM DESCRIPTION, QTY, PRICE, TOTAL */}
                               <table
                                 style={{
                                   width: "100%",
                                   borderCollapse: "collapse",
-                                  fontSize: "12px",
+                                  fontSize: "11px",
+                                  marginTop: "10px",
                                 }}
                               >
                                 <thead>
@@ -9437,26 +9509,34 @@ export default function OrdersFulfillmentPage() {
                                     }}
                                   >
                                     <th style={{ padding: "8px 10px" }}>
-                                      Internal SKU & Barcode
-                                    </th>
-                                    <th style={{ padding: "8px 10px" }}>
-                                      Item & Variant Description
+                                      ITEM DESCRIPTION
                                     </th>
                                     <th
                                       style={{
                                         padding: "8px 10px",
                                         textAlign: "center",
+                                        whiteSpace: "nowrap",
                                       }}
                                     >
-                                      Pick Qty
+                                      QTY
                                     </th>
                                     <th
                                       style={{
                                         padding: "8px 10px",
                                         textAlign: "right",
+                                        whiteSpace: "nowrap",
                                       }}
                                     >
-                                      Price
+                                      PRICE
+                                    </th>
+                                    <th
+                                      style={{
+                                        padding: "8px 10px",
+                                        textAlign: "right",
+                                        whiteSpace: "nowrap",
+                                      }}
+                                    >
+                                      TOTAL
                                     </th>
                                   </tr>
                                 </thead>
@@ -9468,54 +9548,63 @@ export default function OrdersFulfillmentPage() {
                                         borderBottom: "1px solid #e5e7eb",
                                       }}
                                     >
-                                      <td
-                                        style={{
-                                          padding: "8px 10px",
-                                          fontFamily: "monospace",
-                                          fontWeight: 800,
-                                          fontSize: "13px",
-                                        }}
-                                      >
-                                        <div>{item.sku || "N/A"}</div>
-                                        <div
-                                          style={{
-                                            fontSize: "8px",
-                                            color: "#6b7280",
-                                            marginTop: "1px",
-                                          }}
-                                        >
-                                          BIN: A-04
-                                        </div>
-                                      </td>
                                       <td style={{ padding: "8px 10px" }}>
-                                        <div style={{ fontWeight: 700 }}>
+                                        <div style={{ fontWeight: 700, color: "#111827" }}>
                                           {item.title}
                                         </div>
-                                        {item.variantTitle && (
-                                          <div
-                                            style={{
-                                              display: "inline-block",
-                                              marginTop: "2px",
-                                              backgroundColor: "#fef3c7",
-                                              border: "1px solid #f59e0b",
-                                              padding: "1px 6px",
-                                              fontWeight: 700,
-                                              fontSize: "10px",
-                                            }}
-                                          >
-                                            {item.variantTitle}
-                                          </div>
-                                        )}
+                                        <div
+                                          style={{
+                                            display: "flex",
+                                            alignItems: "center",
+                                            gap: "6px",
+                                            marginTop: "2px",
+                                            flexWrap: "wrap",
+                                          }}
+                                        >
+                                          {item.variantTitle && (
+                                            <span
+                                              style={{
+                                                backgroundColor: "#fef3c7",
+                                                border: "1px solid #f59e0b",
+                                                padding: "1px 6px",
+                                                fontWeight: 700,
+                                                fontSize: "10px",
+                                                borderRadius: "3px",
+                                                color: "#92400e",
+                                              }}
+                                            >
+                                              {item.variantTitle}
+                                            </span>
+                                          )}
+                                          {item.sku && (
+                                            <span
+                                              style={{
+                                                fontFamily: "monospace",
+                                                fontSize: "10px",
+                                                backgroundColor: "#f3f4f6",
+                                                padding: "1px 6px",
+                                                borderRadius: "3px",
+                                                border: "1px solid #e5e7eb",
+                                                color: "#374151",
+                                                fontWeight: 700,
+                                                whiteSpace: "nowrap",
+                                              }}
+                                            >
+                                              SKU: {item.sku}
+                                            </span>
+                                          )}
+                                        </div>
                                       </td>
                                       <td
                                         style={{
                                           padding: "8px 10px",
                                           textAlign: "center",
                                           fontWeight: 800,
-                                          fontSize: "14px",
+                                          fontSize: "13px",
+                                          whiteSpace: "nowrap",
                                         }}
                                       >
-                                        x{item.quantity || 1}
+                                        {item.quantity || 1}
                                       </td>
                                       <td
                                         style={{
@@ -9528,36 +9617,171 @@ export default function OrdersFulfillmentPage() {
                                       >
                                         {formatPrice(item.unitPrice)}
                                       </td>
+                                      <td
+                                        style={{
+                                          padding: "8px 10px",
+                                          textAlign: "right",
+                                          fontWeight: 800,
+                                          color: "#111827",
+                                          whiteSpace: "nowrap",
+                                          fontVariantNumeric: "tabular-nums",
+                                        }}
+                                      >
+                                        {formatPrice(
+                                          (Number(item.unitPrice) || 0) * (item.quantity || 1)
+                                        )}
+                                      </td>
                                     </tr>
                                   ))}
                                 </tbody>
                               </table>
+
+                              {/* Warehouse Totals */}
+                              <div
+                                style={{
+                                  display: "flex",
+                                  justifyContent: "flex-end",
+                                  marginTop: "12px",
+                                }}
+                              >
+                                <div style={{ width: "240px", fontSize: "11px" }}>
+                                  <div
+                                    style={{
+                                      display: "flex",
+                                      justifyContent: "space-between",
+                                      color: "#4b5563",
+                                      padding: "2px 0",
+                                    }}
+                                  >
+                                    <span style={{ whiteSpace: "nowrap" }}>Subtotal:</span>
+                                    <span
+                                      style={{
+                                        whiteSpace: "nowrap",
+                                        fontVariantNumeric: "tabular-nums",
+                                      }}
+                                    >
+                                      {formatPrice(subtotal)}
+                                    </span>
+                                  </div>
+                                  {deliveryCharge > 0 && (
+                                    <div
+                                      style={{
+                                        display: "flex",
+                                        justifyContent: "space-between",
+                                        color: "#4b5563",
+                                        padding: "2px 0",
+                                      }}
+                                    >
+                                      <span style={{ whiteSpace: "nowrap" }}>Shipping:</span>
+                                      <span
+                                        style={{
+                                          whiteSpace: "nowrap",
+                                          fontVariantNumeric: "tabular-nums",
+                                        }}
+                                      >
+                                        {formatPrice(deliveryCharge)}
+                                      </span>
+                                    </div>
+                                  )}
+                                  <div
+                                    style={{
+                                      borderTop: `2px solid ${accent}`,
+                                      paddingTop: "6px",
+                                      marginTop: "4px",
+                                      display: "flex",
+                                      justifyContent: "space-between",
+                                      fontWeight: 900,
+                                      fontSize: "13px",
+                                      color: accent,
+                                    }}
+                                  >
+                                    <span style={{ whiteSpace: "nowrap" }}>
+                                      Total COD to Collect:
+                                    </span>
+                                    <span
+                                      style={{
+                                        whiteSpace: "nowrap",
+                                        fontVariantNumeric: "tabular-nums",
+                                      }}
+                                    >
+                                      {formatPrice(totalCodPayable)}
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
                             </div>
 
-                            {/* Manifest Bottom Barcode */}
+                            {/* Bottom Section: Barcode after booking OR Clean Order ID/Payment before booking */}
                             <div
                               style={{
                                 textAlign: "center",
                                 borderTop: "2px dashed #111827",
                                 paddingTop: "12px",
                                 marginTop: "16px",
+                                display: "flex",
+                                flexDirection: "column",
+                                alignItems: "center",
+                                justifyContent: "center",
                               }}
                             >
-                              <DynamicBarcodeGraphic
-                                code={distinctTrackingNumber}
-                                height={38}
-                                showText={false}
-                              />
-                              <div
-                                style={{
-                                  fontSize: "10px",
-                                  fontWeight: 700,
-                                  color: "#6b7280",
-                                  marginTop: "2px",
-                                }}
-                              >
-                                TRACKING MANIFEST REF: {distinctTrackingNumber || "PENDING"}
-                              </div>
+                              {distinctTrackingNumber ? (
+                                <>
+                                  <DynamicBarcodeGraphic
+                                    code={distinctTrackingNumber}
+                                    width="100%"
+                                    maxWidth="150px"
+                                    height={30}
+                                    showText={false}
+                                  />
+                                  <div
+                                    style={{
+                                      fontSize: "10px",
+                                      fontWeight: 700,
+                                      fontFamily: "monospace",
+                                      color: "#4b5563",
+                                      marginTop: "2px",
+                                      whiteSpace: "nowrap",
+                                    }}
+                                  >
+                                    {slip.courierName} • {distinctTrackingNumber}
+                                  </div>
+                                </>
+                              ) : (
+                                <div
+                                  style={{
+                                    border: "1px dashed #9ca3af",
+                                    borderRadius: "6px",
+                                    padding: "6px 16px",
+                                    backgroundColor: "#f9fafb",
+                                    display: "inline-block",
+                                  }}
+                                >
+                                  <div
+                                    style={{
+                                      fontSize: "12px",
+                                      fontWeight: 800,
+                                      color: "#111827",
+                                    }}
+                                  >
+                                    Order ID: {slip.orderName}
+                                  </div>
+                                  <div
+                                    style={{
+                                      fontSize: "10px",
+                                      fontWeight: 700,
+                                      color:
+                                        Number(slip.codAmount) === 0
+                                          ? "#059669"
+                                          : "#d97706",
+                                      marginTop: "2px",
+                                    }}
+                                  >
+                                    {Number(slip.codAmount) === 0
+                                      ? "Paid (Prepaid)"
+                                      : "COD (Due on Delivery)"}
+                                  </div>
+                                </div>
+                              )}
                             </div>
                           </div>
                         );
